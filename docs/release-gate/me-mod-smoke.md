@@ -114,3 +114,17 @@ Verify the refactor preserved Prefab Manager behaviour exactly:
 - [ ] Folder name validation: try "CAP/x", "..", "CON" → all rejected with status message.
 - [ ] Resize window → tree stays at 200 px wide; file grid widens.
 - [ ] Reload (Ctrl+Shift+R) or close/re-open Prefab Manager → tree refreshes from disk.
+
+## Mass Edit (v0.9.0+)
+
+- [ ] `DCS-SMS → Mass Edit` opens the window. Closing via the X hides it.
+- [ ] Marquee 3 groups → opening the window shows Group scope active with 3 rows checked.
+- [ ] Switch to Unit scope → rows now show all units belonging to the 3 groups.
+- [ ] Pick property `Skill` → Operation `Set all to one value` → enter `Excellent` → preview shows the diff for each unit → Apply → footer flashes "N changed".
+- [ ] Press `Ctrl+Z` while the window has focus → footer flashes that the change reverted → re-open Skill panel to confirm the units rolled back to their previous skill values.
+- [ ] Auto-number rename: pick `Name` → Operation `Auto-number` → pattern `Hornet-{n}` → preview shows the per-row diffs sorted by name → Apply → groups rename in numeric order → `Ctrl+Z` reverts.
+- [ ] Mixed plane + static marquee, scope=Unit, pick `Skill` → static rows show `✗ category mismatch` in the preview → Apply runs on the plane rows only → footer reads "N changed · M mismatched" (yellow severity).
+- [ ] Marquee 1 zone → scope=Zone → `Color → Set all → red` → Apply → zone color updates on the map.
+- [ ] Marquee nothing → open the window → "Browsing whole mission" banner shows (or the equivalent — see Decisions 21).
+- [ ] After applying a Mass Edit then placing a prefab via Prefab Manager, `Ctrl+Z` reverts the prefab placement (most-recent action wins; single-slot bus semantics preserved).
+- [ ] Apply with a writer that throws (smoke this by setting a deliberately-invalid value if the dropdown allows it) → the row flips to ✗ in the preview, the footer reads N-1 changed · 1 failed.
