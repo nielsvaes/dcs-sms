@@ -378,7 +378,70 @@ function M.rebuild_property_panel()
         end
     end
 end
-function M.rebuild_preview()          W._preview_dirty = true end
+-- ---------------------------------------------------------------------------
+-- Preview + Apply
+-- ---------------------------------------------------------------------------
+
+function M.rebuild_preview()
+    if not W.widgets.preview_grid then return end
+    if not W.widgets.preview_grid.removeAllItems then return end
+    pcall(W.widgets.preview_grid.removeAllItems, W.widgets.preview_grid)
+
+    local plan = W.plan
+    if not plan or not plan.rows then return end
+
+    local ok_lbi, ListBoxItem = pcall(require, 'ListBoxItem')
+    if not (ok_lbi and ListBoxItem and ListBoxItem.new) then return end
+
+    local n_ok, n_fail = 0, 0
+    for _, r in ipairs(plan.rows) do
+        local name = tostring((r.entity and r.entity.name) or '?')
+        local line
+        if r.ok then
+            line = string.format('  %-30s  %s  →  %s', name, tostring(r.old), tostring(r.new))
+            n_ok = n_ok + 1
+        else
+            line = string.format('✗ %-30s  (%s)', name, tostring(r.error))
+            n_fail = n_fail + 1
+        end
+        local ok_item, item = pcall(ListBoxItem.new)
+        if ok_item and item then
+            if item.setText then pcall(item.setText, item, line) end
+            pcall(W.widgets.preview_grid.insertItem, W.widgets.preview_grid, item)
+        end
+    end
+
+    -- Footer status: "<n_ok> to apply · <n_fail> mismatched"
+    if W.sms_window and W.sms_window.set_status then
+        local sev = (n_ok > 0 and 'info') or 'warning'
+        local text = string.format('%d to apply · %d mismatched', n_ok, n_fail)
+        pcall(W.sms_window.set_status, W.sms_window, text, sev)
+    end
+
+    -- Apply button enabled iff n_ok > 0.
+    if W.widgets.apply_btn and W.widgets.apply_btn.setEnabled then
+        pcall(W.widgets.apply_btn.setEnabled, W.widgets.apply_btn, n_ok > 0)
+    end
+end
+
+function M.on_apply_clicked()
+    -- Always recompute before applying (freshness guarantee — spec §Apply pipeline).
+    recompute_plan()
+    if not W.plan or #W.plan.rows == 0 then return end
+    local result = ops.apply_plan(W.plan)
+    -- Surface the summary in the footer with a severity matched to the
+    -- result mix.
+    local sev = (result.failed == 0 and 'success') or
+                (result.changed == 0 and 'error') or 'warning'
+    local text = string.format('%d changed · %d failed', result.changed, result.failed)
+    if W.sms_window and W.sms_window.set_status then
+        pcall(W.sms_window.set_status, W.sms_window, text, sev)
+    end
+    -- Re-snapshot reader values so the preview shows the post-mutation state.
+    recompute_plan()
+    M.rebuild_preview()
+end
+
 function M.update_scope_counts()
     if not W.widgets.scope_counts then return end
     local counts = scope_pool_counts()
