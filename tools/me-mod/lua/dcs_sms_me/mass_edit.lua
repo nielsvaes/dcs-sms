@@ -209,7 +209,175 @@ function M.rebuild_treeview()
     end
 end
 
-function M.rebuild_property_panel()   W._panel_dirty = true end
+-- ---------------------------------------------------------------------------
+-- Property panel
+-- ---------------------------------------------------------------------------
+
+local OP_LABEL = {
+    set_all       = 'Set all to one value',
+    add_prefix    = 'Add prefix',
+    add_suffix    = 'Add suffix',
+    find_replace  = 'Find & replace text',
+    auto_number   = 'Auto-number',
+    offset        = 'Adjust by amount',
+    toggle_set    = 'Set toggle',
+}
+
+-- Filter registry to the active scope and the categories present in the
+-- pool's parent groups.
+local function applicable_properties()
+    local present_cats = {}
+    if W.scope == 'unit' or W.scope == 'waypoint' or W.scope == 'group' then
+        for _, e in ipairs(W.pool) do
+            local g = W.parent_map[e] or e
+            local cat = g.category
+            if not cat then
+                cat = (W.scope == 'group' and (e.category or 'unknown')) or 'unknown'
+            end
+            present_cats[cat] = true
+        end
+    end
+
+    local out = {}
+    for _, entry in ipairs(registry) do
+        if entry.scope == W.scope then
+            local ok
+            if entry.applies_to[1] == '*' then ok = true
+            else
+                for _, c in ipairs(entry.applies_to) do
+                    if present_cats[c] then ok = true; break end
+                end
+                if W.scope == 'zone' or W.scope == 'drawing' then ok = true end
+                if next(present_cats) == nil then ok = true end
+            end
+            if ok then out[#out + 1] = entry end
+        end
+    end
+    return out
+end
+
+local function distribute_current_value()
+    if not W.property_id then return 'pick a property' end
+    local entry_obj
+    for _, e in ipairs(registry) do if e.id == W.property_id then entry_obj = e; break end end
+    if not entry_obj then return '' end
+    local seen, count = {}, 0
+    for _, ent in ipairs(W.pool) do
+        if W.checked[W.scope][ent] then
+            local v = tostring(entry_obj.reader(ent))
+            if not seen[v] then seen[v] = true; count = count + 1 end
+        end
+    end
+    if count == 0 then return '(none selected)' end
+    if count == 1 then
+        for v, _ in pairs(seen) do return v end
+    end
+    return 'Mixed (' .. count .. ' values)'
+end
+
+function M.rebuild_property_panel()
+    local props = applicable_properties()
+
+    -- Rebuild the property ComboBox.
+    if W.widgets.property_sel and W.widgets.property_sel.removeAllItems then
+        pcall(W.widgets.property_sel.removeAllItems, W.widgets.property_sel)
+        local by_cat = {}
+        for _, p in ipairs(props) do
+            by_cat[p.category] = by_cat[p.category] or {}
+            table.insert(by_cat[p.category], p)
+        end
+        for _, cat in ipairs({ 'Identity', 'Behaviour', 'Appearance', 'Geometry' }) do
+            if by_cat[cat] then
+                pcall(W.widgets.property_sel.addItem, W.widgets.property_sel, '-- ' .. cat .. ' --')
+                for _, p in ipairs(by_cat[cat]) do
+                    pcall(W.widgets.property_sel.addItem, W.widgets.property_sel, p.label .. '|' .. p.id)
+                end
+            end
+        end
+        if W.widgets.property_sel.addChangeCallback then
+            pcall(W.widgets.property_sel.addChangeCallback, W.widgets.property_sel, function(cb)
+                local text = cb.getText and cb:getText() or ''
+                local id = text:match('|(.+)$')
+                if id then
+                    W.property_id = id
+                    W.operation = nil
+                    W.op_args = {}
+                    M.rebuild_property_panel()
+                    recompute_plan(); M.rebuild_preview()
+                end
+            end)
+        end
+    end
+
+    -- Rebuild the operation ComboBox for the chosen property.
+    local entry_obj
+    if W.property_id then
+        for _, e in ipairs(registry) do if e.id == W.property_id then entry_obj = e; break end end
+    end
+    if W.widgets.operation_sel and W.widgets.operation_sel.removeAllItems then
+        pcall(W.widgets.operation_sel.removeAllItems, W.widgets.operation_sel)
+        if entry_obj then
+            for _, op in ipairs(entry_obj.operations) do
+                pcall(W.widgets.operation_sel.addItem, W.widgets.operation_sel,
+                      (OP_LABEL[op] or op) .. '|' .. op)
+            end
+            if W.widgets.operation_sel.addChangeCallback then
+                pcall(W.widgets.operation_sel.addChangeCallback, W.widgets.operation_sel, function(cb)
+                    local text = cb.getText and cb:getText() or ''
+                    local op = text:match('|(.+)$')
+                    if op then
+                        W.operation = op
+                        W.op_args = {}
+                        M.rebuild_property_panel()
+                        recompute_plan(); M.rebuild_preview()
+                    end
+                end)
+            end
+        end
+    end
+
+    -- Rebuild the args panel.
+    if W.widgets.args_panel and entry_obj and W.operation then
+        if W.widgets.args_panel.setText then
+            local current = distribute_current_value()
+            local op_summary = W.operation .. '  (current: ' .. current .. ')'
+            pcall(W.widgets.args_panel.setText, W.widgets.args_panel, op_summary)
+        end
+        local ok_eb, EditBox = pcall(require, 'EditBox')
+        if not W.widgets.set_all_edit and ok_eb and EditBox and EditBox.new then
+            local ok2, ed = pcall(EditBox.new)
+            if ok2 and ed then
+                W.widgets.set_all_edit = ed
+                local raw = W.sms_window and W.sms_window:raw()
+                if ed.setBounds then
+                    pcall(ed.setBounds, ed, 460, 110, 360, 24)
+                end
+                if raw then pcall(raw.insertWidget, raw, ed) end
+                if ed.addChangeCallback then
+                    pcall(ed.addChangeCallback, ed, function(box)
+                        local txt = box.getText and box:getText() or ''
+                        if W.operation == 'set_all'      then W.op_args = { value = txt }
+                        elseif W.operation == 'add_prefix' then W.op_args = { text = txt }
+                        elseif W.operation == 'add_suffix' then W.op_args = { text = txt }
+                        elseif W.operation == 'offset'    then W.op_args = { delta = tonumber(txt) or 0 }
+                        elseif W.operation == 'find_replace' then
+                            local f, r = txt:match('^(.-)|(.*)$')
+                            W.op_args = { find = f or '', replace = r or '' }
+                        elseif W.operation == 'auto_number' then
+                            W.op_args = { pattern = txt, start = 1, step = 1, pad = 2, order = 'name_asc' }
+                        elseif W.operation == 'toggle_set' then
+                            local v = txt:lower()
+                            if v == 'true' then W.op_args = { value = true }
+                            elseif v == 'false' then W.op_args = { value = false }
+                            else W.op_args = { value = nil } end
+                        end
+                        recompute_plan(); M.rebuild_preview()
+                    end)
+                end
+            end
+        end
+    end
+end
 function M.rebuild_preview()          W._preview_dirty = true end
 function M.update_scope_counts()
     if not W.widgets.scope_counts then return end
