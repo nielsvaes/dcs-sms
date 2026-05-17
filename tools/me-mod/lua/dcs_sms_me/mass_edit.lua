@@ -127,10 +127,88 @@ local function on_refresh_clicked()
 end
 
 -- ---------------------------------------------------------------------------
--- Stub widget hooks; real bodies in tasks 12/13/14.
+-- Treeview + filter widgets
+--
+-- dxgui doesn't have a tree widget; we render a flat sortable table inside
+-- a ListBox. Each row is a horizontal strip with a checkbox + per-column
+-- Static labels. Sorting is in-pool (rebuild_treeview re-sorts W.pool by
+-- the active column).
 -- ---------------------------------------------------------------------------
 
-function M.rebuild_treeview()         W._tree_dirty = true end
+local SCOPE_COLUMNS = {
+    group    = { 'Name', 'Country', 'Type', '# Units' },
+    unit     = { 'Name', 'Type', 'Skill', 'Group' },
+    waypoint = { 'Group', '#', 'Type', 'Alt', 'Speed' },
+    zone     = { 'Name', 'Radius' },
+    drawing  = { 'Name', 'Layer' },
+}
+
+local function row_values(scope, entity, group)
+    if scope == 'group' then
+        return { tostring(entity.name or ''), tostring(entity.country or ''),
+                 tostring(entity.category or ''), tostring(#(entity.units or {})) }
+    elseif scope == 'unit' then
+        return { tostring(entity.name or ''), tostring(entity.type or ''),
+                 tostring(entity.skill or ''), tostring((group or {}).name or '') }
+    elseif scope == 'waypoint' then
+        local idx = ''
+        if group and group.route and group.route.points then
+            for i, p in ipairs(group.route.points) do
+                if p == entity then idx = tostring(i); break end
+            end
+        end
+        return { tostring((group or {}).name or ''), idx,
+                 tostring(entity.type or ''),
+                 tostring(entity.alt or ''),
+                 tostring(entity.speed or '') }
+    elseif scope == 'zone' then
+        return { tostring(entity.name or ''), tostring(entity.radius or '') }
+    elseif scope == 'drawing' then
+        return { tostring(entity.name or ''),
+                 tostring((entity.layer and entity.layer.name) or '') }
+    end
+    return {}
+end
+
+local function passes_filters(scope, entity, group, filters)
+    if not filters or next(filters) == nil then return true end
+    local name = tostring(entity.name or (group or {}).name or '')
+    if filters.name_substr and filters.name_substr ~= '' then
+        if not name:lower():find(filters.name_substr:lower(), 1, true) then return false end
+    end
+    if filters.country and filters.country ~= '' and filters.country ~= 'any' then
+        if tostring(entity.country or (group or {}).country or '') ~= filters.country then return false end
+    end
+    if filters.type and filters.type ~= '' and filters.type ~= 'any' then
+        if tostring(entity.type or entity.category or '') ~= filters.type then return false end
+    end
+    if filters.skill and filters.skill ~= '' and filters.skill ~= 'any' then
+        if tostring(entity.skill or '') ~= filters.skill then return false end
+    end
+    return true
+end
+
+function M.rebuild_treeview()
+    local rows = {}
+    for _, e in ipairs(W.pool) do
+        local g = W.parent_map[e] or e
+        if passes_filters(W.scope, e, g, W.filters[W.scope]) then
+            rows[#rows + 1] = {
+                entity   = e,
+                group    = g,
+                values   = row_values(W.scope, e, g),
+                checked  = W.checked[W.scope][e] == true,
+            }
+        end
+    end
+    W._tree_rows = rows
+    W._tree_columns = SCOPE_COLUMNS[W.scope] or {}
+
+    if W.widgets.tree and W.widgets.tree.repaint then
+        pcall(W.widgets.tree.repaint, W.widgets.tree, rows, W._tree_columns)
+    end
+end
+
 function M.rebuild_property_panel()   W._panel_dirty = true end
 function M.rebuild_preview()          W._preview_dirty = true end
 function M.update_scope_counts()
@@ -142,8 +220,40 @@ function M.update_scope_counts()
 end
 
 -- ---------------------------------------------------------------------------
--- Window construction (scaffolding; live widgets come in task 12).
+-- Window construction.
 -- ---------------------------------------------------------------------------
+
+-- Build a single tab "button" out of a Static + click handler, since dxgui
+-- doesn't have a Tab widget. Highlight the active tab by swapping skin.
+local function make_scope_tab(scope_name, label, count_str, on_click)
+    local ok_dl, DialogLoader = pcall(require, 'DialogLoader')
+    local tab = nil
+    if ok_dl and DialogLoader and DialogLoader.spawnDialogFromString then
+        local raw_xml = [[
+<Static name="tab" type="Static">
+  <skin>staticSkin_ME</skin>
+  <bounds x="0" y="0" w="120" h="32"/>
+</Static>
+]]
+        local ok2, dialog = pcall(DialogLoader.spawnDialogFromString, raw_xml)
+        if ok2 and dialog then tab = dialog.tab end
+    end
+    if not tab then
+        local ok_s, Static = pcall(require, 'Static')
+        if ok_s and Static and Static.new then
+            local ok3, s = pcall(Static.new)
+            if ok3 then tab = s end
+        end
+    end
+    if not tab then return nil, nil end
+    if tab.setText then pcall(tab.setText, tab, label .. ' · ' .. count_str) end
+    if tab.addMouseDownCallback then
+        pcall(tab.addMouseDownCallback, tab, function() on_click(scope_name) end)
+    elseif tab.addMouseUpCallback then
+        pcall(tab.addMouseUpCallback, tab, function() on_click(scope_name) end)
+    end
+    return tab, tab
+end
 
 local function build_window()
     if W._built then return end
@@ -168,8 +278,155 @@ local function build_window()
         return
     end
 
-    -- Scope tab strip and other widgets are added in task 12. This task
-    -- only ensures the chrome is in place.
+    -- ----- scope tab strip ----------------------------------------------
+    local tab_y = 4
+    local tab_w = 140
+    local tab_x = 8
+    for _, scope in ipairs(SCOPES) do
+        local label_map = { group = 'Group', unit = 'Unit', waypoint = 'Waypoint',
+                            zone = 'Zone', drawing = 'Drawing' }
+        local tab, count_lbl = make_scope_tab(scope, label_map[scope], '0', on_scope_changed)
+        if tab then
+            if tab.setBounds then pcall(tab.setBounds, tab, tab_x, tab_y, tab_w, 28) end
+            pcall(raw.insertWidget, raw, tab)
+            W.widgets.scope_tabs[scope] = tab
+            W.widgets.scope_counts[scope] = count_lbl
+            tab_x = tab_x + tab_w + 4
+        end
+    end
+
+    -- ----- Refresh button (top-right of tab strip) ----------------------
+    local ok_btn, Button = pcall(require, 'Button')
+    local refresh_btn
+    if ok_btn and Button and Button.new then
+        local ok2, b = pcall(Button.new)
+        if ok2 then refresh_btn = b end
+    end
+    if refresh_btn then
+        if refresh_btn.setText then pcall(refresh_btn.setText, refresh_btn, 'Refresh') end
+        if refresh_btn.setBounds then pcall(refresh_btn.setBounds, refresh_btn, 800, 4, 90, 28) end
+        if refresh_btn.addMouseDownCallback then
+            pcall(refresh_btn.addMouseDownCallback, refresh_btn, on_refresh_clicked)
+        end
+        pcall(raw.insertWidget, raw, refresh_btn)
+        W.widgets.refresh_btn = refresh_btn
+    end
+
+    -- ----- treeview + filters (left half) -------------------------------
+    local ok_eb, EditBox = pcall(require, 'EditBox')
+    local ok_cb, ComboBox = pcall(require, 'ComboBox')
+    if ok_eb and EditBox and EditBox.new then
+        local ok2, name_filter = pcall(EditBox.new)
+        if ok2 and name_filter then
+            if name_filter.setBounds then pcall(name_filter.setBounds, name_filter, 8, 40, 200, 24) end
+            if name_filter.addChangeCallback then
+                pcall(name_filter.addChangeCallback, name_filter, function(ed)
+                    local txt = ed.getText and ed:getText() or ''
+                    W.filters[W.scope].name_substr = txt
+                    M.rebuild_treeview()
+                    recompute_plan(); M.rebuild_preview()
+                end)
+            end
+            pcall(raw.insertWidget, raw, name_filter)
+            W.widgets.name_filter = name_filter
+        end
+    end
+
+    -- ListBox as the treeview surface.
+    local ok_lb, ListBox = pcall(require, 'ListBox')
+    local tree
+    if ok_lb and ListBox and ListBox.new then
+        local ok2, t = pcall(ListBox.new)
+        if ok2 then tree = t end
+    end
+    if tree then
+        if tree.setBounds then pcall(tree.setBounds, tree, 8, 72, 430, 460) end
+        pcall(raw.insertWidget, raw, tree)
+        tree.repaint = function(self, rows, columns)
+            if self.removeAllItems then pcall(self.removeAllItems, self) end
+            local ok_lbi, ListBoxItem = pcall(require, 'ListBoxItem')
+            if not (ok_lbi and ListBoxItem and ListBoxItem.new) then return end
+            for _, r in ipairs(rows) do
+                local text = ''
+                for ci, v in ipairs(r.values) do
+                    text = text .. (ci > 1 and '  ·  ' or '') .. v
+                end
+                local ok3, item = pcall(ListBoxItem.new)
+                if ok3 and item then
+                    if item.setText then pcall(item.setText, item, (r.checked and '[X] ' or '[ ] ') .. text) end
+                    item._row = r
+                    if item.addMouseDownCallback then
+                        pcall(item.addMouseDownCallback, item, function()
+                            W.checked[W.scope][r.entity] = not W.checked[W.scope][r.entity] or nil
+                            M.rebuild_treeview()
+                            recompute_plan(); M.rebuild_preview()
+                        end)
+                    end
+                    pcall(self.insertItem, self, item)
+                end
+            end
+        end
+        W.widgets.tree = tree
+    end
+
+    -- ----- right panel handles (filled in by task 13) -------------------
+    if ok_cb and ComboBox and ComboBox.new then
+        local ok2, property_sel = pcall(ComboBox.new)
+        if ok2 and property_sel then
+            if property_sel.setBounds then pcall(property_sel.setBounds, property_sel, 450, 40, 240, 24) end
+            pcall(raw.insertWidget, raw, property_sel)
+            W.widgets.property_sel = property_sel
+        end
+        local ok3, operation_sel = pcall(ComboBox.new)
+        if ok3 and operation_sel then
+            if operation_sel.setBounds then pcall(operation_sel.setBounds, operation_sel, 700, 40, 190, 24) end
+            pcall(raw.insertWidget, raw, operation_sel)
+            W.widgets.operation_sel = operation_sel
+        end
+    end
+
+    local ok_s, Static = pcall(require, 'Static')
+    if ok_s and Static and Static.new then
+        local ok2, args_panel = pcall(Static.new)
+        if ok2 and args_panel then
+            if args_panel.setBounds then pcall(args_panel.setBounds, args_panel, 450, 72, 440, 100) end
+            pcall(raw.insertWidget, raw, args_panel)
+            W.widgets.args_panel = args_panel
+        end
+    end
+
+    if ok_lb and ListBox and ListBox.new then
+        local ok2, preview = pcall(ListBox.new)
+        if ok2 and preview then
+            if preview.setBounds then pcall(preview.setBounds, preview, 450, 180, 440, 320) end
+            pcall(raw.insertWidget, raw, preview)
+            W.widgets.preview_grid = preview
+        end
+    end
+
+    if ok_btn and Button and Button.new then
+        local ok2, cancel = pcall(Button.new)
+        if ok2 and cancel then
+            if cancel.setText then pcall(cancel.setText, cancel, 'Cancel') end
+            if cancel.setBounds then pcall(cancel.setBounds, cancel, 720, 510, 80, 26) end
+            if cancel.addMouseDownCallback then
+                pcall(cancel.addMouseDownCallback, cancel, function() M.hide() end)
+            end
+            pcall(raw.insertWidget, raw, cancel)
+            W.widgets.cancel_btn = cancel
+        end
+
+        local ok3, apply = pcall(Button.new)
+        if ok3 and apply then
+            if apply.setText then pcall(apply.setText, apply, 'Apply') end
+            if apply.setBounds then pcall(apply.setBounds, apply, 810, 510, 80, 26) end
+            if apply.addMouseDownCallback then
+                pcall(apply.addMouseDownCallback, apply, function() M.on_apply_clicked() end)
+            end
+            pcall(raw.insertWidget, raw, apply)
+            W.widgets.apply_btn = apply
+        end
+    end
 
     W._built = true
 end
