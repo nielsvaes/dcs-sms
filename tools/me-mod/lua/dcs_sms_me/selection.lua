@@ -145,4 +145,146 @@ function M.snapshot()
     return result
 end
 
+-- ---------------------------------------------------------------------------
+-- snapshot_drilled — Mass Edit's scope-aware entry point.
+--
+-- Builds an entity pool for the requested scope, drilled from the current
+-- marquee. When the marquee is empty, falls back to walking the whole
+-- mission table so the user can still use the Mass Edit window.
+--
+-- Returns {
+--   ok           = bool,
+--   error?       = string,
+--   scope        = '<scope>',
+--   source       = 'marquee' | 'mission',
+--   pool         = [entity_ref, ...],
+--   parent_map   = { [entity_ref] = group_ref }  -- identity for group scope
+-- }
+-- ---------------------------------------------------------------------------
+
+local VALID_SCOPES = { group = true, unit = true, waypoint = true, zone = true, drawing = true }
+
+local function walk_mission_groups(callback)
+    local Mission = require('me_mission')
+    local mission = Mission and Mission.mission
+    if not mission or type(mission.coalition) ~= 'table' then return end
+    for _, side in pairs(mission.coalition) do
+        if type(side) == 'table' and type(side.country) == 'table' then
+            for _, country in ipairs(side.country) do
+                for _, cat in ipairs({ 'plane', 'helicopter', 'vehicle', 'ship', 'static' }) do
+                    local bucket = country[cat]
+                    if type(bucket) == 'table' and type(bucket.group) == 'table' then
+                        for _, g in ipairs(bucket.group) do
+                            callback(g)
+                        end
+                    end
+                end
+            end
+        end
+    end
+end
+
+function M.snapshot_drilled(scope)
+    if not VALID_SCOPES[scope] then
+        return { ok = false, error = 'unknown scope: ' .. tostring(scope),
+                 scope = tostring(scope), source = 'marquee',
+                 pool = {}, parent_map = {} }
+    end
+
+    local marquee = M.snapshot()
+    local out = {
+        ok = true, scope = scope, source = 'marquee',
+        pool = {}, parent_map = {},
+    }
+
+    -- Source: marquee groups if any; otherwise the whole mission tree.
+    local groups = {}
+    if marquee.ok and type(marquee.groups) == 'table' and #marquee.groups > 0 then
+        for _, g in ipairs(marquee.groups) do groups[#groups + 1] = g end
+    else
+        out.source = 'mission'
+        walk_mission_groups(function(g) groups[#groups + 1] = g end)
+    end
+
+    if scope == 'group' then
+        for _, g in ipairs(groups) do
+            out.pool[#out.pool + 1] = g
+            out.parent_map[g] = g
+        end
+        return out
+    end
+
+    if scope == 'unit' then
+        for _, g in ipairs(groups) do
+            if type(g.units) == 'table' then
+                for _, u in ipairs(g.units) do
+                    out.pool[#out.pool + 1] = u
+                    out.parent_map[u] = g
+                end
+            end
+        end
+        return out
+    end
+
+    if scope == 'waypoint' then
+        for _, g in ipairs(groups) do
+            if type(g.route) == 'table' and type(g.route.points) == 'table' then
+                for _, wp in ipairs(g.route.points) do
+                    out.pool[#out.pool + 1] = wp
+                    out.parent_map[wp] = g
+                end
+            end
+        end
+        return out
+    end
+
+    if scope == 'zone' then
+        if marquee.ok and type(marquee.zones) == 'table' and #marquee.zones > 0 then
+            for _, z in ipairs(marquee.zones) do
+                out.pool[#out.pool + 1] = z
+                out.parent_map[z] = z
+            end
+        else
+            out.source = 'mission'
+            local Mission = require('me_mission')
+            local mission = Mission and Mission.mission
+            local zones = mission and mission.triggers and mission.triggers.zones
+            if type(zones) == 'table' then
+                for _, z in ipairs(zones) do
+                    out.pool[#out.pool + 1] = z
+                    out.parent_map[z] = z
+                end
+            end
+        end
+        return out
+    end
+
+    if scope == 'drawing' then
+        if marquee.ok and type(marquee.drawings) == 'table' and #marquee.drawings > 0 then
+            for _, d in ipairs(marquee.drawings) do
+                out.pool[#out.pool + 1] = d
+                out.parent_map[d] = d
+            end
+        else
+            out.source = 'mission'
+            local Mission = require('me_mission')
+            local mission = Mission and Mission.mission
+            local layers = mission and mission.drawings and mission.drawings.layers
+            if type(layers) == 'table' then
+                for _, layer in ipairs(layers) do
+                    if type(layer.objects) == 'table' then
+                        for _, d in ipairs(layer.objects) do
+                            out.pool[#out.pool + 1] = d
+                            out.parent_map[d] = d
+                        end
+                    end
+                end
+            end
+        end
+        return out
+    end
+
+    return out  -- unreachable
+end
+
 return M
