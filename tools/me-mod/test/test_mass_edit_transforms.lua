@@ -27,5 +27,29 @@ check('escape_pattern dot',            T.escape_pattern('a.b')   == 'a%.b')
 check('escape_pattern dash',           T.escape_pattern('a-b')   == 'a%-b')
 check('escape_pattern combo',          T.escape_pattern('(a)+b') == '%(a%)%+b')
 
+-- find_replace: plain-text substring replace; replaces ALL occurrences;
+-- meta chars in `find` are escaped via escape_pattern.
+check('find_replace basic',
+      T.find_replace('Hornet-01-Alpha', { find = 'Alpha', replace = 'Beta' }, 1)
+      == 'Hornet-01-Beta')
+check('find_replace all occurrences',
+      T.find_replace('aa-bb-aa', { find = 'aa', replace = 'cc' }, 1)
+      == 'cc-bb-cc')
+check('find_replace with dot in find — treated literally',
+      T.find_replace('a.b.c', { find = '.', replace = '-' }, 1)
+      == 'a-b-c')
+check('find_replace with parens in find',
+      T.find_replace('(test)', { find = '(test)', replace = '[test]' }, 1)
+      == '[test]')
+check('find_replace empty replace',
+      T.find_replace('foo-bar', { find = '-', replace = '' }, 1)
+      == 'foobar')
+check('find_replace miss returns original',
+      T.find_replace('foo', { find = 'xyz', replace = 'q' }, 1)
+      == 'foo')
+check('find_replace nil old returns empty',
+      T.find_replace(nil, { find = 'x', replace = 'y' }, 1)
+      == '')
+
 if failures > 0 then print(failures .. ' failure(s)'); os.exit(1) end
 print('All mass_edit_transforms base tests passed.')

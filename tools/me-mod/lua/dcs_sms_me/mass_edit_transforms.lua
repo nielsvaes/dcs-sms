@@ -27,4 +27,14 @@ function M.add_suffix(old, args, idx)
     return (old or '') .. (args.text or '')
 end
 
+function M.find_replace(old, args, idx)
+    local subject = old or ''
+    local find = args.find or ''
+    if find == '' then return subject end
+    local pat = M.escape_pattern(find)
+    -- gsub replaces all by default; second return is count which we drop.
+    local result = subject:gsub(pat, args.replace or '')
+    return result
+end
+
 return M
