@@ -51,5 +51,26 @@ check('find_replace nil old returns empty',
       T.find_replace(nil, { find = 'x', replace = 'y' }, 1)
       == '')
 
+-- auto_number: substitute {n} in args.pattern with start + (idx-1)*step,
+-- zero-padded to args.pad.
+check('auto_number idx=1 start=1 step=1 pad=2',
+      T.auto_number('anything', { pattern = 'Hornet-{n}', start = 1, step = 1, pad = 2 }, 1)
+      == 'Hornet-01')
+check('auto_number idx=3 start=10 step=1 pad=3',
+      T.auto_number(nil, { pattern = 'Wp-{n}', start = 10, step = 1, pad = 3 }, 3)
+      == 'Wp-012')
+check('auto_number step=5',
+      T.auto_number(nil, { pattern = '{n}', start = 0, step = 5, pad = 2 }, 4)
+      == '15')
+check('auto_number pad=1 (no zero-pad)',
+      T.auto_number(nil, { pattern = '#{n}', start = 1, step = 1, pad = 1 }, 7)
+      == '#7')
+check('auto_number two {n} tokens both expand',
+      T.auto_number(nil, { pattern = 'A{n}-B{n}', start = 5, step = 1, pad = 2 }, 1)
+      == 'A05-B05')
+check('auto_number pattern with no {n} returns pattern verbatim',
+      T.auto_number(nil, { pattern = 'static', start = 1, step = 1, pad = 2 }, 3)
+      == 'static')
+
 if failures > 0 then print(failures .. ' failure(s)'); os.exit(1) end
 print('All mass_edit_transforms base tests passed.')

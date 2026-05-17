@@ -37,4 +37,23 @@ function M.find_replace(old, args, idx)
     return result
 end
 
+-- auto_number — substitute {n} in args.pattern with the running index.
+-- args = { pattern, start, step, pad }.
+--   pattern : string with one or more {n} tokens.
+--   start   : number; running value at idx=1.
+--   step    : number; increment per row.
+--   pad     : integer >= 1; zero-pad width.
+function M.auto_number(old, args, idx)
+    local pattern = args.pattern or ''
+    local start = args.start or 1
+    local step = args.step or 1
+    local pad = math.max(1, math.floor(args.pad or 1))
+    local n = start + (idx - 1) * step
+    local fmt = '%0' .. tostring(pad) .. 'd'
+    local rendered = string.format(fmt, n)
+    -- gsub replaces all occurrences; second return is count which we drop.
+    local result = pattern:gsub('{n}', rendered)
+    return result
+end
+
 return M
