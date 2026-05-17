@@ -180,10 +180,110 @@ function M.compute_plan(scope, checked_entities, parent_map, property_id, operat
     }
 end
 
--- apply_plan is added in the next task. Stub here so the module load
--- doesn't fail when tests call it.
 function M.apply_plan(plan)
-    return { changed = 0, failed = 0, errors = {}, affected_groups = {}, error = 'not implemented' }
+    if type(plan) ~= 'table' or type(plan.rows) ~= 'table' then
+        return { changed = 0, failed = 0, errors = {}, affected_groups = {}, error = 'invalid plan' }
+    end
+    local entry = by_id[plan.property_id]
+    if not entry then
+        return { changed = 0, failed = 0, errors = {}, affected_groups = {},
+                 error = 'unknown property: ' .. tostring(plan.property_id) }
+    end
+
+    -- Build the undo snapshot from rows that will be attempted (ok=true).
+    local snapshot_rows = {}
+    for _, r in ipairs(plan.rows) do
+        if r.ok then
+            snapshot_rows[#snapshot_rows + 1] = { entity = r.entity, group = r.group,
+                                                  property_id = plan.property_id, old = r.old }
+        end
+    end
+
+    -- Mutate loop with per-row pcall.
+    local changed, failed = 0, 0
+    local errors = {}
+    local actually_changed_rows = {}
+    for _, r in ipairs(plan.rows) do
+        if r.ok then
+            local p_ok, w_ok, w_err = pcall(entry.writer, r.entity, r.new)
+            if not p_ok then
+                r.ok = false
+                r.error = 'writer threw: ' .. tostring(w_ok)
+                failed = failed + 1
+                errors[#errors + 1] = { name = tostring(r.entity.name or '?'), reason = r.error }
+            elseif w_ok == false then
+                r.ok = false
+                r.error = w_err or 'writer rejected value'
+                failed = failed + 1
+                errors[#errors + 1] = { name = tostring(r.entity.name or '?'), reason = r.error }
+            else
+                changed = changed + 1
+                actually_changed_rows[#actually_changed_rows + 1] = r
+            end
+        elseif r.error then
+            failed = failed + 1
+            errors[#errors + 1] = { name = tostring(r.entity.name or '?'), reason = r.error }
+        end
+    end
+
+    -- Recompute affected_groups from successfully-mutated rows only.
+    local seen, affected = {}, {}
+    for _, r in ipairs(actually_changed_rows) do
+        if r.group and not seen[r.group] then
+            seen[r.group] = true
+            affected[#affected + 1] = r.group
+        end
+    end
+
+    -- Single panel refresh per affected group.
+    local me_refresh = require('dcs_sms_me.me_refresh')
+    for _, g in ipairs(affected) do
+        pcall(me_refresh.refresh_group_view, g)
+    end
+
+    -- Register undo only if anything succeeded.
+    if changed > 0 then
+        local actually_changed_set = {}
+        for _, r in ipairs(actually_changed_rows) do actually_changed_set[r.entity] = true end
+        local final_snapshot_rows = {}
+        for _, s in ipairs(snapshot_rows) do
+            if actually_changed_set[s.entity] then
+                final_snapshot_rows[#final_snapshot_rows + 1] = s
+            end
+        end
+        local undo = require('dcs_sms_me.undo')
+        undo.record_generic('mass_edit', { rows = final_snapshot_rows, affected_groups = affected })
+    end
+
+    return { changed = changed, failed = failed, errors = errors, affected_groups = affected }
+end
+
+-- ---------------------------------------------------------------------------
+-- Register the 'mass_edit' undo handler at module load.
+-- ---------------------------------------------------------------------------
+
+do
+    local undo = require('dcs_sms_me.undo')
+    undo.register_handler('mass_edit', function(snapshot)
+        if type(snapshot) ~= 'table' or type(snapshot.rows) ~= 'table' then
+            return nil, 'invalid mass_edit undo snapshot'
+        end
+        local me_refresh = require('dcs_sms_me.me_refresh')
+        local errors = 0
+        for _, s in ipairs(snapshot.rows) do
+            local entry = by_id[s.property_id]
+            if entry then
+                local ok = pcall(entry.writer, s.entity, s.old)
+                if not ok then errors = errors + 1 end
+            else
+                errors = errors + 1
+            end
+        end
+        for _, g in ipairs(snapshot.affected_groups or {}) do
+            pcall(me_refresh.refresh_group_view, g)
+        end
+        return true, errors > 0 and (errors .. ' partial failures') or nil
+    end)
 end
 
 return M

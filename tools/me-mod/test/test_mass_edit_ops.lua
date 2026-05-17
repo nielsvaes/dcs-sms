@@ -3,13 +3,21 @@
 
 package.path = '../?.lua;../lua/dcs_sms_me/?.lua;../lua/?.lua;' .. package.path
 
-package.preload['lfs'] = function() return {} end
+package.preload['lfs'] = function()
+    return { writedir = function() return '' end, mkdir = function() return true end,
+             dir = function() return function() return nil end end }
+end
 local mock = require('mock_me_mission')
 package.preload['me_mission']      = function() return mock end
 package.preload['me_loadoututils'] = function() return { getUnitPylons = function() return {} end } end
 -- mass_edit_ops doesn't require dcs_sms_me.verbs unless writer needs it
 -- (country/loadout only). compute_plan never invokes writers.
 package.preload['dcs_sms_me.verbs'] = function() return {} end
+-- Stubs needed when apply_plan (and the 'mass_edit' undo handler registration)
+-- trigger transitive requires through undo.lua → prefab_ops → selection/warehouse.
+package.preload['dcs_sms_me.selection'] = function()
+    return { snapshot = function() return { ok = true, groups = {}, statics = {}, zones = {}, drawings = {} } end }
+end
 
 local ops = require('dcs_sms_me.mass_edit_ops')
 
@@ -126,6 +134,101 @@ end
 do
     local plan = ops.compute_plan('group', {}, {}, 'nonexistent_property', 'set_all', {})
     check('unknown property: plan.error set', plan.error ~= nil)
+end
+
+-- ---------------------------------------------------------------------------
+-- apply_plan
+-- ---------------------------------------------------------------------------
+
+local undo = require('dcs_sms_me.undo')
+
+-- Helper rebuilt: checked() / pmap.
+local function checked(pairs_list)
+    local entities, parent_map = {}, {}
+    for _, p in ipairs(pairs_list) do
+        entities[#entities + 1] = p[1]
+        parent_map[p[1]] = p[2]
+    end
+    return entities, parent_map
+end
+
+-- Case A1: apply unit_skill to 3 units; values land on the entities.
+do
+    undo.clear()
+    mock.new_mission()
+    local g = mock.add_plane({ name = 'A' })
+    g.units = {
+        { unitId = 1, name = 'A-1', type = 'F/A-18C', skill = 'Average' },
+        { unitId = 2, name = 'A-2', type = 'F/A-18C', skill = 'High' },
+        { unitId = 3, name = 'A-3', type = 'F/A-18C', skill = 'Good' },
+    }
+    local ents, pmap = checked({ {g.units[1], g}, {g.units[2], g}, {g.units[3], g} })
+    local plan = ops.compute_plan('unit', ents, pmap, 'unit_skill', 'set_all', { value = 'Excellent' })
+    local result = ops.apply_plan(plan)
+    check('apply: changed=3', result.changed == 3, 'got ' .. tostring(result.changed))
+    check('apply: failed=0', result.failed == 0)
+    check('apply: unit 1 skill mutated', g.units[1].skill == 'Excellent')
+    check('apply: unit 2 skill mutated', g.units[2].skill == 'Excellent')
+    check('apply: unit 3 skill mutated', g.units[3].skill == 'Excellent')
+    check('apply: undo slot recorded', undo.has_record() == true)
+end
+
+-- Case A2: undo restores the previous values.
+do
+    local ok = undo.undo()
+    check('undo: ok=true', ok == true)
+    local restored = {}
+    for _, side in pairs(mock.mission.coalition) do
+        for _, country in ipairs(side.country) do
+            for _, cat in ipairs({ 'plane','helicopter','vehicle','ship','static' }) do
+                for _, gg in ipairs(country[cat] and country[cat].group or {}) do
+                    for _, u in ipairs(gg.units or {}) do
+                        restored[u.name] = u.skill
+                    end
+                end
+            end
+        end
+    end
+    check('undo: A-1 restored to Average', restored['A-1'] == 'Average')
+    check('undo: A-2 restored to High',    restored['A-2'] == 'High')
+    check('undo: A-3 restored to Good',    restored['A-3'] == 'Good')
+end
+
+-- Case A3: writer exception flips row to ok=false during apply.
+do
+    undo.clear()
+    mock.new_mission()
+    local g = mock.add_plane({ name = 'B' })
+    g.units = { { unitId = 1, name = 'B-1', type = 'F/A-18C', skill = 'Average' } }
+    local ents, pmap = checked({ {g.units[1], g} })
+    local plan = ops.compute_plan('unit', ents, pmap, 'unit_skill', 'set_all', { value = 'Excellent' })
+    -- Sabotage the writer for this property.
+    local entry = ops.find('unit_skill')
+    local orig_writer = entry.writer
+    entry.writer = function() error('simulated writer failure') end
+    local result = ops.apply_plan(plan)
+    entry.writer = orig_writer
+    check('apply: throwing writer flips row to fail', result.failed == 1)
+    check('apply: no successful row → no undo slot',  undo.has_record() == false)
+end
+
+-- Case A4: refresh_group_view is called once per affected group, not per row.
+do
+    undo.clear()
+    mock.new_mission()
+    mock.reset_refresh_counters()
+    local g = mock.add_plane({ name = 'C' })
+    g.units = {
+        { unitId = 1, name = 'C-1', type = 'F/A-18C', skill = 'Average' },
+        { unitId = 2, name = 'C-2', type = 'F/A-18C', skill = 'Average' },
+        { unitId = 3, name = 'C-3', type = 'F/A-18C', skill = 'Average' },
+    }
+    local ents, pmap = checked({ {g.units[1], g}, {g.units[2], g}, {g.units[3], g} })
+    local plan = ops.compute_plan('unit', ents, pmap, 'unit_skill', 'set_all', { value = 'Excellent' })
+    ops.apply_plan(plan)
+    check('refresh: update called exactly once for the group',
+          mock.refresh_calls.update == 1,
+          'got update=' .. tostring(mock.refresh_calls.update))
 end
 
 if failures > 0 then print(failures .. ' failure(s)'); os.exit(1) end
