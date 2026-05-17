@@ -102,19 +102,10 @@ local function strip_back_refs(v, depth)
 end
 
 -- refresh_group_view — defensive map-objects refresh after a unit-level
--- mutation. Disk-loaded groups have mapObjects=nil until selected; the
--- create_group_map_objects + update_group_map_objects pair handles both
--- the never-rendered and already-rendered cases. Shared by group_set_pos,
--- group_add_unit, and every unit-level setter that moves something.
-local function refresh_group_view(g)
-    local Mission = require('me_mission')
-    if g.mapObjects == nil and type(Mission.create_group_map_objects) == 'function' then
-        pcall(Mission.create_group_map_objects, g)
-    end
-    if type(Mission.update_group_map_objects) == 'function' then
-        pcall(Mission.update_group_map_objects, g)
-    end
-end
+-- mutation. Shared with mass_edit_ops via dcs_sms_me.me_refresh; both
+-- modules need the same pair of Mission.create/update_group_map_objects
+-- calls in the same order, so the body is canonical in me_refresh.lua.
+local refresh_group_view = require('dcs_sms_me.me_refresh').refresh_group_view
 
 -- find_unit_in_mission — locate a unit by name or id, returning
 -- (unit, group, country, side, category) or nil. Walks the coalition
