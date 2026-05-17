@@ -56,4 +56,18 @@ function M.auto_number(old, args, idx)
     return result
 end
 
+function M.offset(old, args, idx)
+    return (old or 0) + (args.delta or 0)
+end
+
+-- toggle_set — for 3-state boolean controls.
+--   args.value = true  → set to true
+--   args.value = false → set to false
+--   args.value = nil   → leave unchanged (compute_plan converts this to a
+--                        no-op row by checking the returned value before
+--                        committing to the plan).
+function M.toggle_set(old, args, idx)
+    return args.value  -- pass-through, including nil
+end
+
 return M

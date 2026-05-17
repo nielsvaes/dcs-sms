@@ -72,5 +72,17 @@ check('auto_number pattern with no {n} returns pattern verbatim',
       T.auto_number(nil, { pattern = 'static', start = 1, step = 1, pad = 2 }, 3)
       == 'static')
 
+-- offset: numeric add.
+check('offset basic',             T.offset(100, { delta = 25 }, 1) == 125)
+check('offset negative',          T.offset(100, { delta = -50 }, 1) == 50)
+check('offset nil old treats as 0', T.offset(nil, { delta = 5 }, 1) == 5)
+check('offset zero delta',        T.offset(10, { delta = 0 }, 1) == 10)
+
+-- toggle_set: returns args.value as-is. nil means "leave unchanged" — the
+-- transform returns nil; compute_plan reads this and skips the row.
+check('toggle_set true',          T.toggle_set(false, { value = true }, 1)  == true)
+check('toggle_set false',         T.toggle_set(true,  { value = false }, 1) == false)
+check('toggle_set leave-unchanged', T.toggle_set(true, { value = nil }, 1)  == nil)
+
 if failures > 0 then print(failures .. ' failure(s)'); os.exit(1) end
 print('All mass_edit_transforms base tests passed.')
