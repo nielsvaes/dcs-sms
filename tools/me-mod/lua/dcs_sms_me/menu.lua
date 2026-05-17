@@ -84,6 +84,34 @@ local function add_top_level_menu()
         end
     end
 
+    -- "Mass Edit" entry — opens the Mass Edit window (lazy-required so a
+    -- syntax error in mass_edit.lua degrades to a logged warning instead of
+    -- breaking the menu).
+    local mass_edit_item
+    local ok_me, me_err = pcall(function() mass_edit_item = menu:newItem('Mass Edit') end)
+    if ok_me and mass_edit_item then
+        pcall(function()
+            local sibling_item = sibling_menu
+                and (sibling_menu.missionOptions or sibling_menu.mapOptions
+                     or sibling_menu.setPosition  or sibling_menu.logbook)
+            if sibling_item and sibling_item.getSkin and mass_edit_item.setSkin then
+                mass_edit_item:setSkin(sibling_item:getSkin())
+            end
+        end)
+        mass_edit_item.func = function()
+            local ok, mod_or_err = pcall(require, 'dcs_sms_me.mass_edit')
+            if ok and type(mod_or_err) == 'table' and mod_or_err.toggle then
+                local ok2, err = pcall(mod_or_err.toggle)
+                if not ok2 then
+                    pcall(function() _G.log.write('sms.me.menu', _G.log.ERROR or 1,
+                        'mass_edit.toggle threw: ' .. tostring(err)) end)
+                end
+            end
+        end
+    else
+        log.write('sms.me', log.ERROR, 'Mass Edit menu:newItem failed: ' .. tostring(me_err))
+    end
+
     -- Sibling "About" menu entry. Same skin-clone pattern as the Prefab
     -- Manager item; opens the about-dialog via require('dcs_sms_me.about').
     local about_item
