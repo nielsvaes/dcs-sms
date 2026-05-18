@@ -175,13 +175,25 @@ local function walk_mission_groups(callback)
                     local bucket = country[cat]
                     if type(bucket) == 'table' and type(bucket.group) == 'table' then
                         for _, g in ipairs(bucket.group) do
-                            callback(g)
+                            callback(g, cat)
                         end
                     end
                 end
             end
         end
     end
+end
+
+-- Build a {group_ref -> category} index by walking the whole mission once.
+-- snapshot_drilled uses this so both the marquee path (group refs from
+-- M.snapshot) and the mission-walk path (no surrounding container in scope)
+-- can attach the right category to each entity. Marquee groups come from
+-- Mission.getGroup(id) which returns the same ref the mission tree stores,
+-- so identity-keying works for both paths.
+local function build_category_index()
+    local index = {}
+    walk_mission_groups(function(g, cat) index[g] = cat end)
+    return index
 end
 
 function M.snapshot_drilled(scope)
@@ -194,7 +206,7 @@ function M.snapshot_drilled(scope)
     local marquee = M.snapshot()
     local out = {
         ok = true, scope = scope, source = 'marquee',
-        pool = {}, parent_map = {},
+        pool = {}, parent_map = {}, categories = {},
     }
 
     -- Source: marquee groups if any; otherwise the whole mission tree.
@@ -206,10 +218,17 @@ function M.snapshot_drilled(scope)
         walk_mission_groups(function(g) groups[#groups + 1] = g end)
     end
 
+    -- One mission walk for category resolution — keyed by group identity.
+    -- Both the marquee path (Mission.getGroup returns the canonical ref)
+    -- and the mission-walk path will find their groups here.
+    local cat_by_group = build_category_index()
+    local function cat_of(g) return cat_by_group[g] or 'unknown' end
+
     if scope == 'group' then
         for _, g in ipairs(groups) do
             out.pool[#out.pool + 1] = g
             out.parent_map[g] = g
+            out.categories[g] = cat_of(g)
         end
         return out
     end
@@ -217,9 +236,11 @@ function M.snapshot_drilled(scope)
     if scope == 'unit' then
         for _, g in ipairs(groups) do
             if type(g.units) == 'table' then
+                local cat = cat_of(g)
                 for _, u in ipairs(g.units) do
                     out.pool[#out.pool + 1] = u
                     out.parent_map[u] = g
+                    out.categories[u] = cat
                 end
             end
         end
@@ -229,9 +250,11 @@ function M.snapshot_drilled(scope)
     if scope == 'waypoint' then
         for _, g in ipairs(groups) do
             if type(g.route) == 'table' and type(g.route.points) == 'table' then
+                local cat = cat_of(g)
                 for _, wp in ipairs(g.route.points) do
                     out.pool[#out.pool + 1] = wp
                     out.parent_map[wp] = g
+                    out.categories[wp] = cat
                 end
             end
         end

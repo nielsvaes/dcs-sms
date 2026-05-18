@@ -25,6 +25,11 @@ local Static;          do local ok, m = pcall(require, 'Static');         if ok 
 local Grid;            do local ok, m = pcall(require, 'Grid');           if ok then Grid           = m end end
 local GridHeaderCell;  do local ok, m = pcall(require, 'GridHeaderCell'); if ok then GridHeaderCell = m end end
 local CheckBox;        do local ok, m = pcall(require, 'CheckBox');       if ok then CheckBox       = m end end
+local ListBoxItem;     do local ok, m = pcall(require, 'ListBoxItem');    if ok then ListBoxItem    = m end end
+-- ComboList is the dxgui dropdown the ME actually uses (NOT ComboBox —
+-- which exists but doesn't support insertItem and is meant for raw text).
+-- Same module Prefab Manager picks up for its country dropdown.
+local ComboList;       do local ok, m = pcall(require, 'ComboList');      if ok then ComboList      = m end end
 
 local dtc_skins = require('dcs_sms_me.dtc_skins')
 
@@ -78,6 +83,7 @@ local W = {
     source             = 'marquee',
     pool               = {},
     parent_map         = {},
+    categories         = {},  -- {entity -> 'plane'|'helicopter'|'vehicle'|'ship'|'static'|'unknown'}
     checked            = { group = {}, unit = {}, waypoint = {}, zone = {}, drawing = {} },
     filters            = { group = {}, unit = {}, waypoint = {}, zone = {}, drawing = {} },
     sort_state         = {
@@ -127,10 +133,11 @@ local function rebuild_pool()
     local snap = selection.snapshot_drilled(W.scope)
     if not snap.ok then
         log_warn('snapshot_drilled failed: ' .. tostring(snap.error))
-        W.pool = {}; W.parent_map = {}; W.source = 'marquee'
+        W.pool, W.parent_map, W.categories, W.source = {}, {}, {}, 'marquee'
         return
     end
     W.pool, W.parent_map, W.source = snap.pool, snap.parent_map, snap.source
+    W.categories = snap.categories or {}
 
     -- Drop checked entries for items no longer in the pool.
     local in_pool = {}
@@ -501,16 +508,16 @@ local OP_LABEL = {
 }
 
 -- Filter registry to the active scope and the categories present in the
--- pool's parent groups.
+-- pool's parent groups. Categories come from W.categories (built by
+-- selection.snapshot_drilled via one mission walk) — the group ref itself
+-- has no `.category` field; the category is the container key in the
+-- mission tree.
 local function applicable_properties()
     local present_cats = {}
     if W.scope == 'unit' or W.scope == 'waypoint' or W.scope == 'group' then
         for _, e in ipairs(W.pool) do
-            local g = W.parent_map[e] or e
-            local cat = g.category
-            if not cat then
-                cat = (W.scope == 'group' and (e.category or 'unknown')) or 'unknown'
-            end
+            local cat = W.categories and W.categories[e]
+            if not cat or cat == 'unknown' then cat = 'unknown' end
             present_cats[cat] = true
         end
     end
@@ -552,8 +559,23 @@ local function distribute_current_value()
     return 'Mixed (' .. count .. ' values)'
 end
 
+-- Helper: insert one item into a combo. The ComboBox expects a real
+-- ListBoxItem widget — passing a raw string to addItem silently no-ops
+-- (the method doesn't exist on ComboBox; it's insertItem(item)).
+local function combo_insert(combo, label)
+    if not (combo and combo.insertItem and ListBoxItem and ListBoxItem.new) then return end
+    local ok, item = pcall(ListBoxItem.new, label)
+    if ok and item then pcall(combo.insertItem, combo, item) end
+end
+
 function M.rebuild_property_panel()
     local props = applicable_properties()
+    log_info(string.format(
+        'rebuild_property_panel scope=%s pool_size=%d props=%d property_sel=%s ComboList=%s ListBoxItem=%s',
+        tostring(W.scope), #W.pool, #props,
+        tostring(W.widgets.property_sel ~= nil),
+        tostring(ComboList ~= nil),
+        tostring(ListBoxItem ~= nil)))
 
     -- Rebuild the property ComboBox.
     if W.widgets.property_sel and W.widgets.property_sel.removeAllItems then
@@ -565,24 +587,11 @@ function M.rebuild_property_panel()
         end
         for _, cat in ipairs({ 'Identity', 'Behaviour', 'Appearance', 'Geometry' }) do
             if by_cat[cat] then
-                pcall(W.widgets.property_sel.addItem, W.widgets.property_sel, '-- ' .. cat .. ' --')
+                combo_insert(W.widgets.property_sel, '-- ' .. cat .. ' --')
                 for _, p in ipairs(by_cat[cat]) do
-                    pcall(W.widgets.property_sel.addItem, W.widgets.property_sel, p.label .. '|' .. p.id)
+                    combo_insert(W.widgets.property_sel, p.label .. '|' .. p.id)
                 end
             end
-        end
-        if W.widgets.property_sel.addChangeCallback then
-            pcall(W.widgets.property_sel.addChangeCallback, W.widgets.property_sel, function(cb)
-                local text = cb.getText and cb:getText() or ''
-                local id = text:match('|(.+)$')
-                if id then
-                    W.property_id = id
-                    W.operation = nil
-                    W.op_args = {}
-                    M.rebuild_property_panel()
-                    recompute_plan(); M.rebuild_preview()
-                end
-            end)
         end
     end
 
@@ -595,20 +604,7 @@ function M.rebuild_property_panel()
         pcall(W.widgets.operation_sel.removeAllItems, W.widgets.operation_sel)
         if entry_obj then
             for _, op in ipairs(entry_obj.operations) do
-                pcall(W.widgets.operation_sel.addItem, W.widgets.operation_sel,
-                      (OP_LABEL[op] or op) .. '|' .. op)
-            end
-            if W.widgets.operation_sel.addChangeCallback then
-                pcall(W.widgets.operation_sel.addChangeCallback, W.widgets.operation_sel, function(cb)
-                    local text = cb.getText and cb:getText() or ''
-                    local op = text:match('|(.+)$')
-                    if op then
-                        W.operation = op
-                        W.op_args = {}
-                        M.rebuild_property_panel()
-                        recompute_plan(); M.rebuild_preview()
-                    end
-                end)
+                combo_insert(W.widgets.operation_sel, (OP_LABEL[op] or op) .. '|' .. op)
             end
         end
     end
@@ -860,7 +856,7 @@ local function build_window()
     if W._built then return end
 
     W.sms_window = sms_window.new({
-        title    = 'Mass Edit',
+        title    = 'Mass Edit  [loaded ' .. os.date('%H:%M:%S') .. ']',
         size     = { w = 900, h = 600 },
         min_size = { w = 720, h = 500 },
         on_undo  = sms_window.default_on_undo,
@@ -922,7 +918,7 @@ local function build_window()
 
     -- ----- treeview + filters (left half) -------------------------------
     local ok_eb, EditBox = pcall(require, 'EditBox')
-    local ok_cb, ComboBox = pcall(require, 'ComboBox')
+    local ok_cb = ComboList ~= nil  -- ComboList is the proper dxgui dropdown
     if ok_eb and EditBox and EditBox.new then
         local ok2, name_filter = pcall(EditBox.new)
         if ok2 and name_filter then
@@ -947,20 +943,52 @@ local function build_window()
     local ok_lb, ListBox = pcall(require, 'ListBox')  -- still required below for the preview list
 
     -- ----- right panel handles (filled in by task 13) -------------------
-    if ok_cb and ComboBox and ComboBox.new then
-        local ok2, property_sel = pcall(ComboBox.new)
+    -- Change callbacks are attached here (once, at construction) — not from
+    -- rebuild_property_panel, which would stack a fresh listener on every
+    -- pick. Both callbacks read the selected item via getSelectedItem +
+    -- getText (the Prefab Manager pattern); the encoded `label|id` suffix
+    -- in each item's text carries the id/op key back to the model.
+    if ok_cb and ComboList and ComboList.new then
+        local ok2, property_sel = pcall(ComboList.new)
         if ok2 and property_sel then
             try_skin(property_sel, 'comboListSkinNew_')
             if property_sel.setBounds then pcall(property_sel.setBounds, property_sel, 450, 40, 240, 24) end
             pcall(raw.insertWidget, raw, property_sel)
             W.widgets.property_sel = property_sel
+            if property_sel.addChangeCallback then
+                pcall(property_sel.addChangeCallback, property_sel, function(cb)
+                    local item = cb.getSelectedItem and cb:getSelectedItem()
+                    local text = (item and item.getText and item:getText()) or ''
+                    local id = text:match('|(.+)$')
+                    if id then
+                        W.property_id = id
+                        W.operation = nil
+                        W.op_args = {}
+                        M.rebuild_property_panel()
+                        recompute_plan(); M.rebuild_preview()
+                    end
+                end)
+            end
         end
-        local ok3, operation_sel = pcall(ComboBox.new)
+        local ok3, operation_sel = pcall(ComboList.new)
         if ok3 and operation_sel then
             try_skin(operation_sel, 'comboListSkinNew_')
             if operation_sel.setBounds then pcall(operation_sel.setBounds, operation_sel, 700, 40, 190, 24) end
             pcall(raw.insertWidget, raw, operation_sel)
             W.widgets.operation_sel = operation_sel
+            if operation_sel.addChangeCallback then
+                pcall(operation_sel.addChangeCallback, operation_sel, function(cb)
+                    local item = cb.getSelectedItem and cb:getSelectedItem()
+                    local text = (item and item.getText and item:getText()) or ''
+                    local op = text:match('|(.+)$')
+                    if op then
+                        W.operation = op
+                        W.op_args = {}
+                        M.rebuild_property_panel()
+                        recompute_plan(); M.rebuild_preview()
+                    end
+                end)
+            end
         end
     end
 

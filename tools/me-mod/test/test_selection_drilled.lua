@@ -44,7 +44,7 @@ end
 do
     mock.new_mission()
     local g1 = mock.add_plane({ name = 'A' })
-    local g2 = mock.add_plane({ name = 'B' })
+    local g2 = mock.add_vehicle({ name = 'V' })
     with_snapshot({ ok = true, groups = { g1, g2 }, zones = {}, drawings = {} }, function()
         local snap = selection.snapshot_drilled('group')
         check('group scope ok',          snap.ok == true)
@@ -52,6 +52,8 @@ do
         check('group scope pool=2',      #snap.pool == 2)
         check('group scope parent_map identity',
               snap.parent_map[g1] == g1 and snap.parent_map[g2] == g2)
+        check('group scope categories.plane',   snap.categories[g1] == 'plane')
+        check('group scope categories.vehicle', snap.categories[g2] == 'vehicle')
     end)
 end
 
@@ -68,6 +70,9 @@ do
         check('unit parent g1 -> g1',  snap.parent_map[g1.units[1]] == g1)
         check('unit parent g1.u2 -> g1', snap.parent_map[g1.units[2]] == g1)
         check('unit parent g2.u1 -> g2', snap.parent_map[g2.units[1]] == g2)
+        check('unit categories inherit from group',
+              snap.categories[g1.units[1]] == 'plane'
+              and snap.categories[g2.units[1]] == 'plane')
     end)
 end
 
