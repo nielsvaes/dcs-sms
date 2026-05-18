@@ -52,7 +52,11 @@ end
 
 function M._apply(entities, find, replace)
     if type(entities) ~= 'table' or #entities == 0 then
-        return { changed = 0, failed = 0, changed_rows = {}, nothing_selected = true }
+        return {
+            changed = 0, failed = 0, changed_rows = {},
+            nothing_selected = true,
+            toast = 'Nothing selected', sev = 'warning',
+        }
     end
 
     local changed_rows, failed = {}, 0
@@ -74,7 +78,26 @@ function M._apply(entities, find, replace)
         undo.record_generic('mass_edit.find_replace_group_name', { rows = changed_rows })
     end
 
-    return { changed = #changed_rows, failed = failed, changed_rows = changed_rows }
+    local result = {
+        changed      = #changed_rows,
+        failed       = failed,
+        changed_rows = changed_rows,
+    }
+
+    -- Toast text + severity. The host treats these as opaque strings and
+    -- just plays them — keeps the host form-agnostic.
+    if #changed_rows == 0 and failed == 0 then
+        result.toast = 'No matches'
+        result.sev   = 'warning'
+    else
+        local toast = string.format('%d renamed', #changed_rows)
+        if failed > 0 then toast = toast .. string.format(' · %d failed', failed) end
+        local sev = (failed == 0 and 'success') or (#changed_rows == 0 and 'error') or 'warning'
+        result.toast = toast
+        result.sev   = sev
+    end
+
+    return result
 end
 
 -- ---------------------------------------------------------------------------

@@ -20,10 +20,8 @@ local sms_window  = require('dcs_sms_me.sms_window')
 local selection   = require('dcs_sms_me.selection')
 local mass_forms  = require('dcs_sms_me.mass_edit_forms')
 local skin_helper = require('dcs_sms_me.skin_helper')
-local version     = require('dcs_sms_me.version')
 
 -- dxgui modules. pcall-required so the file still loads in test VMs.
-local Skin;            do local ok, m = pcall(require, 'Skin');           if ok then Skin           = m end end
 local Static;          do local ok, m = pcall(require, 'Static');         if ok then Static         = m end end
 local Grid;            do local ok, m = pcall(require, 'Grid');           if ok then Grid           = m end end
 local GridHeaderCell;  do local ok, m = pcall(require, 'GridHeaderCell'); if ok then GridHeaderCell = m end end
@@ -35,9 +33,6 @@ local Button;          do local ok, m = pcall(require, 'Button');         if ok 
 -- Helpers
 -- ---------------------------------------------------------------------------
 
-local function log_info(msg)
-    pcall(function() _G.log.write('sms.me.mass_edit', _G.log.INFO or 0, msg) end)
-end
 local function log_warn(msg)
     pcall(function() _G.log.write('sms.me.mass_edit', _G.log.WARNING or 2, msg) end)
 end
@@ -69,7 +64,6 @@ local W = {
     scope       = 'group',
     pool        = {},
     parent_map  = {},
-    categories  = {},
     checked     = { group = {}, unit = {}, waypoint = {}, zone = {}, drawing = {} },
     filters     = { group = {}, unit = {}, waypoint = {}, zone = {}, drawing = {} },
     sort_state  = {
@@ -103,11 +97,10 @@ local function rebuild_pool()
     local snap = selection.snapshot_mission(W.scope)
     if not snap.ok then
         log_warn('snapshot_mission failed: ' .. tostring(snap.error))
-        W.pool, W.parent_map, W.categories = {}, {}, {}
+        W.pool, W.parent_map = {}, {}
         return
     end
     W.pool, W.parent_map = snap.pool, snap.parent_map
-    W.categories = snap.categories or {}
 
     -- Drop checked entries no longer in the pool.
     local in_pool = {}
@@ -136,22 +129,16 @@ local function get_checked_for_active_scope()
     return out
 end
 
--- Called by forms after a successful apply.
+-- Called by forms after a successful apply. Refreshes the entity list,
+-- updates scope counts, and plays whatever toast/severity the form
+-- supplied. The host treats result.toast/result.sev as opaque strings —
+-- each form decides its own wording so the host stays form-agnostic.
 local function on_after_apply(result)
     rebuild_pool()
     M.update_scope_counts()
     M.rebuild_treeview()
-    if result and result.nothing_selected then
-        if W.sms_window and W.sms_window.set_status then
-            pcall(W.sms_window.set_status, W.sms_window, 'Nothing selected', 'warning')
-        end
-        return
-    end
-    if result and W.sms_window and W.sms_window.set_status then
-        local toast = string.format('%d renamed', result.changed or 0)
-        if (result.failed or 0) > 0 then toast = toast .. string.format(' · %d failed', result.failed) end
-        local sev = (result.failed == 0 and 'success') or (result.changed == 0 and 'error') or 'warning'
-        pcall(W.sms_window.set_status, W.sms_window, toast, sev)
+    if result and result.toast and W.sms_window and W.sms_window.set_status then
+        pcall(W.sms_window.set_status, W.sms_window, result.toast, result.sev or 'info')
     end
 end
 

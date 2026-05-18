@@ -42,6 +42,8 @@ do
     check('empty selection: changed=0',           result.changed == 0)
     check('empty selection: nothing_selected',    result.nothing_selected == true)
     check('empty selection: no undo recorded',    undo.has_record() == false)
+    check('empty selection: toast = Nothing selected', result.toast == 'Nothing selected')
+    check('empty selection: sev = warning', result.sev == 'warning')
 end
 
 -- Case 2: find substring not present in any name → no changes, no undo.
@@ -56,6 +58,8 @@ do
     check('no match: name unchanged g1', g1.name == 'Alpha')
     check('no match: name unchanged g2', g2.name == 'Bravo')
     check('no match: no undo recorded',  undo.has_record() == false)
+    check('no match: toast = No matches', result.toast == 'No matches')
+    check('no match: sev = warning', result.sev == 'warning')
 end
 
 -- Case 3: find substring matches 2 of 3 entities → 2 changed, 1 untouched, undo recorded.
@@ -74,6 +78,8 @@ do
     check('match: g3 untouched', g3.name == 'Other')
     check('match: renameGroup called for both', #renames == 2)
     check('match: undo recorded', undo.has_record() == true)
+    check('match: toast = "2 renamed"', result.toast == '2 renamed', 'got ' .. tostring(result.toast))
+    check('match: sev = success', result.sev == 'success')
 end
 
 -- Case 4: undo restores prior names (continues from case 3 state).
