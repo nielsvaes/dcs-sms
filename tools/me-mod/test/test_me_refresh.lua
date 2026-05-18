@@ -71,5 +71,61 @@ do
     check('recreate tolerates missing me_mission helpers', ok == true)
 end
 
+-- Case 6: update_hidden_group prefers MapWindow.updateHiddenGroup when available.
+do
+    local mw_calls = 0
+    package.loaded['me_map_window'] = {
+        updateHiddenGroup = function(g) mw_calls = mw_calls + 1 end,
+    }
+    create_calls, update_calls = 0, 0
+    package.loaded['me_mission'] = {
+        create_group_map_objects = function(g, force) create_calls = create_calls + 1 end,
+        update_group_map_objects = function(g) update_calls = update_calls + 1 end,
+        remove_group_map_objects = function(g) end,
+    }
+    me_refresh.update_hidden_group({ hidden = true })
+    check('update_hidden_group calls MapWindow.updateHiddenGroup',  mw_calls == 1)
+    check('update_hidden_group skips fallback when MapWindow works', create_calls == 0)
+end
+
+-- Case 7: fallback path when me_map_window is unreachable, hidden=true → remove only.
+do
+    package.loaded['me_map_window'] = nil
+    package.preload['me_map_window'] = function() error('not available') end
+    local remove_calls = 0
+    create_calls = 0
+    package.loaded['me_mission'] = {
+        create_group_map_objects = function(g) create_calls = create_calls + 1 end,
+        remove_group_map_objects = function(g) remove_calls = remove_calls + 1 end,
+    }
+    me_refresh.update_hidden_group({ hidden = true })
+    check('fallback hidden=true: remove fires', remove_calls == 1)
+    check('fallback hidden=true: create skipped', create_calls == 0)
+end
+
+-- Case 8: fallback path with hidden=false → remove + create.
+do
+    package.loaded['me_map_window'] = nil
+    package.preload['me_map_window'] = function() error('not available') end
+    local remove_calls = 0
+    create_calls = 0
+    package.loaded['me_mission'] = {
+        create_group_map_objects = function(g) create_calls = create_calls + 1 end,
+        remove_group_map_objects = function(g) remove_calls = remove_calls + 1 end,
+    }
+    me_refresh.update_hidden_group({ hidden = false })
+    check('fallback hidden=false: remove fires', remove_calls == 1)
+    check('fallback hidden=false: create fires', create_calls == 1)
+end
+
+-- Case 9: fallback tolerates missing me_mission helpers.
+do
+    package.loaded['me_map_window'] = nil
+    package.preload['me_map_window'] = function() error('not available') end
+    package.loaded['me_mission'] = { }
+    local ok = pcall(me_refresh.update_hidden_group, { hidden = true })
+    check('update_hidden_group tolerates missing me_mission helpers', ok == true)
+end
+
 if failures > 0 then print(failures .. ' failure(s)'); os.exit(1) end
 print('All me_refresh tests passed.')

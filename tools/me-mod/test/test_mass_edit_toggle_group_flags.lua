@@ -25,10 +25,13 @@ end
 
 -- Stub me_refresh so the form's refresh calls are recorded but no-op'd.
 local refresh_calls = {}
+local panel_refresh_calls = 0
 package.preload['dcs_sms_me.me_refresh'] = function()
     return {
-        refresh_group_view  = function(g) refresh_calls[#refresh_calls + 1] = { kind = 'refresh', g = g } end,
-        recreate_group_view = function(g) refresh_calls[#refresh_calls + 1] = { kind = 'recreate', g = g } end,
+        refresh_group_view   = function(g) refresh_calls[#refresh_calls + 1] = { kind = 'refresh',  g = g } end,
+        recreate_group_view  = function(g) refresh_calls[#refresh_calls + 1] = { kind = 'recreate', g = g } end,
+        update_hidden_group  = function(g) refresh_calls[#refresh_calls + 1] = { kind = 'hidden',   g = g } end,
+        refresh_group_panels = function()  panel_refresh_calls = panel_refresh_calls + 1 end,
     }
 end
 
@@ -43,6 +46,7 @@ end
 
 local function reset()
     refresh_calls = {}
+    panel_refresh_calls = 0
     undo.clear()
 end
 
@@ -100,7 +104,9 @@ do
     check('single-on: toast = "1 flag changes"',  result.toast == '1 flag changes')
     check('single-on: sev = success',             result.sev == 'success')
     check('single-on: undo recorded',             undo.has_record() == true)
-    check('single-on: refresh_group_view called', #refresh_calls == 1 and refresh_calls[1].g == g)
+    check('single-on: update_hidden_group called (mirrors ED checkbox handler)',
+          #refresh_calls == 1 and refresh_calls[1].g == g and refresh_calls[1].kind == 'hidden')
+    check('single-on: refresh_group_panels called once', panel_refresh_calls == 1)
 end
 
 -- Case 4: single plane, two properties (ON, OFF) -> both fields flipped,
@@ -118,8 +124,9 @@ do
     check('two-props: g.lateActivation = false',  g.lateActivation == false)
     check('two-props: g.uncontrolled = true',     g.uncontrolled == true)
     check('two-props: toast = "2 flag changes"',  result.toast == '2 flag changes')
-    -- Only one refresh call per entity, even with multiple fields touched.
-    check('two-props: refresh_group_view called once', #refresh_calls == 1)
+    -- Only one update_hidden_group call per entity, even with multiple fields touched.
+    check('two-props: update_hidden_group called once',
+          #refresh_calls == 1 and refresh_calls[1].kind == 'hidden')
 end
 
 -- Case 5: plane + vehicle, property `uncontrolled` ON -> field flipped on
@@ -145,9 +152,9 @@ do
     check('mix-cat: toast = "1 flag changes · 1 not applicable"',
           result.toast == '1 flag changes · 1 not applicable')
     check('mix-cat: sev = success',               result.sev == 'success')
-    -- Refresh only fired for the plane (the only one we touched).
+    -- update_hidden_group only fired for the plane (the only one we touched).
     check('mix-cat: refresh fired only for plane',
-          #refresh_calls == 1 and refresh_calls[1].g == g_plane)
+          #refresh_calls == 1 and refresh_calls[1].g == g_plane and refresh_calls[1].kind == 'hidden')
 end
 
 -- Case 6: plane + static, property `hidden` ON -> field flipped on BOTH
@@ -168,7 +175,8 @@ do
     check('hidden-universal: not_applicable=0',   (result.not_applicable or 0) == 0)
     check('hidden-universal: plane.hidden=true',  g_plane.hidden == true)
     check('hidden-universal: static.hidden=true', g_stat.hidden == true)
-    check('hidden-universal: 2 refresh calls',    #refresh_calls == 2)
+    check('hidden-universal: 2 update_hidden_group calls',
+          #refresh_calls == 2 and refresh_calls[1].kind == 'hidden' and refresh_calls[2].kind == 'hidden')
 end
 
 -- Case 7: static + plane-only property -> static counted as not_applicable;
@@ -190,7 +198,7 @@ do
           result.toast == 'Nothing applicable')
     check('nothing-applicable: sev = warning',    result.sev == 'warning')
     check('nothing-applicable: field untouched',  g_stat.uncontrolled == false)
-    check('nothing-applicable: 0 refresh calls',  #refresh_calls == 0)
+    check('nothing-applicable: 0 recreate calls', #refresh_calls == 0)
 end
 
 -- Case 8: undo restores fields in reverse order (multi-field on one

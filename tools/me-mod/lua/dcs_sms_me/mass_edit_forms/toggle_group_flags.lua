@@ -123,11 +123,23 @@ function M._apply(entities, settings, categories)
         end
     end
 
-    -- Lightweight per-entity view refresh once (data-side only -- these
-    -- flags don't change icon appearance, only visibility state). One
-    -- refresh per entity, regardless of how many fields it had touched.
-    if me_refresh and type(me_refresh.refresh_group_view) == 'function' then
-        for e in pairs(refreshed) do pcall(me_refresh.refresh_group_view, e) end
+    -- Per-entity visibility refresh: mirrors what ED's own "HIDDEN ON
+    -- MAP" checkbox handler does -- MapWindow.updateHiddenGroup removes
+    -- the symbol and only recreates it when g.hidden is false.
+    -- update_group_map_objects / recreate_group_view alone don't drop
+    -- the icon when hidden flips to true. We call this for ANY touched
+    -- entity (cheap; only fields we care about visually are `hidden`
+    -- and possibly `lateActivation`, but the wrapper is safe to call
+    -- in all cases).
+    if me_refresh and type(me_refresh.update_hidden_group) == 'function' then
+        for e in pairs(refreshed) do pcall(me_refresh.update_hidden_group, e) end
+    end
+    -- If the user has a group panel open in the right pane and one of
+    -- the modified groups happens to be the actively-selected one, the
+    -- panel's checkboxes will now reflect the new state. No-op for the
+    -- other categories.
+    if me_refresh and type(me_refresh.refresh_group_panels) == 'function' and #changed_rows > 0 then
+        pcall(me_refresh.refresh_group_panels)
     end
 
     if #changed_rows > 0 then
@@ -174,8 +186,11 @@ undo.register_handler('mass_edit.toggle_group_flags', function(snapshot)
             refreshed[r.entity] = true
         end
     end
-    if me_refresh and type(me_refresh.refresh_group_view) == 'function' then
-        for e in pairs(refreshed) do pcall(me_refresh.refresh_group_view, e) end
+    if me_refresh and type(me_refresh.update_hidden_group) == 'function' then
+        for e in pairs(refreshed) do pcall(me_refresh.update_hidden_group, e) end
+    end
+    if me_refresh and type(me_refresh.refresh_group_panels) == 'function' then
+        pcall(me_refresh.refresh_group_panels)
     end
     return true
 end)
