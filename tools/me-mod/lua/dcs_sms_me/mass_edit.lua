@@ -74,6 +74,11 @@ local W = {
         drawing  = { key = 'name',  dir = 'asc' },
     },
     form_panels = { group = {}, unit = {}, waypoint = {}, zone = {}, drawing = {} },
+    -- entity → 'plane' | 'helicopter' | 'vehicle' | 'ship' | 'static' | 'unknown'
+    -- Populated from selection.snapshot_mission(). Reads the Type column for
+    -- the group treeview (the category lives at container-key level in the
+    -- mission tree, not on the group object itself).
+    categories  = {},
     widgets = {
         scope_tabs   = {},
         scope_counts = {},
@@ -97,10 +102,11 @@ local function rebuild_pool()
     local snap = selection.snapshot_mission(W.scope)
     if not snap.ok then
         log_warn('snapshot_mission failed: ' .. tostring(snap.error))
-        W.pool, W.parent_map = {}, {}
+        W.pool, W.parent_map, W.categories = {}, {}, {}
         return
     end
     W.pool, W.parent_map = snap.pool, snap.parent_map
+    W.categories = snap.categories or {}
 
     -- Drop checked entries no longer in the pool.
     local in_pool = {}
@@ -225,9 +231,14 @@ local SCOPE_COLUMNS = {
 
 local function row_values(scope, entity, group)
     if scope == 'group' then
+        -- Country lives on the back-reference (g.boss → country table);
+        -- category lives in W.categories (populated from snapshot_mission).
+        -- Neither is a field on the group object itself.
+        local country = (entity.boss and entity.boss.name) or ''
+        local category = W.categories[entity] or ''
         return { name = tostring(entity.name or ''),
-                 country = tostring(entity.country or ''),
-                 type    = tostring(entity.category or ''),
+                 country = tostring(country),
+                 type    = tostring(category),
                  units   = #(entity.units or {}) }
     elseif scope == 'unit' then
         return { name  = tostring(entity.name or ''),
@@ -526,7 +537,17 @@ local function build_window()
         title    = 'Mass Edit  [loaded ' .. os.date('%H:%M:%S') .. ']',
         size     = { w = 900, h = 600 },
         min_size = { w = 720, h = 500 },
-        on_undo  = sms_window.default_on_undo,
+        -- Compose default_on_undo with a list refresh so the user sees the
+        -- restored values immediately after Ctrl+Z (instead of stale ones
+        -- until they click Refresh).
+        on_undo = function(swin)
+            sms_window.default_on_undo(swin)
+            pcall(function()
+                rebuild_pool()
+                M.update_scope_counts()
+                M.rebuild_treeview()
+            end)
+        end,
         on_resize = function(swin)
             pcall(function() local cw, ch = swin:raw():getSize(); relayout(cw, ch) end)
         end,
