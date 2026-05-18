@@ -1493,6 +1493,79 @@ function M.group_set_uncontrolled(args)
     return { ok = true, id = g.groupId, name = g.name, uncontrolled = g.uncontrolled }
 end
 
+-- group_set_hidden_on_planner — toggle g.hiddenOnPlanner. ME-side this
+-- is the "HIDDEN ON PLANNER" checkbox on the aircraft / heli group
+-- panel (see me_aircraft.lua:104). Separate from g.hidden ("HIDDEN ON
+-- MAP") — a group can be planner-hidden but map-visible, or the
+-- reverse.
+function M.group_set_hidden_on_planner(args)
+    if type(args) ~= 'table' then
+        return { ok = false, error = 'group_set_hidden_on_planner requires args (table)' }
+    end
+    local has_name = type(args.name) == 'string' and args.name ~= ''
+    local has_id = type(args.id) == 'number'
+    if has_name == has_id then
+        return { ok = false, error = 'group_set_hidden_on_planner requires exactly one of args.name or args.id' }
+    end
+    if type(args.hidden) ~= 'boolean' then
+        return { ok = false, error = 'group_set_hidden_on_planner requires args.hidden (boolean)' }
+    end
+    local g = find_group_in_mission(has_name and args.name or nil, has_id and args.id or nil)
+    if not g then
+        return { ok = false, error = 'group not found' }
+    end
+    g.hiddenOnPlanner = args.hidden
+    return { ok = true, id = g.groupId, name = g.name, hidden_on_planner = g.hiddenOnPlanner }
+end
+
+-- group_set_hidden_on_mfd — toggle g.hiddenOnMFD. ME-side this is the
+-- "HIDDEN ON MFD" checkbox; the ME GUI writes a plain boolean
+-- (me_aircraft.lua:3356), overwriting the {} that new-group templates
+-- use as the initial value. We honour that: store a boolean.
+function M.group_set_hidden_on_mfd(args)
+    if type(args) ~= 'table' then
+        return { ok = false, error = 'group_set_hidden_on_mfd requires args (table)' }
+    end
+    local has_name = type(args.name) == 'string' and args.name ~= ''
+    local has_id = type(args.id) == 'number'
+    if has_name == has_id then
+        return { ok = false, error = 'group_set_hidden_on_mfd requires exactly one of args.name or args.id' }
+    end
+    if type(args.hidden) ~= 'boolean' then
+        return { ok = false, error = 'group_set_hidden_on_mfd requires args.hidden (boolean)' }
+    end
+    local g = find_group_in_mission(has_name and args.name or nil, has_id and args.id or nil)
+    if not g then
+        return { ok = false, error = 'group not found' }
+    end
+    g.hiddenOnMFD = args.hidden
+    return { ok = true, id = g.groupId, name = g.name, hidden_on_mfd = g.hiddenOnMFD }
+end
+
+-- group_set_uncontrollable — toggle g.uncontrollable. The ME labels
+-- this "GAME MASTER ONLY" (me_aircraft.lua:125, me_vehicle.lua:100,
+-- me_ship.lua:107). Distinct from g.uncontrolled — both fields exist
+-- on the same group dict, both are independent checkboxes.
+function M.group_set_uncontrollable(args)
+    if type(args) ~= 'table' then
+        return { ok = false, error = 'group_set_uncontrollable requires args (table)' }
+    end
+    local has_name = type(args.name) == 'string' and args.name ~= ''
+    local has_id = type(args.id) == 'number'
+    if has_name == has_id then
+        return { ok = false, error = 'group_set_uncontrollable requires exactly one of args.name or args.id' }
+    end
+    if type(args.enabled) ~= 'boolean' then
+        return { ok = false, error = 'group_set_uncontrollable requires args.enabled (boolean)' }
+    end
+    local g = find_group_in_mission(has_name and args.name or nil, has_id and args.id or nil)
+    if not g then
+        return { ok = false, error = 'group not found' }
+    end
+    g.uncontrollable = args.enabled
+    return { ok = true, id = g.groupId, name = g.name, uncontrollable = g.uncontrollable }
+end
+
 -- group_set_frequency — set g.frequency in MHz.
 function M.group_set_frequency(args)
     if type(args) ~= 'table' then
