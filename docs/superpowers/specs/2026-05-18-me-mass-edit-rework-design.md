@@ -389,8 +389,9 @@ If `dtc_button_set_on` / `dtc_button_set_off` skins don't already exist, the PR 
 - **Per-entity apply.**
   - For each entity, walk the keys in `settings`. For each `(field, target_value)`:
     - If the field is not applicable to the entity's category (table below), skip it AND count this entity as `not_applicable` *for the form-level toast only* (this counter increments once per entity that hit any inapplicable field — not once per field). Do NOT abort the entity; other applicable fields on the same entity still get applied.
-    - If applicable, call the verb for that field (table below) with `pcall`. Verb success → snapshot `{ entity = e, field = field, old = <captured before mutation> }` to a flat changed-rows list; this row counts toward `changed`. Verb thrown / verb returned `ok=false` → log_warn and count as `failed` for the entity-field pair.
-  - "Captured before mutation" is the entity's current value at the moment _apply walks it, *not* a pre-loop snapshot — so two passes applying ON then OFF in quick succession both round-trip correctly.
+    - If applicable, snapshot `{ entity = e, field = field, old = <captured before mutation> }` to a flat changed-rows list, then write `e[field] = target_value` directly. The row counts toward `changed`.
+  - "Captured before mutation" is the entity's current value at the moment _apply walks it, *not* a pre-loop snapshot — so two passes applying ON then OFF in quick succession both round-trip correctly. Non-boolean current values (e.g. `hiddenOnMFD`'s initial `{}` from a freshly-created group) are normalized to `false` for the snapshot so undo can restore a boolean.
+  - **Direct field writes, not verb calls.** Unlike `set_country` (which routes through `verbs.group_set_country` to inherit coalition / livery / map-color side effects), the six toggle fields have no side effects beyond their own value — the corresponding verbs would be trivial passthroughs. The form writes fields directly. The new verbs added in this PR (`group_set_hidden_on_planner` etc.) exist for **CLI scripting** of these flags, not because the form needs them.
 
 - **Applicability map** (form-side, hard-coded — mirrors the ME's per-category visibility):
 
@@ -407,25 +408,24 @@ If `dtc_button_set_on` / `dtc_button_set_off` skins don't already exist, the PR 
 
   The form uses `e._category` (set on entities by `selection.snapshot_mission`) for the lookup. An entity whose category isn't in the inner table is skipped for that field. Static groups are accepted only by `hidden`.
 
-- **Verb map.**
+- **Field write summary.**
 
-  | Field | Verb |
-  |---|---|
-  | `hidden` | `verbs.group_set_hidden({ id=g.groupId, hidden=v })` (existing) |
-  | `hiddenOnPlanner` | `verbs.group_set_hidden_on_planner({ id=g.groupId, hidden=v })` (new) |
-  | `hiddenOnMFD` | `verbs.group_set_hidden_on_mfd({ id=g.groupId, hidden=v })` (new) |
-  | `uncontrollable` | `verbs.group_set_uncontrollable({ id=g.groupId, enabled=v })` (new) |
-  | `uncontrolled` | `verbs.group_set_uncontrolled({ id=g.groupId, enabled=v })` (existing) |
-  | `lateActivation` | `verbs.group_set_late_activation({ id=g.groupId, enabled=v })` (existing) |
+  | Field | Form writes | Standalone CLI verb (for scripting) |
+  |---|---|---|
+  | `hidden` | `e.hidden = v` | `verbs.group_set_hidden` (existing) |
+  | `hiddenOnPlanner` | `e.hiddenOnPlanner = v` | `verbs.group_set_hidden_on_planner` (new in this PR) |
+  | `hiddenOnMFD` | `e.hiddenOnMFD = v` | `verbs.group_set_hidden_on_mfd` (new in this PR) |
+  | `uncontrollable` | `e.uncontrollable = v` | `verbs.group_set_uncontrollable` (new in this PR) |
+  | `uncontrolled` | `e.uncontrolled = v` | `verbs.group_set_uncontrolled` (existing) |
+  | `lateActivation` | `e.lateActivation = v` | `verbs.group_set_late_activation` (existing) |
 
 - **Toast.** Single-line summary built from the result counters:
   - All-success, nothing-not-applicable: `N flag changes` (sev=`success`). Where `N` is the count of `(entity, field)` pairs actually mutated.
-  - With `not_applicable > 0`: append ` · M not applicable` (M = entities, not pairs). sev stays `success` unless there were failures.
-  - With `failed > 0` and `changed > 0`: append ` · K failed`. sev=`warning`.
-  - With `changed == 0, failed > 0`: `0 flag changes · K failed` (sev=`error`).
-  - With `changed == 0, failed == 0, not_applicable > 0`: `Nothing applicable` (sev=`warning`).
+  - With `not_applicable > 0` and `changed > 0`: append ` · M not applicable` (M = entities, not pairs). sev=`success`.
+  - With `changed == 0, not_applicable > 0`: `Nothing applicable` (sev=`warning`).
+  - There is no `failed` counter — direct field writes can't fail under normal conditions. The form module's outer `pcall` wraps the apply handler so an unexpected throw (e.g. corrupted entity table) degrades to an `Internal error (logged)` toast rather than crashing the editor.
 
-**Undo.** Per-row snapshot: each successfully mutated `(entity, field, old_value)` triple is appended to `changed_rows`. Undo handler iterates rows in reverse order (so multi-field changes on the same entity restore consistently) and calls the corresponding verb to write back the old value. The verb-roundtrip approach matches `set_country`'s undo — keeps the verb layer authoritative.
+**Undo.** Per-row snapshot: each mutated `(entity, field, old_value)` triple is appended to `changed_rows`. Undo handler iterates rows in reverse order (so multi-field changes on the same entity restore in the opposite order they applied) and writes `r.entity[r.field] = r.old` directly. This is consistent with the form's own write path; no verb roundtrip.
 
 **Required new verbs** in `tools/me-mod/lua/dcs_sms_me/verbs.lua`:
 
@@ -484,8 +484,8 @@ Best-judgement calls made autonomously and recorded here so they can be revisite
 - **Applicability handling = skip-and-report.** Inapplicable (field, entity) pairs are silently skipped; the *entity* is counted toward `not_applicable` once if any of its fields were skipped. Toast surfaces the count. Alternative ("reject whole batch") rejected as too restrictive for mixed-category selections.
 - **Per-property applicability is hard-coded** in the form module (the `APPLIES_TO` table), not introspected from the ME. Trade-off: simpler, but tight coupling to ED's per-category visibility rules. If ED changes (e.g., adds `hiddenOnPlanner` to vehicles), the table needs an update. Acceptable — this set of fields has been stable since at least DCS 2.5.
 - **New verbs follow the existing toggle convention** (`hidden_on_planner`/`hidden_on_mfd` take `args.hidden`; `uncontrollable` takes `args.enabled`). Naming asymmetry is preserved to match the existing pattern (`group_set_hidden` uses `hidden`, `group_set_uncontrolled` uses `enabled`).
-- **Verb-pair completeness:** Lua verbs + Go CLI + doc updates land in the same PR. Skipping the Go side would leave 3 Lua-only verbs and break the consistent verb table; not worth the inconsistency to save ~30 min of boilerplate.
-- **Undo restores via verbs**, not by direct field assignment, matching the `set_country` undo pattern. Single source of truth for the mutation.
+- **Verb-pair completeness:** Lua verbs + Go CLI + doc updates land in the same PR. Skipping the Go side would leave 3 Lua-only verbs and break the consistent verb table; not worth the inconsistency to save ~30 min of boilerplate. These verbs exist for **CLI scripting** of the same flags — they are not called by the toggle form itself.
+- **Form writes fields directly**, NOT through the new verbs. Departs from `set_country`'s verb-roundtrip pattern because the toggle verbs are trivial passthroughs (`g.field = value` with no side effects) — routing through them is overhead with no functional gain. The verbs exist for the CLI surface; the form has no reason to call them. Undo also writes fields directly for the same reason.
 - **Group view refresh:** the form's `on_after_apply` callback drives `me_refresh.refresh_group_view` (lightweight) per entity. The heavyweight `recreate_group_view` is unnecessary here — these flags don't affect category, coalition, or unit composition, just visibility. Empirical verification belongs in smoke; if a flag like `lateActivation` does affect rendering (deferred icons), fall back to `recreate_group_view`.
 - **State-button skin:** prefer reusing `dtc_button` (default) for LEAVE and either existing `dtc_button_coal_red/blue` skins or new `dtc_button_set_on/off` static-tinted variants for ON/OFF. The implementation plan picks one after a quick check of `dtc_skins.lua` — does not block the design.
 - **No "Apply all six" shortcut button** in v1 (e.g. "Hide everywhere"). YAGNI; users can cycle three buttons faster than they'd find such a shortcut.
