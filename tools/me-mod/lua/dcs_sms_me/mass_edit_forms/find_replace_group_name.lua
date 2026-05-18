@@ -26,6 +26,7 @@ M.title = 'Find & replace in group names'
 local transforms  = require('dcs_sms_me.mass_edit_transforms')
 local undo        = require('dcs_sms_me.undo')
 local skin_helper = require('dcs_sms_me.skin_helper')
+local name_writer = require('dcs_sms_me.group_name_writer')
 
 -- dxgui modules (pcall-guarded so the module loads in the test VM).
 local Static;   do local ok, m = pcall(require, 'Static');   if ok then Static   = m end end
@@ -33,18 +34,6 @@ local EditBox;  do local ok, m = pcall(require, 'EditBox');  if ok then EditBox 
 local Button;   do local ok, m = pcall(require, 'Button');   if ok then Button   = m end end
 
 local function log_warn(msg) pcall(function() _G.log.write('sms.me.mass_edit.find_replace_group_name', _G.log.WARNING or 2, msg) end) end
-
--- Internal writer. Mirrors the deleted group_name registry entry's logic.
-local function write_group_name(g, value)
-    local Mission = require('me_mission')
-    if type(Mission.renameGroup) ~= 'function' then
-        g.name = value
-        return true
-    end
-    local ok = Mission.renameGroup(g, value)
-    if not ok then return false, 'rename rejected by Mission.renameGroup' end
-    return true
-end
 
 -- ---------------------------------------------------------------------------
 -- Apply (testable; no dxgui access).
@@ -64,12 +53,12 @@ function M._apply(entities, find, replace)
         local old = e.name
         local new = transforms.find_replace(old, { find = find or '', replace = replace or '' })
         if new ~= old then
-            local p_ok, w_ok, w_err = pcall(write_group_name, e, new)
+            local p_ok, w_ok, _actual, w_err = pcall(name_writer.write, e, new)
             if p_ok and w_ok then
                 changed_rows[#changed_rows + 1] = { entity = e, old = old }
             else
                 failed = failed + 1
-                log_warn('write_group_name failed: ' .. tostring(p_ok and w_err or w_ok))
+                log_warn('name_writer.write failed: ' .. tostring(p_ok and w_err or w_ok))
             end
         end
     end
@@ -103,7 +92,7 @@ end
 -- ---------------------------------------------------------------------------
 -- Undo handler — registered once at module load. Re-registers after hot
 -- reload (the undo bus replaces the handler under the same id). Restores
--- names via the same write_group_name path used at apply time, so
+-- names via the same name_writer.write path used at apply time, so
 -- Mission.renameGroup side effects (ME group panel refresh, etc.) fire
 -- on undo too.
 -- ---------------------------------------------------------------------------
@@ -114,7 +103,7 @@ undo.register_handler('mass_edit.find_replace_group_name', function(snapshot)
     end
     local errors = 0
     for _, r in ipairs(snapshot.rows) do
-        local p_ok, w_ok = pcall(write_group_name, r.entity, r.old)
+        local p_ok, w_ok = pcall(name_writer.write, r.entity, r.old)
         if not (p_ok and w_ok) then errors = errors + 1 end
     end
     return true, errors > 0 and (errors .. ' partial failures') or nil

@@ -21,23 +21,13 @@ M.title = 'Rename groups'
 local transforms  = require('dcs_sms_me.mass_edit_transforms')
 local undo        = require('dcs_sms_me.undo')
 local skin_helper = require('dcs_sms_me.skin_helper')
+local name_writer = require('dcs_sms_me.group_name_writer')
 
 local Static;   do local ok, m = pcall(require, 'Static');   if ok then Static   = m end end
 local EditBox;  do local ok, m = pcall(require, 'EditBox');  if ok then EditBox  = m end end
 local Button;   do local ok, m = pcall(require, 'Button');   if ok then Button   = m end end
 
 local function log_warn(msg) pcall(function() _G.log.write('sms.me.mass_edit.rename_group', _G.log.WARNING or 2, msg) end) end
-
-local function write_group_name(g, value)
-    local Mission = require('me_mission')
-    if type(Mission.renameGroup) ~= 'function' then
-        g.name = value
-        return true
-    end
-    local ok = Mission.renameGroup(g, value)
-    if not ok then return false, 'rename rejected by Mission.renameGroup' end
-    return true
-end
 
 function M._apply(entities, pattern)
     if type(entities) ~= 'table' or #entities == 0 then
@@ -68,12 +58,12 @@ function M._apply(entities, pattern)
         local old = e.name
         local new = transforms.auto_number(old, args, idx)
         if new ~= old then
-            local p_ok, w_ok, w_err = pcall(write_group_name, e, new)
+            local p_ok, w_ok, _actual, w_err = pcall(name_writer.write, e, new)
             if p_ok and w_ok then
                 changed_rows[#changed_rows + 1] = { entity = e, old = old }
             else
                 failed = failed + 1
-                log_warn('write_group_name failed: ' .. tostring(p_ok and w_err or w_ok))
+                log_warn('name_writer.write failed: ' .. tostring(p_ok and w_err or w_ok))
             end
         end
     end
@@ -106,7 +96,7 @@ undo.register_handler('mass_edit.rename_group', function(snapshot)
     end
     local errors = 0
     for _, r in ipairs(snapshot.rows) do
-        local p_ok, w_ok = pcall(write_group_name, r.entity, r.old)
+        local p_ok, w_ok = pcall(name_writer.write, r.entity, r.old)
         if not (p_ok and w_ok) then errors = errors + 1 end
     end
     return true, errors > 0 and (errors .. ' partial failures') or nil
