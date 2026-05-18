@@ -310,4 +310,98 @@ function M.snapshot_drilled(scope)
     return out  -- unreachable
 end
 
+-- ---------------------------------------------------------------------------
+-- snapshot_mission — like snapshot_drilled but always walks the full mission
+-- tree (no marquee dependency, no fallback path). Used by Mass Edit, which
+-- selects entities via in-window checkboxes rather than the ME's marquee.
+--
+-- Returns the same shape as snapshot_drilled (ok, scope, source, pool,
+-- parent_map, categories). source is always 'mission'.
+-- ---------------------------------------------------------------------------
+
+function M.snapshot_mission(scope)
+    if not VALID_SCOPES[scope] then
+        return { ok = false, error = 'unknown scope: ' .. tostring(scope),
+                 scope = tostring(scope), source = 'mission',
+                 pool = {}, parent_map = {}, categories = {} }
+    end
+
+    local out = {
+        ok = true, scope = scope, source = 'mission',
+        pool = {}, parent_map = {}, categories = {},
+    }
+
+    local cat_by_group = build_category_index()
+    local function cat_of(g) return cat_by_group[g] or 'unknown' end
+
+    if scope == 'group' then
+        walk_mission_groups(function(g)
+            out.pool[#out.pool + 1] = g
+            out.parent_map[g] = g
+            out.categories[g] = cat_of(g)
+        end)
+        return out
+    end
+
+    if scope == 'unit' then
+        walk_mission_groups(function(g)
+            if type(g.units) == 'table' then
+                local cat = cat_of(g)
+                for _, u in ipairs(g.units) do
+                    out.pool[#out.pool + 1] = u
+                    out.parent_map[u] = g
+                    out.categories[u] = cat
+                end
+            end
+        end)
+        return out
+    end
+
+    if scope == 'waypoint' then
+        walk_mission_groups(function(g)
+            if type(g.route) == 'table' and type(g.route.points) == 'table' then
+                local cat = cat_of(g)
+                for _, wp in ipairs(g.route.points) do
+                    out.pool[#out.pool + 1] = wp
+                    out.parent_map[wp] = g
+                    out.categories[wp] = cat
+                end
+            end
+        end)
+        return out
+    end
+
+    if scope == 'zone' then
+        local Mission = require('me_mission')
+        local mission = Mission and Mission.mission
+        local zones = mission and mission.triggers and mission.triggers.zones
+        if type(zones) == 'table' then
+            for _, z in ipairs(zones) do
+                out.pool[#out.pool + 1] = z
+                out.parent_map[z] = z
+            end
+        end
+        return out
+    end
+
+    if scope == 'drawing' then
+        local Mission = require('me_mission')
+        local mission = Mission and Mission.mission
+        local layers = mission and mission.drawings and mission.drawings.layers
+        if type(layers) == 'table' then
+            for _, layer in ipairs(layers) do
+                if type(layer.objects) == 'table' then
+                    for _, d in ipairs(layer.objects) do
+                        out.pool[#out.pool + 1] = d
+                        out.parent_map[d] = d
+                    end
+                end
+            end
+        end
+        return out
+    end
+
+    return out
+end
+
 return M
