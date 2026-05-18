@@ -1,46 +1,53 @@
 -- mass_edit.lua — the Mass Edit tool window.
 --
--- A single sms_window-chromed window with a top-of-window scope tab strip
--- and (filled in by later tasks) a treeview / filter widgets / property
--- panel / preview table. Toggle via DCS-SMS → Mass Edit menu entry.
+-- A single sms_window-chromed window with:
+--   * a top scope tab strip (group / unit / waypoint / zone / drawing)
+--   * a left pane: name-substring filter + multi-column treeview (Grid)
+--     of every entity in the mission, with checkboxes for selection
+--   * a right pane: vertical stack of self-contained forms (find &
+--     replace, rename, set country, ...) — one per (property × operation),
+--     each with its own button. No preview, no Apply gate.
 --
--- The window's lifecycle is idempotent — show() reuses the previous
--- widget tree (hidden, not destroyed) when re-opened in the same session.
--- All per-session state lives in the W table; rebuild_pool / rebuild_
--- treeview / rebuild_property_panel / recompute_plan / rebuild_preview
--- helpers wire the data flow.
+-- The form modules live under mass_edit_forms/ and are loaded via
+-- mass_edit_forms.lua. mass_edit.lua is a thin host: it manages scope
+-- tabs, the entity list, and form mounting.
+--
+-- Toggle via DCS-SMS → Mass Edit menu entry.
 
 local M = {}
 
-local sms_window = require('dcs_sms_me.sms_window')
-local selection  = require('dcs_sms_me.selection')
-local registry   = require('dcs_sms_me.mass_edit_registry')
-local ops        = require('dcs_sms_me.mass_edit_ops')
-local version    = require('dcs_sms_me.version')
+local sms_window  = require('dcs_sms_me.sms_window')
+local selection   = require('dcs_sms_me.selection')
+local mass_forms  = require('dcs_sms_me.mass_edit_forms')
+local skin_helper = require('dcs_sms_me.skin_helper')
+local version     = require('dcs_sms_me.version')
 
--- dxgui widget modules. All pcall-required so the module still loads in
--- test VMs / older DCS builds without these classes.
+-- dxgui modules. pcall-required so the file still loads in test VMs.
 local Skin;            do local ok, m = pcall(require, 'Skin');           if ok then Skin           = m end end
 local Static;          do local ok, m = pcall(require, 'Static');         if ok then Static         = m end end
 local Grid;            do local ok, m = pcall(require, 'Grid');           if ok then Grid           = m end end
 local GridHeaderCell;  do local ok, m = pcall(require, 'GridHeaderCell'); if ok then GridHeaderCell = m end end
 local CheckBox;        do local ok, m = pcall(require, 'CheckBox');       if ok then CheckBox       = m end end
-local ListBoxItem;     do local ok, m = pcall(require, 'ListBoxItem');    if ok then ListBoxItem    = m end end
--- ComboList is the dxgui dropdown the ME actually uses (NOT ComboBox —
--- which exists but doesn't support insertItem and is meant for raw text).
--- Same module Prefab Manager picks up for its country dropdown.
-local ComboList;       do local ok, m = pcall(require, 'ComboList');      if ok then ComboList      = m end end
+local EditBox;         do local ok, m = pcall(require, 'EditBox');        if ok then EditBox        = m end end
+local Button;          do local ok, m = pcall(require, 'Button');         if ok then Button         = m end end
 
-local skin_helper = require('dcs_sms_me.skin_helper')
+-- ---------------------------------------------------------------------------
+-- Helpers
+-- ---------------------------------------------------------------------------
+
+local function log_info(msg)
+    pcall(function() _G.log.write('sms.me.mass_edit', _G.log.INFO or 0, msg) end)
+end
+local function log_warn(msg)
+    pcall(function() _G.log.write('sms.me.mass_edit', _G.log.WARNING or 2, msg) end)
+end
 
 local function make_cell(text, tooltip)
     if not (Static and Static.new) then return nil end
     local ok, s = pcall(Static.new, tostring(text or ''))
     if not (ok and s) then return nil end
     skin_helper.apply(s, 'staticSkin_ME')
-    if tooltip and s.setTooltipText then
-        pcall(function() s:setTooltipText(tostring(tooltip)) end)
-    end
+    if tooltip and s.setTooltipText then pcall(function() s:setTooltipText(tostring(tooltip)) end) end
     return s
 end
 
@@ -58,68 +65,51 @@ end
 -- ---------------------------------------------------------------------------
 
 local W = {
-    sms_window         = nil,
-    scope              = 'group',   -- 'group' | 'unit' | 'waypoint' | 'zone' | 'drawing'
-    source             = 'marquee',
-    pool               = {},
-    parent_map         = {},
-    categories         = {},  -- {entity -> 'plane'|'helicopter'|'vehicle'|'ship'|'static'|'unknown'}
-    checked            = { group = {}, unit = {}, waypoint = {}, zone = {}, drawing = {} },
-    filters            = { group = {}, unit = {}, waypoint = {}, zone = {}, drawing = {} },
-    sort_state         = {
+    sms_window  = nil,
+    scope       = 'group',
+    pool        = {},
+    parent_map  = {},
+    categories  = {},
+    checked     = { group = {}, unit = {}, waypoint = {}, zone = {}, drawing = {} },
+    filters     = { group = {}, unit = {}, waypoint = {}, zone = {}, drawing = {} },
+    sort_state  = {
         group    = { key = 'name',  dir = 'asc' },
         unit     = { key = 'name',  dir = 'asc' },
         waypoint = { key = 'group', dir = 'asc' },
         zone     = { key = 'name',  dir = 'asc' },
         drawing  = { key = 'name',  dir = 'asc' },
     },
-    property_id        = nil,
-    operation          = nil,
-    op_args            = {},
-    plan               = nil,
-    debounce_deadline  = nil,
-    -- Widget handles (populated lazily on first show).
+    form_panels = { group = {}, unit = {}, waypoint = {}, zone = {}, drawing = {} },
     widgets = {
         scope_tabs   = {},
         scope_counts = {},
         tree         = nil,
         tree_headers = {},
-        property_sel = nil,
-        operation_sel = nil,
-        args_panel   = nil,
-        preview_grid = nil,
-        apply_btn    = nil,
-        cancel_btn   = nil,
+        name_filter  = nil,
         refresh_btn  = nil,
-        banner_label = nil,
+        cancel_btn   = nil,
+        empty_label  = nil,
     },
     _built = false,
 }
 
 local SCOPES = { 'group', 'unit', 'waypoint', 'zone', 'drawing' }
 
-local function log_info(msg)
-    pcall(function() _G.log.write('sms.me.mass_edit', _G.log.INFO or 0, msg) end)
-end
-local function log_warn(msg)
-    pcall(function() _G.log.write('sms.me.mass_edit', _G.log.WARNING or 2, msg) end)
-end
-
 -- ---------------------------------------------------------------------------
--- Data flow helpers.
+-- Data flow
 -- ---------------------------------------------------------------------------
 
 local function rebuild_pool()
-    local snap = selection.snapshot_drilled(W.scope)
+    local snap = selection.snapshot_mission(W.scope)
     if not snap.ok then
-        log_warn('snapshot_drilled failed: ' .. tostring(snap.error))
-        W.pool, W.parent_map, W.categories, W.source = {}, {}, {}, 'marquee'
+        log_warn('snapshot_mission failed: ' .. tostring(snap.error))
+        W.pool, W.parent_map, W.categories = {}, {}, {}
         return
     end
-    W.pool, W.parent_map, W.source = snap.pool, snap.parent_map, snap.source
+    W.pool, W.parent_map = snap.pool, snap.parent_map
     W.categories = snap.categories or {}
 
-    -- Drop checked entries for items no longer in the pool.
+    -- Drop checked entries no longer in the pool.
     local in_pool = {}
     for _, e in ipairs(W.pool) do in_pool[e] = true end
     for e, _ in pairs(W.checked[W.scope] or {}) do
@@ -130,60 +120,87 @@ end
 local function scope_pool_counts()
     local counts = {}
     for _, s in ipairs(SCOPES) do
-        local snap = selection.snapshot_drilled(s)
+        local snap = selection.snapshot_mission(s)
         counts[s] = snap.ok and #snap.pool or 0
     end
     return counts
 end
 
-local function recompute_plan()
-    if not W.property_id or not W.operation then
-        W.plan = nil
+-- Get the entities checked in the active scope. Closure handed to each
+-- form so its apply handler can read the current selection.
+local function get_checked_for_active_scope()
+    local out = {}
+    for _, e in ipairs(W.pool) do
+        if W.checked[W.scope][e] then out[#out + 1] = e end
+    end
+    return out
+end
+
+-- Called by forms after a successful apply.
+local function on_after_apply(result)
+    rebuild_pool()
+    M.update_scope_counts()
+    M.rebuild_treeview()
+    if result and result.nothing_selected then
+        if W.sms_window and W.sms_window.set_status then
+            pcall(W.sms_window.set_status, W.sms_window, 'Nothing selected', 'warning')
+        end
         return
     end
-    local checked_entities = {}
-    for _, e in ipairs(W.pool) do
-        if W.checked[W.scope][e] then
-            checked_entities[#checked_entities + 1] = e
+    if result and W.sms_window and W.sms_window.set_status then
+        local toast = string.format('%d renamed', result.changed or 0)
+        if (result.failed or 0) > 0 then toast = toast .. string.format(' · %d failed', result.failed) end
+        local sev = (result.failed == 0 and 'success') or (result.changed == 0 and 'error') or 'warning'
+        pcall(W.sms_window.set_status, W.sms_window, toast, sev)
+    end
+end
+
+local function show_forms_for_active_scope()
+    -- Hide every panel in every scope.
+    for _, scope in ipairs(SCOPES) do
+        for _, panel in ipairs(W.form_panels[scope] or {}) do
+            if panel.hide then panel:hide() end
         end
     end
-    W.plan = ops.compute_plan(W.scope, checked_entities, W.parent_map,
-                              W.property_id, W.operation, W.op_args)
+    -- Show the active scope's panels (or the empty-label fallback).
+    local active = W.form_panels[W.scope] or {}
+    if #active == 0 then
+        if W.widgets.empty_label and W.widgets.empty_label.setVisible then
+            pcall(W.widgets.empty_label.setVisible, W.widgets.empty_label, true)
+        end
+    else
+        if W.widgets.empty_label and W.widgets.empty_label.setVisible then
+            pcall(W.widgets.empty_label.setVisible, W.widgets.empty_label, false)
+        end
+        for _, panel in ipairs(active) do
+            if panel.show then panel:show() end
+        end
+    end
 end
 
 local function on_scope_changed(new_scope)
     if new_scope == W.scope then return end
     W.scope = new_scope
-    W.property_id, W.operation, W.op_args = nil, nil, {}
     rebuild_pool()
-    M._build_tree_widget()  -- columns differ per scope → rebuild the Grid
+    M._build_tree_widget()
     M.rebuild_treeview()
-    M.rebuild_property_panel()
-    recompute_plan()
-    M.rebuild_preview()
+    show_forms_for_active_scope()
+    if M._relayout and W.sms_window and W.sms_window:raw() then
+        local cw, ch = W.sms_window:raw():getSize()
+        M._relayout(cw, ch)
+    end
 end
 
 local function on_refresh_clicked()
     rebuild_pool()
     M.update_scope_counts()
     M.rebuild_treeview()
-    M.rebuild_property_panel()
-    recompute_plan()
-    M.rebuild_preview()
 end
 
 -- ---------------------------------------------------------------------------
--- Treeview + filter widgets
---
--- dxgui doesn't have a tree widget; we render a flat sortable table inside
--- a ListBox. Each row is a horizontal strip with a checkbox + per-column
--- Static labels. Sorting is in-pool (rebuild_treeview re-sorts W.pool by
--- the active column).
+-- Treeview (per-scope columns, sortable, checkbox col 0).
 -- ---------------------------------------------------------------------------
 
--- Per-scope column definitions. Column 0 is always 'check' (CheckBox cell);
--- the rest are data columns rendered as Static cells. Widths sum to ~428px
--- to fit the 430px tree area.
 local SCOPE_COLUMNS = {
     group = {
         { key = 'check',   label = '',        width = 28,  type = 'check'  },
@@ -219,57 +236,32 @@ local SCOPE_COLUMNS = {
     },
 }
 
--- Default sort key per scope (matches the spec's "sort default" column).
-local DEFAULT_SORT = {
-    group    = 'name',
-    unit     = 'name',
-    waypoint = 'group',
-    zone     = 'name',
-    drawing  = 'name',
-}
-
--- row_values returns a keyed table aligned to SCOPE_COLUMNS data-column keys.
--- Numeric columns return numbers (not strings) so the sort comparator can
--- treat them as numbers without re-parsing.
 local function row_values(scope, entity, group)
     if scope == 'group' then
-        return {
-            name    = tostring(entity.name or ''),
-            country = tostring(entity.country or ''),
-            type    = tostring(entity.category or ''),
-            units   = #(entity.units or {}),
-        }
+        return { name = tostring(entity.name or ''),
+                 country = tostring(entity.country or ''),
+                 type    = tostring(entity.category or ''),
+                 units   = #(entity.units or {}) }
     elseif scope == 'unit' then
-        return {
-            name  = tostring(entity.name or ''),
-            type  = tostring(entity.type or ''),
-            skill = tostring(entity.skill or ''),
-            group = tostring((group or {}).name or ''),
-        }
+        return { name  = tostring(entity.name or ''),
+                 type  = tostring(entity.type or ''),
+                 skill = tostring(entity.skill or ''),
+                 group = tostring((group or {}).name or '') }
     elseif scope == 'waypoint' then
         local idx = 0
         if group and group.route and group.route.points then
-            for i, p in ipairs(group.route.points) do
-                if p == entity then idx = i; break end
-            end
+            for i, p in ipairs(group.route.points) do if p == entity then idx = i; break end end
         end
-        return {
-            group = tostring((group or {}).name or ''),
-            idx   = idx,
-            type  = tostring(entity.type or ''),
-            alt   = tonumber(entity.alt) or 0,
-            speed = tonumber(entity.speed) or 0,
-        }
+        return { group = tostring((group or {}).name or ''),
+                 idx   = idx,
+                 type  = tostring(entity.type or ''),
+                 alt   = tonumber(entity.alt) or 0,
+                 speed = tonumber(entity.speed) or 0 }
     elseif scope == 'zone' then
-        return {
-            name   = tostring(entity.name or ''),
-            radius = tonumber(entity.radius) or 0,
-        }
+        return { name = tostring(entity.name or ''), radius = tonumber(entity.radius) or 0 }
     elseif scope == 'drawing' then
-        return {
-            name  = tostring(entity.name or ''),
-            layer = tostring((entity.layer and entity.layer.name) or ''),
-        }
+        return { name = tostring(entity.name or ''),
+                 layer = tostring((entity.layer and entity.layer.name) or '') }
     end
     return {}
 end
@@ -280,20 +272,9 @@ local function passes_filters(scope, entity, group, filters)
     if filters.name_substr and filters.name_substr ~= '' then
         if not name:lower():find(filters.name_substr:lower(), 1, true) then return false end
     end
-    if filters.country and filters.country ~= '' and filters.country ~= 'any' then
-        if tostring(entity.country or (group or {}).country or '') ~= filters.country then return false end
-    end
-    if filters.type and filters.type ~= '' and filters.type ~= 'any' then
-        if tostring(entity.type or entity.category or '') ~= filters.type then return false end
-    end
-    if filters.skill and filters.skill ~= '' and filters.skill ~= 'any' then
-        if tostring(entity.skill or '') ~= filters.skill then return false end
-    end
     return true
 end
 
--- Re-text headers so the active sort column gets the ▲/▼ glyph and the
--- others reset to their plain label.
 local function update_sort_indicators()
     local cols = SCOPE_COLUMNS[W.scope] or {}
     local ss = W.sort_state[W.scope] or {}
@@ -309,56 +290,38 @@ local function update_sort_indicators()
     end
 end
 
--- Stable in-place sort of `rows` by the column key/dir in W.sort_state.
 local function sort_rows(rows)
     local ss = W.sort_state[W.scope]
     if not (ss and ss.key) then return end
     local cols = SCOPE_COLUMNS[W.scope] or {}
     local col_type
-    for _, c in ipairs(cols) do
-        if c.key == ss.key then col_type = c.type; break end
-    end
+    for _, c in ipairs(cols) do if c.key == ss.key then col_type = c.type; break end end
     if col_type == 'check' or col_type == nil then return end
-    local asc = ss.dir ~= 'desc'
-    local numeric = col_type == 'number'
+    local asc, numeric = ss.dir ~= 'desc', col_type == 'number'
     for i, r in ipairs(rows) do r._idx = i end
     table.sort(rows, function(a, b)
         local av, bv = a.values[ss.key], b.values[ss.key]
-        if numeric then
-            av, bv = tonumber(av) or 0, tonumber(bv) or 0
-        else
-            av, bv = tostring(av or ''):lower(), tostring(bv or ''):lower()
-        end
+        if numeric then av, bv = tonumber(av) or 0, tonumber(bv) or 0
+        else            av, bv = tostring(av or ''):lower(), tostring(bv or ''):lower() end
         if av == bv then return a._idx < b._idx end
         if asc then return av < bv else return av > bv end
     end)
     for _, r in ipairs(rows) do r._idx = nil end
 end
 
--- Construct (or replace) the Grid widget for the active scope. Columns
--- differ per scope so we rebuild the Grid on every scope change. The
--- previous Grid is hidden (dxgui has no widget removal API exposed
--- consistently); the visual leak is bounded by the number of scope
--- switches in a session.
 local function build_tree_widget()
-    if not (Grid and Grid.new and GridHeaderCell and GridHeaderCell.new) then
-        return  -- fallback: no Grid → leave W.widgets.tree as nil
-    end
+    if not (Grid and Grid.new and GridHeaderCell and GridHeaderCell.new) then return end
     if not W.sms_window then return end
     local raw = W.sms_window:raw()
     if not raw then return end
 
-    -- Tear down the previous Grid.
-    if W.widgets.tree then
-        pcall(W.widgets.tree.setVisible, W.widgets.tree, false)
-    end
+    if W.widgets.tree then pcall(W.widgets.tree.setVisible, W.widgets.tree, false) end
 
     local ok_grid, grid = pcall(Grid.new)
     if not (ok_grid and grid) then return end
     skin_helper.apply(grid, 'dtc_grid')
     if grid.setBounds then pcall(grid.setBounds, grid, 8, 72, 430, 460) end
 
-    -- Insert per-scope columns with sort-on-click headers.
     W.widgets.tree_headers = {}
     local cols = SCOPE_COLUMNS[W.scope] or {}
     for i, c in ipairs(cols) do
@@ -370,12 +333,8 @@ local function build_tree_widget()
                 local key = c.key
                 pcall(hc.addChangeCallback, hc, function()
                     local ss = W.sort_state[W.scope]
-                    if ss.key == key then
-                        ss.dir = (ss.dir == 'asc') and 'desc' or 'asc'
-                    else
-                        ss.key = key
-                        ss.dir = 'asc'
-                    end
+                    if ss.key == key then ss.dir = (ss.dir == 'asc') and 'desc' or 'asc'
+                    else ss.key = key; ss.dir = 'asc' end
                     M.rebuild_treeview()
                 end)
             end
@@ -384,9 +343,6 @@ local function build_tree_widget()
         end
     end
 
-    -- Whole-row click toggles the row's checked state. Skip col 0 — the
-    -- CheckBox there fires its own change callback. Right-click is a no-op
-    -- for v1.
     grid.onMouseDown = function(self, x, y, button)
         if button ~= 1 then return end
         pcall(function()
@@ -398,39 +354,28 @@ local function build_tree_widget()
             local new_state = not (W.checked[W.scope][r.entity] == true)
             W.checked[W.scope][r.entity] = new_state or nil
             M.rebuild_treeview()
-            recompute_plan(); M.rebuild_preview()
         end)
     end
 
     pcall(raw.insertWidget, raw, grid)
     W.widgets.tree = grid
     update_sort_indicators()
-    -- The newly-constructed Grid was inserted with placeholder bounds; have
-    -- relayout reposition it (and every other widget) against the current
-    -- outer window size. M._relayout is the layout closure assigned at end
-    -- of the module — uses M dispatch because relayout is defined later
-    -- in the file than build_tree_widget.
     pcall(function()
-        if W.sms_window and W.sms_window:raw() then
+        if W.sms_window and W.sms_window:raw() and M._relayout then
             local cw, ch = W.sms_window:raw():getSize()
-            if M._relayout then M._relayout(cw, ch) end
+            M._relayout(cw, ch)
         end
     end)
 end
 M._build_tree_widget = build_tree_widget
 
 function M.rebuild_treeview()
-    -- Compose rows from pool + filters.
     local rows = {}
     for _, e in ipairs(W.pool) do
         local g = W.parent_map[e] or e
         if passes_filters(W.scope, e, g, W.filters[W.scope]) then
-            rows[#rows + 1] = {
-                entity   = e,
-                group    = g,
-                values   = row_values(W.scope, e, g),
-                checked  = W.checked[W.scope][e] == true,
-            }
+            rows[#rows + 1] = { entity = e, group = g, values = row_values(W.scope, e, g),
+                                checked = W.checked[W.scope][e] == true }
         end
     end
     sort_rows(rows)
@@ -456,250 +401,22 @@ function M.rebuild_treeview()
                         pcall(cb.addChangeCallback, cb, function(box)
                             local state = box.getState and box:getState() == true
                             W.checked[W.scope][entity] = state or nil
-                            recompute_plan(); M.rebuild_preview()
                         end)
                     end
                     pcall(grid.setCell, grid, col_idx - 1, row_idx, cb)
                 end
             else
                 local v = r.values[c.key]
-                local text = (v == nil) and '' or tostring(v)
-                local cell = make_cell(text, text)
-                if cell then
-                    pcall(grid.setCell, grid, col_idx - 1, row_idx, cell)
-                end
+                local cell = make_cell((v == nil) and '' or tostring(v), tostring(v or ''))
+                if cell then pcall(grid.setCell, grid, col_idx - 1, row_idx, cell) end
             end
         end
     end
 end
 
 -- ---------------------------------------------------------------------------
--- Property panel
+-- Scope counts label
 -- ---------------------------------------------------------------------------
-
-local OP_LABEL = {
-    set_all       = 'Set all to one value',
-    add_prefix    = 'Add prefix',
-    add_suffix    = 'Add suffix',
-    find_replace  = 'Find & replace text',
-    auto_number   = 'Auto-number',
-    offset        = 'Adjust by amount',
-    toggle_set    = 'Set toggle',
-}
-
--- Filter registry to the active scope and the categories present in the
--- pool's parent groups. Categories come from W.categories (built by
--- selection.snapshot_drilled via one mission walk) — the group ref itself
--- has no `.category` field; the category is the container key in the
--- mission tree.
-local function applicable_properties()
-    local present_cats = {}
-    if W.scope == 'unit' or W.scope == 'waypoint' or W.scope == 'group' then
-        for _, e in ipairs(W.pool) do
-            local cat = W.categories and W.categories[e]
-            if not cat or cat == 'unknown' then cat = 'unknown' end
-            present_cats[cat] = true
-        end
-    end
-
-    local out = {}
-    for _, entry in ipairs(registry) do
-        if entry.scope == W.scope then
-            local ok
-            if entry.applies_to[1] == '*' then ok = true
-            else
-                for _, c in ipairs(entry.applies_to) do
-                    if present_cats[c] then ok = true; break end
-                end
-                if W.scope == 'zone' or W.scope == 'drawing' then ok = true end
-                if next(present_cats) == nil then ok = true end
-            end
-            if ok then out[#out + 1] = entry end
-        end
-    end
-    return out
-end
-
-local function distribute_current_value()
-    if not W.property_id then return 'pick a property' end
-    local entry_obj
-    for _, e in ipairs(registry) do if e.id == W.property_id then entry_obj = e; break end end
-    if not entry_obj then return '' end
-    local seen, count = {}, 0
-    for _, ent in ipairs(W.pool) do
-        if W.checked[W.scope][ent] then
-            local v = tostring(entry_obj.reader(ent))
-            if not seen[v] then seen[v] = true; count = count + 1 end
-        end
-    end
-    if count == 0 then return '(none selected)' end
-    if count == 1 then
-        for v, _ in pairs(seen) do return v end
-    end
-    return 'Mixed (' .. count .. ' values)'
-end
-
--- Helper: insert one item into a combo. The ComboBox expects a real
--- ListBoxItem widget — passing a raw string to addItem silently no-ops
--- (the method doesn't exist on ComboBox; it's insertItem(item)).
-local function combo_insert(combo, label)
-    if not (combo and combo.insertItem and ListBoxItem and ListBoxItem.new) then return end
-    local ok, item = pcall(ListBoxItem.new, label)
-    if ok and item then pcall(combo.insertItem, combo, item) end
-end
-
-function M.rebuild_property_panel()
-    local props = applicable_properties()
-    log_info(string.format(
-        'rebuild_property_panel scope=%s pool_size=%d props=%d property_sel=%s ComboList=%s ListBoxItem=%s',
-        tostring(W.scope), #W.pool, #props,
-        tostring(W.widgets.property_sel ~= nil),
-        tostring(ComboList ~= nil),
-        tostring(ListBoxItem ~= nil)))
-
-    -- Rebuild the property ComboBox.
-    if W.widgets.property_sel and W.widgets.property_sel.removeAllItems then
-        pcall(W.widgets.property_sel.removeAllItems, W.widgets.property_sel)
-        local by_cat = {}
-        for _, p in ipairs(props) do
-            by_cat[p.category] = by_cat[p.category] or {}
-            table.insert(by_cat[p.category], p)
-        end
-        for _, cat in ipairs({ 'Identity', 'Behaviour', 'Appearance', 'Geometry' }) do
-            if by_cat[cat] then
-                combo_insert(W.widgets.property_sel, '-- ' .. cat .. ' --')
-                for _, p in ipairs(by_cat[cat]) do
-                    combo_insert(W.widgets.property_sel, p.label .. '|' .. p.id)
-                end
-            end
-        end
-    end
-
-    -- Rebuild the operation ComboBox for the chosen property.
-    local entry_obj
-    if W.property_id then
-        for _, e in ipairs(registry) do if e.id == W.property_id then entry_obj = e; break end end
-    end
-    if W.widgets.operation_sel and W.widgets.operation_sel.removeAllItems then
-        pcall(W.widgets.operation_sel.removeAllItems, W.widgets.operation_sel)
-        if entry_obj then
-            for _, op in ipairs(entry_obj.operations) do
-                combo_insert(W.widgets.operation_sel, (OP_LABEL[op] or op) .. '|' .. op)
-            end
-        end
-    end
-
-    -- Rebuild the args panel.
-    if W.widgets.args_panel and entry_obj and W.operation then
-        if W.widgets.args_panel.setText then
-            local current = distribute_current_value()
-            local op_summary = W.operation .. '  (current: ' .. current .. ')'
-            pcall(W.widgets.args_panel.setText, W.widgets.args_panel, op_summary)
-        end
-        local ok_eb, EditBox = pcall(require, 'EditBox')
-        if not W.widgets.set_all_edit and ok_eb and EditBox and EditBox.new then
-            local ok2, ed = pcall(EditBox.new)
-            if ok2 and ed then
-                W.widgets.set_all_edit = ed
-                skin_helper.apply(ed, 'editBoxSkin_ME')
-                local raw = W.sms_window and W.sms_window:raw()
-                if raw then pcall(raw.insertWidget, raw, ed) end
-                -- Have relayout position the freshly-inserted EditBox in
-                -- the right-pane args row (instead of a hardcoded coord).
-                pcall(function()
-                    if W.sms_window and W.sms_window:raw() and M._relayout then
-                        local cw, ch = W.sms_window:raw():getSize()
-                        M._relayout(cw, ch)
-                    end
-                end)
-                if ed.addChangeCallback then
-                    pcall(ed.addChangeCallback, ed, function(box)
-                        local txt = box.getText and box:getText() or ''
-                        if W.operation == 'set_all'      then W.op_args = { value = txt }
-                        elseif W.operation == 'add_prefix' then W.op_args = { text = txt }
-                        elseif W.operation == 'add_suffix' then W.op_args = { text = txt }
-                        elseif W.operation == 'offset'    then W.op_args = { delta = tonumber(txt) or 0 }
-                        elseif W.operation == 'find_replace' then
-                            local f, r = txt:match('^(.-)|(.*)$')
-                            W.op_args = { find = f or '', replace = r or '' }
-                        elseif W.operation == 'auto_number' then
-                            W.op_args = { pattern = txt, start = 1, step = 1, pad = 2, order = 'name_asc' }
-                        elseif W.operation == 'toggle_set' then
-                            local v = txt:lower()
-                            if v == 'true' then W.op_args = { value = true }
-                            elseif v == 'false' then W.op_args = { value = false }
-                            else W.op_args = { value = nil } end
-                        end
-                        recompute_plan(); M.rebuild_preview()
-                    end)
-                end
-            end
-        end
-    end
-end
--- ---------------------------------------------------------------------------
--- Preview + Apply
--- ---------------------------------------------------------------------------
-
-function M.rebuild_preview()
-    if not W.widgets.preview_grid then return end
-    if not W.widgets.preview_grid.removeAllItems then return end
-    pcall(W.widgets.preview_grid.removeAllItems, W.widgets.preview_grid)
-
-    local plan = W.plan
-    if not plan or not plan.rows then return end
-
-    local ok_lbi, ListBoxItem = pcall(require, 'ListBoxItem')
-    if not (ok_lbi and ListBoxItem and ListBoxItem.new) then return end
-
-    local n_ok, n_fail = 0, 0
-    for _, r in ipairs(plan.rows) do
-        local name = tostring((r.entity and r.entity.name) or '?')
-        local line
-        if r.ok then
-            line = string.format('  %-30s  %s  →  %s', name, tostring(r.old), tostring(r.new))
-            n_ok = n_ok + 1
-        else
-            line = string.format('✗ %-30s  (%s)', name, tostring(r.error))
-            n_fail = n_fail + 1
-        end
-        local ok_item, item = pcall(ListBoxItem.new)
-        if ok_item and item then
-            if item.setText then pcall(item.setText, item, line) end
-            pcall(W.widgets.preview_grid.insertItem, W.widgets.preview_grid, item)
-        end
-    end
-
-    -- Footer status: "<n_ok> to apply · <n_fail> mismatched"
-    if W.sms_window and W.sms_window.set_status then
-        local sev = (n_ok > 0 and 'info') or 'warning'
-        local text = string.format('%d to apply · %d mismatched', n_ok, n_fail)
-        pcall(W.sms_window.set_status, W.sms_window, text, sev)
-    end
-
-    -- Apply button enabled iff n_ok > 0.
-    if W.widgets.apply_btn and W.widgets.apply_btn.setEnabled then
-        pcall(W.widgets.apply_btn.setEnabled, W.widgets.apply_btn, n_ok > 0)
-    end
-end
-
-function M.on_apply_clicked()
-    -- Always recompute before applying (freshness guarantee — spec §Apply pipeline).
-    recompute_plan()
-    if not W.plan or #W.plan.rows == 0 then return end
-    local result = ops.apply_plan(W.plan)
-    -- Surface the summary in the footer with a severity matched to the
-    -- result mix.
-    local sev = (result.failed == 0 and 'success') or
-                (result.changed == 0 and 'error') or 'warning'
-    local text = string.format('%d changed · %d failed', result.changed, result.failed)
-    if W.sms_window and W.sms_window.set_status then
-        pcall(W.sms_window.set_status, W.sms_window, text, sev)
-    end
-    -- Re-snapshot reader values so the preview shows the post-mutation state.
-    recompute_plan()
-    M.rebuild_preview()
-end
 
 local SCOPE_LABEL = {
     group = 'Group', unit = 'Unit', waypoint = 'Waypoint',
@@ -709,9 +426,6 @@ local SCOPE_LABEL = {
 function M.update_scope_counts()
     if not W.widgets.scope_counts then return end
     local counts = scope_pool_counts()
-    -- Each tab widget shows "<scope> · <count>". Re-render the full string;
-    -- the tab widget IS the label widget (single Static), so we must include
-    -- the scope name or it gets dropped.
     for scope, lbl in pairs(W.widgets.scope_counts) do
         if lbl and lbl.setText then
             local text = (SCOPE_LABEL[scope] or scope) .. ' · ' .. tostring(counts[scope] or 0)
@@ -724,34 +438,29 @@ end
 -- Layout
 -- ---------------------------------------------------------------------------
 
--- Single source of truth for child widget geometry. Called once at the end of
--- build_window and again on every sms_window resize. Mirrors prefab_manager's
--- relayout(w, h) pattern. All positions are derived from outer (w, h); no
--- widget owns a hard-coded coordinate.
 local LAYOUT = {
-    EDGE             = 8,    -- left/right padding inside the window
-    TOP_Y            = 4,    -- top of the tab strip
-    TAB_H            = 28,
-    TAB_W            = 100,  -- per-tab width (5 tabs fit at min_w=720)
-    ROW_H            = 24,   -- standard row height (EditBox / ComboBox)
-    GAP              = 4,    -- vertical/horizontal gap between rows / panes
-    BTN_H            = 26,
-    BTN_W            = 80,
-    REFRESH_W        = 90,
-    SPLIT_GUTTER     = 4,    -- gutter between left (tree) and right (panel) panes
-    FOOTER_RESERVED  = 80,   -- bottom band reserved for sms_window's footer
+    EDGE            = 8,
+    TOP_Y           = 4,
+    TAB_H           = 28,
+    TAB_W           = 100,
+    ROW_H           = 24,
+    GAP             = 4,
+    BTN_H           = 26,
+    BTN_W           = 80,
+    REFRESH_W       = 90,
+    SPLIT_GUTTER    = 4,
+    FOOTER_RESERVED = 80,
+    FORM_GAP        = 8,
 }
 
 local function relayout(w, h)
     if not (W.sms_window and W.sms_window:raw()) then return end
     local L = LAYOUT
     local function set(widget, x, y, ww, hh)
-        if widget and widget.setBounds then
-            pcall(widget.setBounds, widget, x, y, ww, hh)
-        end
+        if widget and widget.setBounds then pcall(widget.setBounds, widget, x, y, ww, hh) end
     end
 
-    -- Row 0: scope tabs (left-anchored) + Refresh button (right-anchored).
+    -- Row 0: scope tabs + refresh button.
     local tab_x = L.EDGE
     for _, scope in ipairs(SCOPES) do
         set(W.widgets.scope_tabs[scope], tab_x, L.TOP_Y, L.TAB_W, L.TAB_H)
@@ -759,49 +468,43 @@ local function relayout(w, h)
     end
     set(W.widgets.refresh_btn, w - L.EDGE - L.REFRESH_W, L.TOP_Y, L.REFRESH_W, L.TAB_H)
 
-    -- Horizontal split: 50/50 between treeview pane (left) and property /
-    -- preview pane (right), with a small gutter.
     local left_w  = math.floor((w - 2 * L.EDGE - L.SPLIT_GUTTER) / 2)
     local right_x = L.EDGE + left_w + L.SPLIT_GUTTER
     local right_w = w - L.EDGE - right_x
 
-    -- Row 1: name filter (left) + property combo (right).
-    local row1_y = L.TOP_Y + L.TAB_H + L.GAP                            -- 36
-    set(W.widgets.name_filter,  L.EDGE, row1_y, left_w,  L.ROW_H)
-    set(W.widgets.property_sel, right_x, row1_y, right_w, L.ROW_H)
+    -- Row 1: name filter (left half).
+    local row1_y = L.TOP_Y + L.TAB_H + L.GAP
+    set(W.widgets.name_filter, L.EDGE, row1_y, left_w, L.ROW_H)
 
-    -- Right pane stacked rows: operation, args summary, args input.
-    local row2_y = row1_y + L.ROW_H + L.GAP                             -- 64
-    local row3_y = row2_y + L.ROW_H + L.GAP                             -- 92
-    local row4_y = row3_y + L.ROW_H + L.GAP                             -- 120
-    set(W.widgets.operation_sel, right_x, row2_y, right_w, L.ROW_H)
-    set(W.widgets.args_panel,    right_x, row3_y, right_w, L.ROW_H)
-    set(W.widgets.set_all_edit,  right_x, row4_y, right_w, L.ROW_H)
-
-    -- Bottom button band (anchored to bottom).
+    -- Bottom button band (right-anchored Cancel only — no Apply in this UI).
     local btn_y       = h - L.FOOTER_RESERVED - L.BTN_H - L.GAP
     local body_bottom = btn_y - L.GAP
-    set(W.widgets.apply_btn,  w - L.EDGE - L.BTN_W,                        btn_y, L.BTN_W, L.BTN_H)
-    set(W.widgets.cancel_btn, w - L.EDGE - L.BTN_W - L.GAP - L.BTN_W,      btn_y, L.BTN_W, L.BTN_H)
+    set(W.widgets.cancel_btn, w - L.EDGE - L.BTN_W, btn_y, L.BTN_W, L.BTN_H)
 
-    -- Body fills the space between the top rows and the button band.
-    -- Treeview starts just below the name filter (row2_y); preview list
-    -- starts below the args input (row4_y + ROW_H + GAP).
-    local tree_y      = row2_y
-    local tree_h      = math.max(60, body_bottom - tree_y)
-    local preview_y   = row4_y + L.ROW_H + L.GAP                        -- 148
-    local preview_h   = math.max(60, body_bottom - preview_y)
-    set(W.widgets.tree,         L.EDGE,  tree_y,    left_w,  tree_h)
-    set(W.widgets.preview_grid, right_x, preview_y, right_w, preview_h)
+    -- Left pane: tree fills from row1_y to body_bottom.
+    local tree_y = row1_y + L.ROW_H + L.GAP
+    local tree_h = math.max(60, body_bottom - tree_y)
+    set(W.widgets.tree, L.EDGE, tree_y, left_w, tree_h)
+
+    -- Right pane: stack the active scope's forms vertically, starting at row1_y.
+    local active = W.form_panels[W.scope] or {}
+    local y_cursor = row1_y
+    for _, panel in ipairs(active) do
+        local ph = (panel.get_height and panel:get_height()) or 80
+        if panel.set_bounds then panel:set_bounds(right_x, y_cursor, right_w, ph) end
+        y_cursor = y_cursor + ph + L.FORM_GAP
+    end
+
+    if #active == 0 then
+        set(W.widgets.empty_label, right_x, row1_y, right_w, L.ROW_H)
+    end
 end
 M._relayout = relayout
 
 -- ---------------------------------------------------------------------------
--- Window construction.
+-- Window construction
 -- ---------------------------------------------------------------------------
 
--- Build a single tab "button" out of a Static + click handler, since dxgui
--- doesn't have a Tab widget. Highlight the active tab by swapping skin.
 local function make_scope_tab(scope_name, label, count_str, on_click)
     local ok_dl, DialogLoader = pcall(require, 'DialogLoader')
     local tab = nil
@@ -815,12 +518,9 @@ local function make_scope_tab(scope_name, label, count_str, on_click)
         local ok2, dialog = pcall(DialogLoader.spawnDialogFromString, raw_xml)
         if ok2 and dialog then tab = dialog.tab end
     end
-    if not tab then
-        local ok_s, Static = pcall(require, 'Static')
-        if ok_s and Static and Static.new then
-            local ok3, s = pcall(Static.new)
-            if ok3 then tab = s end
-        end
+    if not tab and Static and Static.new then
+        local ok3, s = pcall(Static.new)
+        if ok3 then tab = s end
     end
     if not tab then return nil, nil end
     if tab.setText then pcall(tab.setText, tab, label .. ' · ' .. count_str) end
@@ -840,212 +540,103 @@ local function build_window()
         size     = { w = 900, h = 600 },
         min_size = { w = 720, h = 500 },
         on_undo  = sms_window.default_on_undo,
-        -- on_resize fires after every user-driven resize. Use the dxgui
-        -- Window's outer dimensions (raw():getSize()) — same pattern as
-        -- prefab_manager.lua — so relayout's anchors match the chrome.
         on_resize = function(swin)
-            pcall(function()
-                local cw, ch = swin:raw():getSize()
-                relayout(cw, ch)
-            end)
+            pcall(function() local cw, ch = swin:raw():getSize(); relayout(cw, ch) end)
         end,
     })
-    if not W.sms_window then
-        log_warn('sms_window.new returned nil')
-        return
-    end
-
+    if not W.sms_window then log_warn('sms_window.new returned nil'); return end
     local raw = W.sms_window:raw()
-    if not raw then
-        log_warn('sms_window:raw() returned nil')
-        return
-    end
+    if not raw then log_warn('sms_window:raw() returned nil'); return end
 
-    -- ----- scope tab strip ----------------------------------------------
-    local tab_y = 4
-    local tab_w = 140
-    local tab_x = 8
+    -- Scope tabs.
     for _, scope in ipairs(SCOPES) do
-        local label_map = { group = 'Group', unit = 'Unit', waypoint = 'Waypoint',
-                            zone = 'Zone', drawing = 'Drawing' }
-        local tab, count_lbl = make_scope_tab(scope, label_map[scope], '0', on_scope_changed)
+        local tab, count_lbl = make_scope_tab(scope, SCOPE_LABEL[scope], '0', on_scope_changed)
         if tab then
-            if tab.setBounds then pcall(tab.setBounds, tab, tab_x, tab_y, tab_w, 28) end
+            if tab.setBounds then pcall(tab.setBounds, tab, 8, 4, 140, 28) end
             pcall(raw.insertWidget, raw, tab)
             W.widgets.scope_tabs[scope] = tab
             W.widgets.scope_counts[scope] = count_lbl
-            tab_x = tab_x + tab_w + 4
         end
     end
 
-    -- ----- Refresh button (top-right of tab strip) ----------------------
-    local ok_btn, Button = pcall(require, 'Button')
-    local refresh_btn
-    if ok_btn and Button and Button.new then
-        local ok2, b = pcall(Button.new)
-        if ok2 then refresh_btn = b end
-    end
-    if refresh_btn then
-        skin_helper.apply(refresh_btn, 'dtc_button')
-        if refresh_btn.setText then pcall(refresh_btn.setText, refresh_btn, 'Refresh') end
-        if refresh_btn.setBounds then pcall(refresh_btn.setBounds, refresh_btn, 800, 4, 90, 28) end
-        if refresh_btn.addMouseDownCallback then
-            pcall(refresh_btn.addMouseDownCallback, refresh_btn, on_refresh_clicked)
+    -- Refresh button.
+    if Button and Button.new then
+        local ok, b = pcall(Button.new)
+        if ok and b then
+            skin_helper.apply(b, 'dtc_button')
+            if b.setText then pcall(b.setText, b, 'Refresh') end
+            if b.addMouseDownCallback then pcall(b.addMouseDownCallback, b, on_refresh_clicked) end
+            pcall(raw.insertWidget, raw, b)
+            W.widgets.refresh_btn = b
         end
-        pcall(raw.insertWidget, raw, refresh_btn)
-        W.widgets.refresh_btn = refresh_btn
     end
 
-    -- ----- treeview + filters (left half) -------------------------------
-    local ok_eb, EditBox = pcall(require, 'EditBox')
-    local ok_cb = ComboList ~= nil  -- ComboList is the proper dxgui dropdown
-    if ok_eb and EditBox and EditBox.new then
-        local ok2, name_filter = pcall(EditBox.new)
-        if ok2 and name_filter then
-            skin_helper.apply(name_filter, 'editBoxSkin_ME')
-            if name_filter.setBounds then pcall(name_filter.setBounds, name_filter, 8, 40, 200, 24) end
-            if name_filter.addChangeCallback then
-                pcall(name_filter.addChangeCallback, name_filter, function(ed)
-                    local txt = ed.getText and ed:getText() or ''
+    -- Name filter.
+    if EditBox and EditBox.new then
+        local ok, ed = pcall(EditBox.new)
+        if ok and ed then
+            skin_helper.apply(ed, 'editBoxSkin_ME')
+            if ed.addChangeCallback then
+                pcall(ed.addChangeCallback, ed, function(box)
+                    local txt = box.getText and box:getText() or ''
                     W.filters[W.scope].name_substr = txt
                     M.rebuild_treeview()
-                    recompute_plan(); M.rebuild_preview()
                 end)
             end
-            pcall(raw.insertWidget, raw, name_filter)
-            W.widgets.name_filter = name_filter
+            pcall(raw.insertWidget, raw, ed)
+            W.widgets.name_filter = ed
         end
     end
 
-    -- Treeview surface: a real multi-column Grid (built lazily per scope by
-    -- build_tree_widget so the column set tracks the active scope). The
-    -- first build happens in M.show() after _built is flipped true.
-    local ok_lb, ListBox = pcall(require, 'ListBox')  -- still required below for the preview list
-
-    -- ----- right panel handles (filled in by task 13) -------------------
-    -- Change callbacks are attached here (once, at construction) — not from
-    -- rebuild_property_panel, which would stack a fresh listener on every
-    -- pick. Both callbacks read the selected item via getSelectedItem +
-    -- getText (the Prefab Manager pattern); the encoded `label|id` suffix
-    -- in each item's text carries the id/op key back to the model.
-    if ok_cb and ComboList and ComboList.new then
-        local ok2, property_sel = pcall(ComboList.new)
-        if ok2 and property_sel then
-            skin_helper.apply(property_sel, 'comboListSkinNew_')
-            if property_sel.setBounds then pcall(property_sel.setBounds, property_sel, 450, 40, 240, 24) end
-            pcall(raw.insertWidget, raw, property_sel)
-            W.widgets.property_sel = property_sel
-            if property_sel.addChangeCallback then
-                pcall(property_sel.addChangeCallback, property_sel, function(cb)
-                    local item = cb.getSelectedItem and cb:getSelectedItem()
-                    local text = (item and item.getText and item:getText()) or ''
-                    local id = text:match('|(.+)$')
-                    if id then
-                        W.property_id = id
-                        W.operation = nil
-                        W.op_args = {}
-                        M.rebuild_property_panel()
-                        recompute_plan(); M.rebuild_preview()
-                    end
-                end)
-            end
-        end
-        local ok3, operation_sel = pcall(ComboList.new)
-        if ok3 and operation_sel then
-            skin_helper.apply(operation_sel, 'comboListSkinNew_')
-            if operation_sel.setBounds then pcall(operation_sel.setBounds, operation_sel, 700, 40, 190, 24) end
-            pcall(raw.insertWidget, raw, operation_sel)
-            W.widgets.operation_sel = operation_sel
-            if operation_sel.addChangeCallback then
-                pcall(operation_sel.addChangeCallback, operation_sel, function(cb)
-                    local item = cb.getSelectedItem and cb:getSelectedItem()
-                    local text = (item and item.getText and item:getText()) or ''
-                    local op = text:match('|(.+)$')
-                    if op then
-                        W.operation = op
-                        W.op_args = {}
-                        M.rebuild_property_panel()
-                        recompute_plan(); M.rebuild_preview()
-                    end
-                end)
-            end
-        end
-    end
-
+    -- Empty-scope placeholder (shared across scopes; toggled in show_forms_for_active_scope).
     if Static and Static.new then
-        local ok2, args_panel = pcall(Static.new)
-        if ok2 and args_panel then
-            skin_helper.apply(args_panel, 'staticSkin_ME')
-            if args_panel.setBounds then pcall(args_panel.setBounds, args_panel, 450, 72, 440, 100) end
-            pcall(raw.insertWidget, raw, args_panel)
-            W.widgets.args_panel = args_panel
+        local ok, s = pcall(Static.new, 'No forms yet for this scope')
+        if ok and s then
+            skin_helper.apply(s, 'staticSkin_ME')
+            pcall(raw.insertWidget, raw, s)
+            W.widgets.empty_label = s
         end
     end
 
-    if ok_lb and ListBox and ListBox.new then
-        local ok2, preview = pcall(ListBox.new)
-        if ok2 and preview then
-            skin_helper.apply(preview, 'listBoxSkin_ME')
-            if preview.setBounds then pcall(preview.setBounds, preview, 450, 180, 440, 320) end
-            pcall(raw.insertWidget, raw, preview)
-            W.widgets.preview_grid = preview
+    -- Cancel button.
+    if Button and Button.new then
+        local ok, b = pcall(Button.new)
+        if ok and b then
+            skin_helper.apply(b, 'dtc_button')
+            if b.setText then pcall(b.setText, b, 'Cancel') end
+            if b.addMouseDownCallback then pcall(b.addMouseDownCallback, b, function() M.hide() end) end
+            pcall(raw.insertWidget, raw, b)
+            W.widgets.cancel_btn = b
         end
     end
 
-    if ok_btn and Button and Button.new then
-        local ok2, cancel = pcall(Button.new)
-        if ok2 and cancel then
-            skin_helper.apply(cancel, 'dtc_button')
-            if cancel.setText then pcall(cancel.setText, cancel, 'Cancel') end
-            if cancel.setBounds then pcall(cancel.setBounds, cancel, 720, 510, 80, 26) end
-            if cancel.addMouseDownCallback then
-                pcall(cancel.addMouseDownCallback, cancel, function() M.hide() end)
+    -- Mount form panels for every scope (one-time allocation per Q2 of the design).
+    for _, scope in ipairs(SCOPES) do
+        local panels = {}
+        for _, form_module in ipairs(mass_forms.forms_for(scope)) do
+            local panel = form_module.new(raw, get_checked_for_active_scope, on_after_apply)
+            if panel then
+                panels[#panels + 1] = panel
+                if panel.hide then panel:hide() end
             end
-            pcall(raw.insertWidget, raw, cancel)
-            W.widgets.cancel_btn = cancel
         end
-
-        local ok3, apply = pcall(Button.new)
-        if ok3 and apply then
-            skin_helper.apply(apply, 'dtc_button')
-            if apply.setText then pcall(apply.setText, apply, 'Apply') end
-            if apply.setBounds then pcall(apply.setBounds, apply, 810, 510, 80, 26) end
-            if apply.addMouseDownCallback then
-                pcall(apply.addMouseDownCallback, apply, function() M.on_apply_clicked() end)
-            end
-            pcall(raw.insertWidget, raw, apply)
-            W.widgets.apply_btn = apply
-        end
+        W.form_panels[scope] = panels
     end
 
     W._built = true
 
-    -- Initial layout pass — all child widgets have been inserted with
-    -- placeholder bounds above; this is where they get their real positions.
-    pcall(function()
-        local cw, ch = W.sms_window:raw():getSize()
-        relayout(cw, ch)
-    end)
+    pcall(function() local cw, ch = raw:getSize(); relayout(cw, ch) end)
 end
 
 function M.show()
     build_window()
     if not W.sms_window then return end
-    -- Build the Grid for the active scope on first show. on_scope_changed
-    -- rebuilds it on subsequent scope switches.
     if not W.widgets.tree then M._build_tree_widget() end
     rebuild_pool()
     M.update_scope_counts()
     M.rebuild_treeview()
-    M.rebuild_property_panel()
-    recompute_plan()
-    M.rebuild_preview()
-    -- The Grid is rebuilt by _build_tree_widget which set its own bounds;
-    -- re-relayout so it picks up the current dimensions instead.
-    pcall(function()
-        local cw, ch = W.sms_window:raw():getSize()
-        relayout(cw, ch)
-    end)
+    show_forms_for_active_scope()
+    pcall(function() local cw, ch = W.sms_window:raw():getSize(); relayout(cw, ch) end)
     W.sms_window:show()
 end
 
@@ -1062,11 +653,10 @@ function M.toggle()
 end
 
 -- Expose internals for tests.
-M._W = W
-M._scope_pool_counts = scope_pool_counts
-M._recompute_plan    = recompute_plan
-M._rebuild_pool      = rebuild_pool
-M._on_scope_changed  = on_scope_changed
+M._W                  = W
+M._scope_pool_counts  = scope_pool_counts
+M._rebuild_pool       = rebuild_pool
+M._on_scope_changed   = on_scope_changed
 M._on_refresh_clicked = on_refresh_clicked
 
 return M
