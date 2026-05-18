@@ -102,9 +102,10 @@ local function strip_back_refs(v, depth)
 end
 
 -- refresh_group_view — defensive map-objects refresh after a unit-level
--- mutation. Shared with mass_edit_ops via dcs_sms_me.me_refresh; both
--- modules need the same pair of Mission.create/update_group_map_objects
--- calls in the same order, so the body is canonical in me_refresh.lua.
+-- mutation. Shared with the Mass Edit form modules via
+-- dcs_sms_me.me_refresh; both call sites need the same pair of
+-- Mission.create/update_group_map_objects calls in the same order, so
+-- the body is canonical in me_refresh.lua.
 local refresh_group_view = require('dcs_sms_me.me_refresh').refresh_group_view
 
 -- find_unit_in_mission — locate a unit by name or id, returning

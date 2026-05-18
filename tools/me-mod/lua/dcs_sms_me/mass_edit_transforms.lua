@@ -2,8 +2,8 @@
 -- tool. Each transform takes (old, args, idx) and returns the new value.
 -- No I/O, no ME-internal globals — fully unit-testable.
 --
--- idx is the 1-based row position in the apply plan. Ordering is decided
--- in mass_edit_ops.compute_plan before transforms are invoked, so a
+-- idx is the 1-based row position in the apply order. Ordering is decided
+-- by the calling form module before transforms are invoked, so a
 -- transform can assume idx maps to user-chosen order.
 
 local M = {}

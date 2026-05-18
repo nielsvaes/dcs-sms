@@ -1,7 +1,8 @@
 -- me_refresh.lua — defensive map-objects refresh after a group-level mutation.
 --
 -- Extracted from verbs.lua's local refresh_group_view so it can be shared
--- with mass_edit_ops.lua without duplicating the Mission API knowledge.
+-- with the Mass Edit form modules without duplicating the Mission API
+-- knowledge.
 -- Disk-loaded groups have mapObjects=nil until selected; the
 -- create_group_map_objects + update_group_map_objects pair handles both
 -- the never-rendered and already-rendered cases. Each ME call is pcall'd
