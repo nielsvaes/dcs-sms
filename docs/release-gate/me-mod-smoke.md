@@ -160,3 +160,23 @@ PR-by-PR each form is added; this section will grow as forms land.
 - [ ] Check a group currently in Russia. Pick `Russia`. Click Set country. Toast: `Already in Russia` (info). No mutation.
 - [ ] Check two groups, one in USA and one in Russia. Pick `Russia`. Click. Toast contains `1 country set` and `1 unchanged`.
 - [ ] Ctrl+Z reverts the most recent country-change.
+
+### Visibility & control (toggle_group_flags)
+
+- [ ] The Visibility & control form is the bottom form in the Group scope's right pane (below Set country).
+- [ ] Form shows six state buttons in 2 rows × 3 columns: `Hidden on map`, `Hidden on planner`, `Hidden on MFD` (top row); `Game Master Only`, `Uncontrolled`, `Late activation` (bottom row).
+- [ ] All six buttons default to LEAVE state (suffix `—`, grey tint) on first mount.
+- [ ] Click `Hidden on map —` once → label becomes `Hidden on map ON` with green/blue tint. Click again → `Hidden on map OFF` with red tint. Click again → back to `—` grey.
+- [ ] Click `Apply` with nothing checked in the left pane → toast `Nothing selected` (warning). No mutation.
+- [ ] Click `Apply` with all six buttons at LEAVE → toast `Nothing to apply` (warning). No mutation.
+- [ ] Check 2 plane groups. Set `Hidden on map` to ON. Click Apply. Both groups disappear from the map; their list-pane Type cell unchanged. Toast: `2 flag changes` (success).
+- [ ] All six state buttons reset to LEAVE after the successful apply.
+- [ ] Re-check the same 2 planes. Set `Hidden on map` to OFF. Click Apply. Map markers return.
+- [ ] Check 1 plane + 1 vehicle. Set `Uncontrolled` to ON. Click Apply. Plane's `uncontrolled` flips on; vehicle untouched. Toast contains `1 flag changes` and `1 not applicable`.
+- [ ] Check 1 static group. Set `Hidden on map` to ON and `Uncontrolled` to ON. Click Apply. Static is hidden; `uncontrolled` skipped for it. Toast contains `1 flag changes` and `1 not applicable`.
+- [ ] Check 2 planes. Set `Late activation` and `Hidden on MFD` both to ON in the same form (don't apply between). Click Apply. Both fields flip on both planes. Toast: `4 flag changes`.
+- [ ] Press Ctrl+Z after the previous step. All four mutations are reverted (both planes back to their pre-apply state on both fields). Toast: `Undo successful`.
+- [ ] Save the .miz and reopen. The flag values persist in the saved file.
+- [ ] `dcs-sms me group set-hidden-on-planner --name <plane> --hidden=true` (CLI sanity check): flag flips on the named plane.
+- [ ] `dcs-sms me group set-hidden-on-mfd --name <plane> --hidden=true`: same.
+- [ ] `dcs-sms me group set-uncontrollable --name <plane> --enabled=true`: GAME MASTER ONLY checkbox in the ME's right panel ticks on for that group.
