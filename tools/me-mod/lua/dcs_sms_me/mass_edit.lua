@@ -31,33 +31,13 @@ local ListBoxItem;     do local ok, m = pcall(require, 'ListBoxItem');    if ok 
 -- Same module Prefab Manager picks up for its country dropdown.
 local ComboList;       do local ok, m = pcall(require, 'ComboList');      if ok then ComboList      = m end end
 
-local dtc_skins = require('dcs_sms_me.dtc_skins')
-
--- Apply a skin by short name. Resolves dtc_grid / dtc_grid_header against
--- dtc_skins.lua first (these aren't auto-generated entries in Skin), then
--- falls back to Skin.<name>() for stock ME skins (staticSkin_ME,
--- checkBoxSkin_MENew, etc). Failures degrade silently.
-local function try_skin(widget, skin_name)
-    pcall(function()
-        if not (widget and widget.setSkin) then return end
-        local s
-        if     skin_name == 'dtc_grid'        then s = dtc_skins.grid()
-        elseif skin_name == 'dtc_grid_header' then s = dtc_skins.grid_header()
-        elseif skin_name == 'dtc_button'      then s = dtc_skins.button()
-        else
-            local fn = Skin and Skin[skin_name]
-            if not fn then return end
-            s = fn()
-        end
-        if s then widget:setSkin(s) end
-    end)
-end
+local skin_helper = require('dcs_sms_me.skin_helper')
 
 local function make_cell(text, tooltip)
     if not (Static and Static.new) then return nil end
     local ok, s = pcall(Static.new, tostring(text or ''))
     if not (ok and s) then return nil end
-    try_skin(s, 'staticSkin_ME')
+    skin_helper.apply(s, 'staticSkin_ME')
     if tooltip and s.setTooltipText then
         pcall(function() s:setTooltipText(tostring(tooltip)) end)
     end
@@ -68,7 +48,7 @@ local function make_checkbox(state)
     if not (CheckBox and CheckBox.new) then return nil end
     local ok, cb = pcall(CheckBox.new)
     if not (ok and cb) then return nil end
-    try_skin(cb, 'checkBoxSkin_MENew')
+    skin_helper.apply(cb, 'checkBoxSkin_MENew')
     if cb.setState then pcall(cb.setState, cb, state == true) end
     return cb
 end
@@ -375,7 +355,7 @@ local function build_tree_widget()
 
     local ok_grid, grid = pcall(Grid.new)
     if not (ok_grid and grid) then return end
-    try_skin(grid, 'dtc_grid')
+    skin_helper.apply(grid, 'dtc_grid')
     if grid.setBounds then pcall(grid.setBounds, grid, 8, 72, 430, 460) end
 
     -- Insert per-scope columns with sort-on-click headers.
@@ -384,7 +364,7 @@ local function build_tree_widget()
     for i, c in ipairs(cols) do
         local ok_hc, hc = pcall(GridHeaderCell.new)
         if ok_hc and hc then
-            try_skin(hc, 'dtc_grid_header')
+            skin_helper.apply(hc, 'dtc_grid_header')
             if hc.setText then pcall(hc.setText, hc, c.label) end
             if c.key ~= 'check' and hc.addChangeCallback then
                 local key = c.key
@@ -621,7 +601,7 @@ function M.rebuild_property_panel()
             local ok2, ed = pcall(EditBox.new)
             if ok2 and ed then
                 W.widgets.set_all_edit = ed
-                try_skin(ed, 'editBoxSkin_ME')
+                skin_helper.apply(ed, 'editBoxSkin_ME')
                 local raw = W.sms_window and W.sms_window:raw()
                 if raw then pcall(raw.insertWidget, raw, ed) end
                 -- Have relayout position the freshly-inserted EditBox in
@@ -906,7 +886,7 @@ local function build_window()
         if ok2 then refresh_btn = b end
     end
     if refresh_btn then
-        try_skin(refresh_btn, 'dtc_button')
+        skin_helper.apply(refresh_btn, 'dtc_button')
         if refresh_btn.setText then pcall(refresh_btn.setText, refresh_btn, 'Refresh') end
         if refresh_btn.setBounds then pcall(refresh_btn.setBounds, refresh_btn, 800, 4, 90, 28) end
         if refresh_btn.addMouseDownCallback then
@@ -922,7 +902,7 @@ local function build_window()
     if ok_eb and EditBox and EditBox.new then
         local ok2, name_filter = pcall(EditBox.new)
         if ok2 and name_filter then
-            try_skin(name_filter, 'editBoxSkin_ME')
+            skin_helper.apply(name_filter, 'editBoxSkin_ME')
             if name_filter.setBounds then pcall(name_filter.setBounds, name_filter, 8, 40, 200, 24) end
             if name_filter.addChangeCallback then
                 pcall(name_filter.addChangeCallback, name_filter, function(ed)
@@ -951,7 +931,7 @@ local function build_window()
     if ok_cb and ComboList and ComboList.new then
         local ok2, property_sel = pcall(ComboList.new)
         if ok2 and property_sel then
-            try_skin(property_sel, 'comboListSkinNew_')
+            skin_helper.apply(property_sel, 'comboListSkinNew_')
             if property_sel.setBounds then pcall(property_sel.setBounds, property_sel, 450, 40, 240, 24) end
             pcall(raw.insertWidget, raw, property_sel)
             W.widgets.property_sel = property_sel
@@ -972,7 +952,7 @@ local function build_window()
         end
         local ok3, operation_sel = pcall(ComboList.new)
         if ok3 and operation_sel then
-            try_skin(operation_sel, 'comboListSkinNew_')
+            skin_helper.apply(operation_sel, 'comboListSkinNew_')
             if operation_sel.setBounds then pcall(operation_sel.setBounds, operation_sel, 700, 40, 190, 24) end
             pcall(raw.insertWidget, raw, operation_sel)
             W.widgets.operation_sel = operation_sel
@@ -995,7 +975,7 @@ local function build_window()
     if Static and Static.new then
         local ok2, args_panel = pcall(Static.new)
         if ok2 and args_panel then
-            try_skin(args_panel, 'staticSkin_ME')
+            skin_helper.apply(args_panel, 'staticSkin_ME')
             if args_panel.setBounds then pcall(args_panel.setBounds, args_panel, 450, 72, 440, 100) end
             pcall(raw.insertWidget, raw, args_panel)
             W.widgets.args_panel = args_panel
@@ -1005,7 +985,7 @@ local function build_window()
     if ok_lb and ListBox and ListBox.new then
         local ok2, preview = pcall(ListBox.new)
         if ok2 and preview then
-            try_skin(preview, 'listBoxSkin_ME')
+            skin_helper.apply(preview, 'listBoxSkin_ME')
             if preview.setBounds then pcall(preview.setBounds, preview, 450, 180, 440, 320) end
             pcall(raw.insertWidget, raw, preview)
             W.widgets.preview_grid = preview
@@ -1015,7 +995,7 @@ local function build_window()
     if ok_btn and Button and Button.new then
         local ok2, cancel = pcall(Button.new)
         if ok2 and cancel then
-            try_skin(cancel, 'dtc_button')
+            skin_helper.apply(cancel, 'dtc_button')
             if cancel.setText then pcall(cancel.setText, cancel, 'Cancel') end
             if cancel.setBounds then pcall(cancel.setBounds, cancel, 720, 510, 80, 26) end
             if cancel.addMouseDownCallback then
@@ -1027,7 +1007,7 @@ local function build_window()
 
         local ok3, apply = pcall(Button.new)
         if ok3 and apply then
-            try_skin(apply, 'dtc_button')
+            skin_helper.apply(apply, 'dtc_button')
             if apply.setText then pcall(apply.setText, apply, 'Apply') end
             if apply.setBounds then pcall(apply.setBounds, apply, 810, 510, 80, 26) end
             if apply.addMouseDownCallback then
