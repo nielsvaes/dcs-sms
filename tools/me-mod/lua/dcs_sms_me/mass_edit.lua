@@ -161,13 +161,26 @@ local function scope_pool_counts()
 end
 
 -- Get the entities checked in the active scope. Closure handed to each
--- form so its apply handler can read the current selection.
+-- form so its apply handler can read the current selection. Returns a
+-- second value -- a categories map keyed by the same entities -- so
+-- forms that care about per-entity category (e.g. toggle_group_flags's
+-- applicability lookup) can read it. Older forms only assign the first
+-- return value; the second is silently discarded.
 local function get_checked_for_active_scope()
     local out = {}
     for _, e in ipairs(W.pool) do
         if W.checked[W.scope][e] then out[#out + 1] = e end
     end
-    return out
+    return out, W.categories or {}
+end
+
+-- Closure form so the form contract can take an opaque
+-- get_categories() instead of digging into mass_edit's state. Returns
+-- the same categories map that get_checked's second return value
+-- surfaces. Cheap (just exposes W.categories); each form decides
+-- whether to call it.
+local function get_categories_for_active_scope()
+    return W.categories or {}
 end
 
 -- Called by forms after a successful apply. Refreshes the entity list,
@@ -668,7 +681,7 @@ local function build_window()
     for _, scope in ipairs(SCOPES) do
         local panels = {}
         for _, form_module in ipairs(mass_forms.forms_for(scope)) do
-            local panel = form_module.new(raw, get_checked_for_active_scope, on_after_apply)
+            local panel = form_module.new(raw, get_checked_for_active_scope, on_after_apply, get_categories_for_active_scope)
             if panel then
                 panels[#panels + 1] = panel
                 if panel.hide then panel:hide() end

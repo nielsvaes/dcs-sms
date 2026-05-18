@@ -13,10 +13,12 @@ local M = {}
 local find_replace_group_name = require('dcs_sms_me.mass_edit_forms.find_replace_group_name')
 local rename_group            = require('dcs_sms_me.mass_edit_forms.rename_group')
 local set_country             = require('dcs_sms_me.mass_edit_forms.set_country')
+local toggle_group_flags      = require('dcs_sms_me.mass_edit_forms.toggle_group_flags')
 
 M.by_scope = {
-    -- rename on top (most active), find/replace in the middle, set_country at the bottom.
-    group    = { rename_group, find_replace_group_name, set_country },
+    -- rename on top (most active), find/replace and set_country in the middle,
+    -- toggle_group_flags at the bottom (covers six properties, less frequent).
+    group    = { rename_group, find_replace_group_name, set_country, toggle_group_flags },
     unit     = {},
     waypoint = {},
     zone     = {},
