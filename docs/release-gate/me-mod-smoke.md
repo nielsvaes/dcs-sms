@@ -115,16 +115,25 @@ Verify the refactor preserved Prefab Manager behaviour exactly:
 - [ ] Resize window → tree stays at 200 px wide; file grid widens.
 - [ ] Reload (Ctrl+Shift+R) or close/re-open Prefab Manager → tree refreshes from disk.
 
-## Mass Edit (v0.9.0+)
+## Mass Edit (v0.10.0+)
 
-- [ ] `DCS-SMS → Mass Edit` opens the window. Closing via the X hides it.
-- [ ] Marquee 3 groups → opening the window shows Group scope active with 3 rows checked.
-- [ ] Switch to Unit scope → rows now show all units belonging to the 3 groups.
-- [ ] Pick property `Skill` → Operation `Set all to one value` → enter `Excellent` → preview shows the diff for each unit → Apply → footer flashes "N changed".
-- [ ] Press `Ctrl+Z` while the window has focus → footer flashes that the change reverted → re-open Skill panel to confirm the units rolled back to their previous skill values.
-- [ ] Auto-number rename: pick `Name` → Operation `Auto-number` → pattern `Hornet-{n}` → preview shows the per-row diffs sorted by name → Apply → groups rename in numeric order → `Ctrl+Z` reverts.
-- [ ] Mixed plane + static marquee, scope=Unit, pick `Skill` → static rows show `✗ category mismatch` in the preview → Apply runs on the plane rows only → footer reads "N changed · M mismatched" (yellow severity).
-- [ ] Marquee 1 zone → scope=Zone → `Color → Set all → red` → Apply → zone color updates on the map.
-- [ ] Marquee nothing → open the window → "Browsing whole mission" banner shows (or the equivalent — see Decisions 21).
-- [ ] After applying a Mass Edit then placing a prefab via Prefab Manager, `Ctrl+Z` reverts the prefab placement (most-recent action wins; single-slot bus semantics preserved).
-- [ ] Apply with a writer that throws (smoke this by setting a deliberately-invalid value if the dropdown allows it) → the row flips to ✗ in the preview, the footer reads N-1 changed · 1 failed.
+The Mass Edit window is being rebuilt around an action-panel model
+(see `docs/superpowers/specs/2026-05-18-me-mass-edit-rework-design.md`).
+PR-by-PR each form is added; this section will grow as forms land.
+
+### Find & replace in group names
+
+- [ ] DCS-SMS → Mass Edit opens the window.
+- [ ] Window title includes a `[loaded HH:MM:SS]` suffix (dev aid; remove when stable).
+- [ ] The Group scope tab is active by default. The other four scope tabs (Unit, Waypoint, Zone, Drawing) are visible but render only a "No forms yet for this scope" label in the right pane when clicked.
+- [ ] The left pane lists every group in the mission. Switching to a mission with several groups: the list populates with all of them. No dependency on the marquee tool.
+- [ ] The name-filter EditBox above the list narrows it (case-insensitive substring match).
+- [ ] Sort headers work — clicking Name / Country / Type / # Units sorts asc / desc.
+- [ ] Checkboxes in column 0 toggle independently. Whole-row click also toggles.
+- [ ] The right pane shows exactly one form: "Find & replace in group names".
+- [ ] All widgets are skinned (visual match against Prefab Manager — same blue navy theme).
+- [ ] Type `Foo` in Find, `Bar` in Replace. Check 2 groups whose names contain `Foo`. Click `Replace`. Names update to substitute Foo→Bar. Footer toast reads `2 renamed`.
+- [ ] Groups whose names did NOT contain `Foo` remain unchanged.
+- [ ] Press `Ctrl+Z` while the Mass Edit window has focus. The two renamed groups revert to their original names.
+- [ ] Click `Refresh`. The list re-walks the mission; any external rename (e.g. via ME group panel) is picked up.
+- [ ] Click `Cancel`. The window hides. DCS-SMS → Mass Edit reopens it.
