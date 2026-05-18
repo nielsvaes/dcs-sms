@@ -12,10 +12,11 @@ local M = {}
 
 local find_replace_group_name = require('dcs_sms_me.mass_edit_forms.find_replace_group_name')
 local rename_group            = require('dcs_sms_me.mass_edit_forms.rename_group')
+local set_country             = require('dcs_sms_me.mass_edit_forms.set_country')
 
 M.by_scope = {
-    -- Rename first so it renders on top of find/replace in the stacked pane.
-    group    = { rename_group, find_replace_group_name },
+    -- rename on top (most active), find/replace in the middle, set_country at the bottom.
+    group    = { rename_group, find_replace_group_name, set_country },
     unit     = {},
     waypoint = {},
     zone     = {},

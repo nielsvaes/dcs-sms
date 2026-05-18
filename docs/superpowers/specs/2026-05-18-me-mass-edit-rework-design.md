@@ -266,17 +266,87 @@ Form order: rename on top, find/replace below. Registered in `mass_edit_forms.lu
 - Ctrl+Z reverts the most recent rename.
 - `tools/me-mod/test/run-tests.ps1` passes with the new `test_mass_edit_rename_group.lua`.
 
-## Future work (after PR 2)
+## PR 3: set_country form
+
+The third form. First non-string property — exercises the `ComboList` widget pattern. Wraps the existing `verbs.group_set_country` so the apply path inherits all the side-effect handling (coalition flip, livery fixup, map color update, removed-from-old-country-bucket + added-to-new) the verb already does.
+
+**File:** `tools/me-mod/lua/dcs_sms_me/mass_edit_forms/set_country.lua`. Same contract as the other forms (`M.scope = 'group'`, `M.title = 'Set country'`, `M.new(parent_raw, get_checked, on_after_apply) → panel`, `M._apply(entities, country_name)`). Undo handler id: `mass_edit.set_country`.
+
+**Layout (right pane stack after this PR lands):**
+
+```
+┌─ Rename groups ──────────────────────────────────┐
+│  Pattern:  [____________________]     [Rename]   │
+│  (use {n} for sequence, e.g. "Foo-{n}")          │
+└──────────────────────────────────────────────────┘
+┌─ Find & replace in group names ──────────────────┐
+│  Find:    [____________________]                 │
+│  Replace: [____________________]    [Replace]    │
+└──────────────────────────────────────────────────┘
+┌─ Set country ────────────────────────────────────┐
+│  Country:  [USA              ▾]   [Set country]  │
+│  (coalition will change if the country switches sides) │
+└──────────────────────────────────────────────────┘
+```
+
+Loader registration: `group = { rename_group, find_replace_group_name, set_country }` — set_country at the bottom.
+
+**Country list source.** The dropdown is populated from `me_mission.Mission.missionCountry` — the same canonical source `prefab_manager.populate_country_combo` uses. This means the list contains every country that already has at least one entity assigned somewhere in the mission. Countries not yet in the mission tree are intentionally excluded — `verbs.group_set_country` rejects them anyway (its internal `find_country_by_name` only walks the mission tree, not the full DCS country roster). Users who need to introduce a brand-new country should still do that through the ME's own group panel; Mass Edit is for bulk-editing existing assignments.
+
+**Coalition tinting.** Each `ListBoxItem` gets a per-item skin matching its coalition: `listBoxItemCoalRedSkin` / `listBoxItemCoalBlueSkin` / `listBoxItemCoalNeutralSkin`, applied via `skin_helper.apply`. This both (a) gives a visual hint at the coalition the dropdown selection will flip the group to, and (b) survives into the `ComboList`'s closed-state rendering — fixing the "selected text invisible in closed display" rough edge that surfaced on the original v0.9 smoke (per the handoff note about ComboList's closed display using the ListBoxItem's own skin).
+
+**Item ordering.** Alphabetical within the list. No coalition grouping or pre-sort; the per-item skin tells the user which side each country sits on.
+
+**Apply behavior.**
+
+- Empty selection: `{ changed=0, failed=0, nothing_selected=true, toast='Nothing selected', sev='warning' }`. No mutation.
+- No country picked (selection is empty or nil): `{ changed=0, failed=0, toast='Pick a country', sev='warning' }`. No mutation.
+- Per-entity apply: `verbs.group_set_country({ id = g.groupId, country = country_name })` wrapped in `pcall`.
+- Verb returns `{ ok=true, no_op=true }` when the entity is already in the target country. These rows are NOT counted as changed and do NOT enter the undo snapshot — they are an `unchanged` count surfaced in the toast.
+- Verb returns `{ ok=false, error=... }` (group not found, country not in mission, etc.): counted as `failed`, error logged via `log_warn`.
+- Verb returns `{ ok=true }` with a real mutation: snapshot `{ entity = g, old = old_country_name }` for undo, increment `changed`.
+- Toast: `N country set` (sev='success') when changed > 0 and failed == 0. Failures or unchanged rows append ` · M failed` / ` · K unchanged` as appropriate, with sev='warning' when any failed > 0 and changed > 0, 'error' when only failures, etc. When everything is `unchanged` (changed == 0, failed == 0, but selection wasn't empty), toast `Already in <country>` / sev='info'.
+
+**Old country capture.** The verb's return table includes `previous_country` (the country name the group used to be in) and `previous_side`. The form uses `result.previous_country` to populate the undo snapshot — no pre-verb mission walk or `g.boss` reach-in needed. This is cleaner than touching the entity's internals: the verb already does the lookup, reports it back, and is the single source of truth.
+
+**Undo handler.** Registered at module load under id `mass_edit.set_country`. On `undo.undo()`, iterates `snapshot.rows` and calls `verbs.group_set_country({ id = entity.groupId, country = old })` for each, wrapped in `pcall`. The verb handles re-flipping the coalition back. Partial failures (e.g., the original country was deleted between apply and undo) are tolerated — handler returns `true, "<n> partial failures"`.
+
+**Tests.** `tools/me-mod/test/test_mass_edit_set_country.lua` covers: empty selection, no-country-picked, single-entity successful set + undo round-trip, multi-entity with one no-op (already in target) and one mutation, verb-rejection failure path, verb-throw failure path, module metadata. The mock_me_mission scaffold supplies countries with `boss` back-references so `g.boss.name` works in tests; `verbs.group_set_country` is stubbed in the test to record calls and return controllable results — we test the FORM's logic (counting, toast, snapshot, undo dispatch), not the verb's internals.
+
+**Acceptance criteria.**
+
+- Open Mass Edit → Group tab. The Set country form is visible below Find & replace.
+- The country dropdown lists every country present in the mission, each tinted with the appropriate coalition (red / blue / neutral).
+- The closed-state ComboList shows the selected country's name with the correct coalition tint (no blank closed display).
+- Check 2 groups currently in USA. Pick "Russia" in the dropdown. Click Set country. Both groups move to Russia (and to the red coalition). Toast: `2 country set`.
+- Click Set country with nothing in the dropdown picked. Toast: `Pick a country` (warning).
+- Click Set country with nothing checked. Toast: `Nothing selected` (warning).
+- Check a group already in Russia, pick "Russia" again, click Set country. Toast: `Already in Russia` (info or warning), no mutation.
+- Ctrl+Z reverts the most recent country-change.
+- `tools/me-mod/test/run-tests.ps1` passes with the new `test_mass_edit_set_country.lua`.
+
+## Future work (after PR 3)
 
 In rough order of expected landing:
 
-1. `mass_edit_forms/set_country.lua` — country combo with values from a country list; button: `Set country`. Uses `verbs.group_set_country` (already exists, already has undo support).
-2. `mass_edit_forms/toggle_*.lua` — hidden / late activation / uncontrolled. Three-state checkbox + button.
-3. `mass_edit_forms/set_frequency.lua` — number input + `Set` button. Uses `set_all` transform.
-4. Then unit-scope forms (rename, find/replace in names, set skill, set callsign, set loadout, set fuel).
-5. Then waypoint / zone / drawing forms.
+1. `mass_edit_forms/toggle_*.lua` — hidden / late activation / uncontrolled. Three-state checkbox + button.
+2. `mass_edit_forms/set_frequency.lua` — number input + `Set` button. Uses `set_all` transform.
+3. Then unit-scope forms (rename, find/replace in names, set skill, set callsign, set loadout, set fuel).
+4. Then waypoint / zone / drawing forms.
 
-Once enough forms have shipped and the pattern feels stable, the first release lands as `v0.10.0`. No version bump in PR 2 either — release happens after critical mass of forms are smoke-tested.
+Once enough forms have shipped and the pattern feels stable, the first release lands as `v0.10.0`. No version bump in PR 3 either — release happens after critical mass of forms are smoke-tested.
+
+## Decisions (PR 3)
+
+Best-judgement calls made autonomously and recorded here so they can be revisited if needed:
+
+- **Country list source = `Mission.missionCountry`** (not the full DCS roster). Matches what `verbs.group_set_country` will actually accept; introducing a brand-new country still goes through the ME's own group panel.
+- **No Combat/All filter toggle** (unlike prefab_manager). Mass Edit shows all coalitions including neutrals — fewer widgets, more discoverable.
+- **Coalition tinting via per-item skins** (`listBoxItemCoal*Skin`). Doubles as a visual cue AND solves the "closed-display blank" rough edge.
+- **Items sorted alphabetically**, not grouped by side. The tint communicates side; grouping is redundant.
+- **No-op (already in target country) is its own outcome** — counted separately from `changed` and `failed`, surfaced in the toast as ` · K unchanged` or, when the whole batch is no-ops, `Already in <country>`.
+- **Undo via the verb** (`verbs.group_set_country` with the old country) rather than direct field assignment. Keeps the verb as the single source of truth for the mutation + side effects (livery fixup, coalition flip, map color, etc.).
+- **Form position: bottom of the group-scope stack.** rename (most active) → find/replace → set_country (least frequently used).
 
 ## Versioning
 

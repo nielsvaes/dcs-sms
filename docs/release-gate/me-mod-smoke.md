@@ -148,3 +148,15 @@ PR-by-PR each form is added; this section will grow as forms land.
 - [ ] Press `Ctrl+Z` while the Mass Edit window has focus. The two renamed groups revert to their original names.
 - [ ] Click `Refresh`. The list re-walks the mission; any external rename (e.g. via ME group panel) is picked up.
 - [ ] Click `Cancel`. The window hides. DCS-SMS → Mass Edit reopens it.
+
+### Set country
+
+- [ ] The Set country form is the bottom form in the Group scope's right pane (below Find & replace).
+- [ ] The country dropdown lists every country present in the mission. Each entry is coalition-tinted (red, blue, or neutral). Countries that have no entities in the current mission are NOT listed.
+- [ ] After picking a country, the closed dropdown shows the country name with the matching coalition tint — no blank closed display.
+- [ ] Check 2 groups currently in USA. Pick `Russia` in the dropdown. Click Set country. Both groups move to Russia and to the red coalition. Footer toast: `2 country set`.
+- [ ] Click Set country with nothing picked in the dropdown. Toast: `Pick a country` (warning).
+- [ ] Click Set country with nothing checked. Toast: `Nothing selected` (warning).
+- [ ] Check a group currently in Russia. Pick `Russia`. Click Set country. Toast: `Already in Russia` (info). No mutation.
+- [ ] Check two groups, one in USA and one in Russia. Pick `Russia`. Click. Toast contains `1 country set` and `1 unchanged`.
+- [ ] Ctrl+Z reverts the most recent country-change.
