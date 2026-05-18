@@ -23,6 +23,7 @@ local Static;        do local ok, m = pcall(require, 'Static');        if ok the
 local ComboList;     do local ok, m = pcall(require, 'ComboList');     if ok then ComboList     = m end end
 local ListBoxItem;   do local ok, m = pcall(require, 'ListBoxItem');   if ok then ListBoxItem   = m end end
 local Button;        do local ok, m = pcall(require, 'Button');        if ok then Button        = m end end
+local ToggleButton;  do local ok, m = pcall(require, 'ToggleButton');  if ok then ToggleButton  = m end end
 
 local function log_warn(msg) pcall(function() _G.log.write('sms.me.mass_edit.set_country', _G.log.WARNING or 2, msg) end) end
 
@@ -56,7 +57,7 @@ local COALITION_SKIN = {
 -- the current selection across the rebuild — if the previously-selected
 -- country is still in the list, re-selects it; otherwise the combo lands
 -- on whatever the widget's default-selected item is.
-local function populate_country_combo(combo)
+local function populate_country_combo(combo, show_all)
     if not (combo and ListBoxItem and ListBoxItem.new) then return end
     local Mission = require('me_mission')
 
@@ -93,13 +94,18 @@ local function populate_country_combo(combo)
 
     local match_item
     for _, name in ipairs(names) do
-        local ok, item = pcall(ListBoxItem.new, name)
-        if ok and item then
-            local coal = country_coalition_of(Mission, name)
-            local skin_name = COALITION_SKIN[coal]
-            if skin_name then skin_helper.apply(item, skin_name) end
-            pcall(combo.insertItem, combo, item)
-            if prev_text and name == prev_text then match_item = item end
+        local coal = country_coalition_of(Mission, name)
+        -- Combat mode (show_all=false): only red/blue. All mode: include
+        -- neutrals too. Mirrors prefab_manager's tbFilter convention.
+        local include = show_all or coal == 'red' or coal == 'blue'
+        if include then
+            local ok, item = pcall(ListBoxItem.new, name)
+            if ok and item then
+                local skin_name = COALITION_SKIN[coal]
+                if skin_name then skin_helper.apply(item, skin_name) end
+                pcall(combo.insertItem, combo, item)
+                if prev_text and name == prev_text then match_item = item end
+            end
         end
     end
 
@@ -206,15 +212,16 @@ end)
 -- ---------------------------------------------------------------------------
 
 local LAYOUT = {
-    PAD_X      = 8,
-    LABEL_W    = 60,
-    ROW_H      = 24,
-    BTN_W      = 100,
-    GAP_X      = 6,
-    GAP_Y      = 4,
-    TITLE_H    = 22,
-    HINT_H     = 18,
-    FOOTER_PAD = 6,
+    PAD_X        = 8,
+    LABEL_W      = 60,
+    ROW_H        = 24,
+    BTN_W        = 100,
+    COMBAT_BTN_W = 70,   -- "Combat"/"All" toggle to the left of Set country
+    GAP_X        = 6,
+    GAP_Y        = 4,
+    TITLE_H      = 22,
+    HINT_H       = 18,
+    FOOTER_PAD   = 6,
 }
 
 local function form_height()
@@ -231,7 +238,7 @@ function M.new(parent_raw, get_checked, on_after_apply)
         return widget
     end
 
-    local title_lbl, country_lbl, country_combo, hint_lbl, apply_btn
+    local title_lbl, country_lbl, country_combo, hint_lbl, apply_btn, combat_btn
 
     if Static and Static.new then
         local ok, s = pcall(Static.new, M.title)
@@ -247,13 +254,22 @@ function M.new(parent_raw, get_checked, on_after_apply)
         if ok and c then
             skin_helper.apply(c, 'comboListSkinNew_')
             country_combo = add(c)
-            populate_country_combo(country_combo)
+            populate_country_combo(country_combo, false)
         end
     end
 
     if Static and Static.new then
         local ok, s = pcall(Static.new, '(coalition will change if the country switches sides)')
         if ok and s then skin_helper.apply(s, 'staticSkin_ME'); hint_lbl = add(s) end
+    end
+
+    if ToggleButton and ToggleButton.new then
+        local ok, t = pcall(ToggleButton.new)
+        if ok and t then
+            skin_helper.apply(t, 'dtc_button')
+            if t.setText then pcall(t.setText, t, 'Combat') end
+            combat_btn = add(t)
+        end
     end
 
     if Button and Button.new then
@@ -263,6 +279,18 @@ function M.new(parent_raw, get_checked, on_after_apply)
             if b.setText then pcall(b.setText, b, 'Set country') end
             apply_btn = add(b)
         end
+    end
+
+    -- Toggle change → flip label, re-populate the combo with the new
+    -- filter. Selection survives because populate_country_combo captures
+    -- prev_text and re-selects the matching item when the country is still
+    -- present in the filtered list.
+    if combat_btn and combat_btn.addChangeCallback then
+        pcall(combat_btn.addChangeCallback, combat_btn, function(self)
+            local on = self.getState and self:getState() == true
+            pcall(function() self:setText(on and 'All' or 'Combat') end)
+            populate_country_combo(country_combo, on)
+        end)
     end
 
     if apply_btn and apply_btn.addMouseDownCallback then
@@ -280,7 +308,8 @@ function M.new(parent_raw, get_checked, on_after_apply)
                 -- a no-op click should not churn the list (or risk wiping the
                 -- user's selection on an idempotent widget redraw).
                 if result and (result.changed or 0) > 0 then
-                    populate_country_combo(country_combo)
+                    local on = (combat_btn and combat_btn.getState and combat_btn:getState()) == true
+                    populate_country_combo(country_combo, on)
                 end
             end)
         end)
@@ -311,14 +340,20 @@ function M.new(parent_raw, get_checked, on_after_apply)
         set(title_lbl, x + L.PAD_X, y, w - 2 * L.PAD_X, L.TITLE_H)
 
         local row_y = y + L.TITLE_H + L.GAP_Y
-        local input_x = x + L.PAD_X + L.LABEL_W + L.GAP_X
-        local input_w = w - L.PAD_X * 2 - L.LABEL_W - L.GAP_X - L.BTN_W - L.GAP_X
-        if input_w < 80 then input_w = 80 end
-        set(country_lbl,   x + L.PAD_X, row_y, L.LABEL_W, L.ROW_H)
-        set(country_combo, input_x,      row_y, input_w,  L.ROW_H)
 
-        local btn_x = x + w - L.PAD_X - L.BTN_W
-        set(apply_btn, btn_x, row_y, L.BTN_W, L.ROW_H)
+        -- Right-anchored: Set country (rightmost), then Combat/All toggle to
+        -- its left. Country combo fills the rest of the row from after the
+        -- label to just before the toggle.
+        local apply_x  = x + w - L.PAD_X - L.BTN_W
+        local combat_x = apply_x - L.GAP_X - L.COMBAT_BTN_W
+        local input_x  = x + L.PAD_X + L.LABEL_W + L.GAP_X
+        local input_w  = combat_x - L.GAP_X - input_x
+        if input_w < 80 then input_w = 80 end
+
+        set(country_lbl,   x + L.PAD_X, row_y, L.LABEL_W,      L.ROW_H)
+        set(country_combo, input_x,     row_y, input_w,        L.ROW_H)
+        set(combat_btn,    combat_x,    row_y, L.COMBAT_BTN_W, L.ROW_H)
+        set(apply_btn,     apply_x,     row_y, L.BTN_W,        L.ROW_H)
 
         local hint_y = row_y + L.ROW_H + L.GAP_Y
         set(hint_lbl, x + L.PAD_X, hint_y, w - 2 * L.PAD_X, L.HINT_H)
