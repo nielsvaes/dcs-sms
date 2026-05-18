@@ -13,12 +13,15 @@ package.preload['dcs_sms_me.dtc_skins'] = function()
     }
 end
 
--- Stub Skin (the fallback branch resolver target).
+-- Stub Skin (the fallback branch resolver target). Plain table with only
+-- known stock-skin names so that lookups for unknown names return nil —
+-- matching the production Skin module shape (auto-generated from a fixed
+-- name list, so unknown names really do come back nil).
 local stock_calls = {}
 package.preload['Skin'] = function()
-    return setmetatable({}, { __index = function(_, name)
-        return function() stock_calls[name] = (stock_calls[name] or 0) + 1; return { __skin = name } end
-    end })
+    return {
+        staticSkin_ME = function() stock_calls.staticSkin_ME = (stock_calls.staticSkin_ME or 0) + 1; return { __skin = 'staticSkin_ME' } end,
+    }
 end
 
 local skin_helper = require('dcs_sms_me.skin_helper')
