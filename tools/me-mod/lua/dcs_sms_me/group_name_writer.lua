@@ -22,27 +22,39 @@
 --
 -- Returns (ok, actual_name, err). `actual_name` is the name that
 -- *actually* landed on the group (which may differ from `desired` if
--- check_group_name added a suffix). Callers that want to report or log
--- the actual name use this; callers that don't care can ignore it.
--- Undo snapshots don't need it — they capture `old` (the pre-rename
--- name), which is unaffected by collision logic.
+-- check_group_name added a suffix).
+--
+-- Pass {literal=true} as opts to skip the collision check. Used by
+-- undo handlers: the snapshot's `old` is what the user wants restored
+-- verbatim. Without the literal flag, undo could silently produce
+-- "Foo-1" when the user is owed "Foo".
 
 local M = {}
 
-function M.write(g, desired)
+-- M.write(g, desired)              — collision-safe rename via check_group_name
+-- M.write(g, desired, {literal=1}) — literal rename, skip the collision pre-step
+--
+-- Use the literal variant from undo handlers: the snapshot's `old` name was
+-- the entity's name BEFORE the apply happened, and the whole point of undo
+-- is to restore that exact string. Without the literal flag, undo would
+-- silently auto-suffix any restore that collides with another row already
+-- restored earlier in the same batch (or with any unrelated group that has
+-- taken the name in the meantime), which is the opposite of what undo
+-- promises.
+function M.write(g, desired, opts)
     local Mission = require('me_mission')
+    opts = opts or {}
 
-    -- Step 1: ask DCS for a collision-safe variant of `desired`. If the
-    -- API isn't available or throws, fall through with `desired` unchanged.
+    -- Step 1: collision auto-disambiguation. Skipped for literal writes.
     local safe = desired
-    if type(Mission.check_group_name) == 'function' then
+    if not opts.literal and type(Mission.check_group_name) == 'function' then
         local p_ok, candidate = pcall(Mission.check_group_name, desired)
         if p_ok and type(candidate) == 'string' and candidate ~= '' then
             safe = candidate
         end
     end
 
-    -- Step 2: hand the safe name to renameGroup if available.
+    -- Step 2: hand the safe (or literal) name to renameGroup if available.
     if type(Mission.renameGroup) == 'function' then
         local ok = Mission.renameGroup(g, safe)
         if not ok then
@@ -51,9 +63,7 @@ function M.write(g, desired)
         return true, safe
     end
 
-    -- Step 3: fallback for environments without renameGroup (test VMs,
-    -- old builds). Direct assignment, since there's no ME-side bookkeeping
-    -- to coordinate with.
+    -- Step 3: fallback for environments without renameGroup.
     g.name = safe
     return true, safe
 end

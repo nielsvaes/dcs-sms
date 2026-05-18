@@ -160,5 +160,45 @@ do
     check('case8: renameGroup called with Foo', rename_calls[1] and rename_calls[1].name == 'Foo')
 end
 
+-- Case 9: opts.literal=true skips check_group_name entirely.
+do
+    fresh_mission({
+        check_returns = function(n) return n .. '-99' end,  -- would auto-suffix
+        rename_returns = true,
+    })
+    local writer = load_writer()
+    local g = { name = 'A' }
+    local ok, actual = writer.write(g, 'Foo', { literal = true })
+    check('case9: ok=true', ok == true)
+    check('case9: actual=Foo (literal — no suffix)', actual == 'Foo')
+    check('case9: check_group_name NOT called', #check_calls == 0)
+    check('case9: renameGroup called with Foo (literal)', rename_calls[1] and rename_calls[1].name == 'Foo')
+end
+
+-- Case 10: opts.literal=false (or absent) behaves like the default (no flag).
+do
+    fresh_mission({
+        check_returns = function(n) return n .. '-1' end,
+        rename_returns = true,
+    })
+    local writer = load_writer()
+    local g = { name = 'A' }
+    local ok, actual = writer.write(g, 'Foo', { literal = false })
+    check('case10: actual=Foo-1 (literal=false honors check)', actual == 'Foo-1')
+    check('case10: check_group_name called once', #check_calls == 1)
+end
+
+-- Case 11: opts={} (no literal field) still runs check_group_name.
+do
+    fresh_mission({
+        check_returns = function(n) return n .. '-1' end,
+        rename_returns = true,
+    })
+    local writer = load_writer()
+    local g = { name = 'A' }
+    local ok, actual = writer.write(g, 'Foo', {})
+    check('case11: actual=Foo-1 (empty opts behaves as default)', actual == 'Foo-1')
+end
+
 if failures > 0 then print(failures .. ' failure(s)'); os.exit(1) end
 print('All group_name_writer tests passed.')

@@ -103,7 +103,7 @@ undo.register_handler('mass_edit.find_replace_group_name', function(snapshot)
     end
     local errors = 0
     for _, r in ipairs(snapshot.rows) do
-        local p_ok, w_ok = pcall(name_writer.write, r.entity, r.old)
+        local p_ok, w_ok = pcall(name_writer.write, r.entity, r.old, { literal = true })
         if not (p_ok and w_ok) then errors = errors + 1 end
     end
     return true, errors > 0 and (errors .. ' partial failures') or nil
