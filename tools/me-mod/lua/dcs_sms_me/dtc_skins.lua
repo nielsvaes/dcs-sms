@@ -88,6 +88,15 @@ function M.static_yellow() return static_colored('0xffd700ff') end  -- warning
 function M.static_red()    return static_colored('0xff5555ff') end  -- error (softened from pure red)
 function M.static_green()  return static_colored('0x44dd44ff') end  -- placement / success
 
+-- Coalition-tinted Static variants. Render the cell's text in the
+-- coalition color so the group treeview's Country column visually echoes
+-- the colored marker the country ComboList already shows on its
+-- ListBoxItem entries. Hex values match the existing dtc palette where
+-- possible (red = static_red's hex; neutral = static_yellow's hex).
+function M.coal_red()     return static_colored('0xff5555ff') end
+function M.coal_blue()    return static_colored('0x5599ffff') end
+function M.coal_neutral() return static_colored('0xffd700ff') end
+
 -- Thin horizontal-rule skin for sectioning the prefab manager. dxgui has
 -- no native separator widget, so we override a Static's released-state bkg
 -- with a darker tone — when the Static is sized 1px tall and stretched

@@ -25,6 +25,9 @@ function M.apply(widget, skin_name)
         elseif skin_name == 'dtc_grid_header' and dtc_skins then s = dtc_skins.grid_header()
         elseif skin_name == 'dtc_button'      and dtc_skins then s = dtc_skins.button()
         elseif skin_name == 'dtc_separator'   and dtc_skins then s = dtc_skins.separator()
+        elseif skin_name == 'dtc_coal_red'     and dtc_skins then s = dtc_skins.coal_red()
+        elseif skin_name == 'dtc_coal_blue'    and dtc_skins then s = dtc_skins.coal_blue()
+        elseif skin_name == 'dtc_coal_neutral' and dtc_skins then s = dtc_skins.coal_neutral()
         else
             local fn = Skin and Skin[skin_name]
             if not fn then return end

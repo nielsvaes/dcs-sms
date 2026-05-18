@@ -78,7 +78,11 @@ local W = {
     -- Populated from selection.snapshot_mission(). Reads the Type column for
     -- the group treeview (the category lives at container-key level in the
     -- mission tree, not on the group object itself).
-    categories  = {},
+    categories     = {},
+    -- country (table reference) → 'red' | 'blue' | 'neutral'. Built by
+    -- rebuild_pool from the mission tree; the group-scope treeview's
+    -- Country column applies the matching dtc_coal_* skin per row.
+    country_to_side = {},
     widgets = {
         scope_tabs   = {},
         scope_counts = {},
@@ -94,6 +98,14 @@ local W = {
 
 local SCOPES = { 'group', 'unit', 'waypoint', 'zone', 'drawing' }
 
+-- Map a coalition side → dtc-coalition-skin name for the Country cell in
+-- group scope. Unknown sides fall back to staticSkin_ME (no tint).
+local COALITION_CELL_SKIN = {
+    red     = 'dtc_coal_red',
+    blue    = 'dtc_coal_blue',
+    neutral = 'dtc_coal_neutral',
+}
+
 -- ---------------------------------------------------------------------------
 -- Data flow
 -- ---------------------------------------------------------------------------
@@ -102,11 +114,34 @@ local function rebuild_pool()
     local snap = selection.snapshot_mission(W.scope)
     if not snap.ok then
         log_warn('snapshot_mission failed: ' .. tostring(snap.error))
-        W.pool, W.parent_map, W.categories = {}, {}, {}
+        W.pool, W.parent_map, W.categories, W.country_to_side = {}, {}, {}, {}
         return
     end
     W.pool, W.parent_map = snap.pool, snap.parent_map
     W.categories = snap.categories or {}
+
+    -- Rebuild the country → side index. Walks mission.coalition once;
+    -- typical missions have under a dozen countries so this is cheap. Side
+    -- keys in mission.coalition are 'red' / 'blue' / 'neutrals' (plural in
+    -- some DCS versions) — we normalise 'neutrals' to 'neutral' so the
+    -- skin lookup table can use one canonical key.
+    W.country_to_side = {}
+    do
+        local ok_req, Mission = pcall(require, 'me_mission')
+        local mission = ok_req and Mission and Mission.mission
+        if type(mission) == 'table' and type(mission.coalition) == 'table' then
+            for side_name, side in pairs(mission.coalition) do
+                if type(side) == 'table' and type(side.country) == 'table' then
+                    local canonical = (side_name == 'red' and 'red')
+                                   or (side_name == 'blue' and 'blue')
+                                   or 'neutral'
+                    for _, c in ipairs(side.country) do
+                        W.country_to_side[c] = canonical
+                    end
+                end
+            end
+        end
+    end
 
     -- Drop checked entries no longer in the pool.
     local in_pool = {}
@@ -406,7 +441,18 @@ function M.rebuild_treeview()
             else
                 local v = r.values[c.key]
                 local cell = make_cell((v == nil) and '' or tostring(v), tostring(v or ''))
-                if cell then pcall(grid.setCell, grid, col_idx - 1, row_idx, cell) end
+                if cell then
+                    -- Coalition tint for the group-scope Country column —
+                    -- echoes the colored marker the country ComboList already
+                    -- shows on its ListBoxItem entries. Skin override has to
+                    -- happen after make_cell's default staticSkin_ME apply.
+                    if cell and W.scope == 'group' and c.key == 'country' then
+                        local side = W.country_to_side[r.entity.boss]
+                        local skin = COALITION_CELL_SKIN[side]
+                        if skin then skin_helper.apply(cell, skin) end
+                    end
+                    pcall(grid.setCell, grid, col_idx - 1, row_idx, cell)
+                end
             end
         end
     end
