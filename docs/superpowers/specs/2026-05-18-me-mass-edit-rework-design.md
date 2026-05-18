@@ -228,18 +228,55 @@ When the user clicks the Group scope tab with no matches in the list (mission ha
 - `tools/me-mod/test/run-tests.ps1` passes with no failures.
 - `mass_edit.lua` no longer references `mass_edit_registry`, `mass_edit_ops`, `W.property_id`, `W.operation`, `W.op_args`, or `W.plan`.
 
-## Future work (not in PR 1)
+## PR 2: rename_group form
+
+The second form. Uses `mass_edit_transforms.auto_number` so the user can substitute `{n}` for a 2-pad sequence number in the pattern. The form pattern is now a copy-paste of `find_replace_group_name` with adjusted apply logic and one fewer input row — this PR also validates that the form contract is stable enough to template.
+
+**File:** `tools/me-mod/lua/dcs_sms_me/mass_edit_forms/rename_group.lua`. Same contract as the find/replace form (`M.scope = 'group'`, `M.title = 'Rename groups'`, `M.new(parent_raw, get_checked, on_after_apply) → panel`, `M._apply(entities, pattern)`). Undo handler id: `mass_edit.rename_group`. Internal writer reuses the same Mission.renameGroup + fallback as find/replace.
+
+**Layout (right pane, group scope, after this PR lands):**
+
+```
+┌─ Rename groups ──────────────────────────────────┐
+│  Pattern:  [____________________]     [Rename]   │
+│  (use {n} for sequence, e.g. "Foo-{n}")          │
+└──────────────────────────────────────────────────┘
+┌─ Find & replace in group names ──────────────────┐
+│  Find:    [____________________]                 │
+│  Replace: [____________________]    [Replace]    │
+└──────────────────────────────────────────────────┘
+```
+
+Form order: rename on top, find/replace below. Registered in `mass_edit_forms.lua` as `group = { rename_group, find_replace_group_name }`.
+
+**Apply behavior:**
+
+- Pattern transform: `auto_number(old, { pattern = pattern, start = 1, step = 1, pad = 2, order = 'name_asc' })`. The `order = 'name_asc'` is honored inside the form's apply loop (entities are sorted by current name before assigning sequential numbers) so numbering is deterministic regardless of the left-pane sort or check order.
+- Empty pattern: form returns `{ changed=0, failed=0, toast='Pattern is empty', sev='warning' }` and does not mutate. Different from find/replace (where empty Find is a no-op via the transform); rename's empty pattern would set every name to "", which is destructive.
+- `{n}`-free pattern: every checked group gets the same name. Allowed — DCS auto-disambiguates name collisions inside the mission tree. Toast still reports `N renamed` with `success` severity.
+- `{n}`-bearing pattern: substituted with the row index using the hardcoded pad/start/step. Padding of 2 means `01..99` then `100..`; users with >99 groups should pick a pad-tolerant pattern (e.g. `Group-{n}-x`) or accept the width step.
+- Empty selection: `{ changed=0, failed=0, nothing_selected=true, toast='Nothing selected', sev='warning' }`.
+
+**Acceptance criteria:**
+
+- Open Mass Edit → Group tab. Rename form is visible above the Find & replace form.
+- Check 3 groups. Type `Foo-{n}` in Pattern, click `Rename`. Three groups get named `Foo-01`, `Foo-02`, `Foo-03` in name-asc order. Toast: `3 renamed`.
+- Click Rename with empty Pattern. Toast: `Pattern is empty` (warning). No mutation.
+- Click Rename with `Foo` (no `{n}`). All three groups become `Foo` (DCS handles the collision). Toast: `3 renamed`.
+- Ctrl+Z reverts the most recent rename.
+- `tools/me-mod/test/run-tests.ps1` passes with the new `test_mass_edit_rename_group.lua`.
+
+## Future work (after PR 2)
 
 In rough order of expected landing:
 
-1. `mass_edit_forms/rename_group.lua` — pattern-based rename with `auto_number` transform. Inputs: pattern text box (placeholder hint `use {n} for sequence`). Button: `Rename`. Hard-coded `start=1, step=1, pad=2, order=name_asc` to keep the form one-row; if anyone needs configurable start/step/pad later, those become additional fields in this same form.
-2. `mass_edit_forms/set_country.lua` — country combo with values from a country list; button: `Set country`. Uses `verbs.group_set_country` (already exists, already has undo support).
-3. `mass_edit_forms/toggle_*.lua` — hidden / late activation / uncontrolled. Three-state checkbox + button.
-4. `mass_edit_forms/set_frequency.lua` — number input + `Set` button. Uses `set_all` transform.
-5. Then unit-scope forms (rename, find/replace in names, set skill, set callsign, set loadout, set fuel).
-6. Then waypoint / zone / drawing forms.
+1. `mass_edit_forms/set_country.lua` — country combo with values from a country list; button: `Set country`. Uses `verbs.group_set_country` (already exists, already has undo support).
+2. `mass_edit_forms/toggle_*.lua` — hidden / late activation / uncontrolled. Three-state checkbox + button.
+3. `mass_edit_forms/set_frequency.lua` — number input + `Set` button. Uses `set_all` transform.
+4. Then unit-scope forms (rename, find/replace in names, set skill, set callsign, set loadout, set fuel).
+5. Then waypoint / zone / drawing forms.
 
-Once enough forms have shipped and the pattern feels stable, the first release lands as `v0.10.0`. No version bump in PR 1 — this is destructive and incomplete; release happens after critical mass of forms are smoke-tested.
+Once enough forms have shipped and the pattern feels stable, the first release lands as `v0.10.0`. No version bump in PR 2 either — release happens after critical mass of forms are smoke-tested.
 
 ## Versioning
 

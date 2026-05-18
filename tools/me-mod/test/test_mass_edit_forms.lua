@@ -22,9 +22,13 @@ check('forms_for is a function', type(forms.forms_for) == 'function')
 
 do
     local list = forms.forms_for('group')
-    check('group: 1 form',          #list == 1, 'got ' .. tostring(#list))
-    check('group: form.scope=group', list[1] and list[1].scope == 'group')
-    check('group: form.new fn',      list[1] and type(list[1].new) == 'function')
+    check('group: 2 forms',          #list == 2, 'got ' .. tostring(#list))
+    -- Order matters: rename on top of find/replace in the stacked right pane.
+    check('group: form[1] = rename_group', list[1] and list[1].title == 'Rename groups')
+    check('group: form[2] = find_replace_group_name',
+          list[2] and list[2].title == 'Find & replace in group names')
+    check('group: form[1].scope = group',  list[1] and list[1].scope == 'group')
+    check('group: form[2].scope = group',  list[2] and list[2].scope == 'group')
 end
 
 for _, scope in ipairs({ 'unit', 'waypoint', 'zone', 'drawing' }) do

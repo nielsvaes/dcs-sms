@@ -121,6 +121,17 @@ The Mass Edit window is being rebuilt around an action-panel model
 (see `docs/superpowers/specs/2026-05-18-me-mass-edit-rework-design.md`).
 PR-by-PR each form is added; this section will grow as forms land.
 
+### Rename groups
+
+- [ ] The Rename groups form is the topmost form in the Group scope's right pane.
+- [ ] Pattern input has a sibling hint line "(use {n} for sequence, e.g. "Foo-{n}")".
+- [ ] Check 3 groups, type `X-{n}` in Pattern, click Rename. Names become `X-01`, `X-02`, `X-03` in name-ascending order (alphabetical by previous name, not by check order). Footer toast: `3 renamed`.
+- [ ] Type `Foo` (no `{n}` token) and click Rename with the same 3 groups checked. All three get a name based on `Foo` — DCS auto-disambiguates the collision. Toast: `3 renamed`.
+- [ ] Click Rename with the pattern field empty. Toast: `Pattern is empty` (warning). No names mutate.
+- [ ] Click Rename with nothing checked. Toast: `Nothing selected` (warning).
+- [ ] Press `Ctrl+Z` while the window has focus. The most recent rename reverts.
+- [ ] After a rename, the entity list refreshes and shows the new names.
+
 ### Find & replace in group names
 
 - [ ] DCS-SMS → Mass Edit opens the window.
