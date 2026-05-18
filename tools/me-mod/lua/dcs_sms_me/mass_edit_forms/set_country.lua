@@ -52,13 +52,25 @@ local COALITION_SKIN = {
 }
 
 -- (Re-)populate a ComboList from Mission.missionCountry, falling back to
--- a coalition-tree walk if missionCountry is absent (test VMs).
+-- a coalition-tree walk if missionCountry is absent (test VMs). Preserves
+-- the current selection across the rebuild — if the previously-selected
+-- country is still in the list, re-selects it; otherwise the combo lands
+-- on whatever the widget's default-selected item is.
 local function populate_country_combo(combo)
     if not (combo and ListBoxItem and ListBoxItem.new) then return end
-    if combo.removeAllItems then pcall(combo.removeAllItems, combo) end
     local Mission = require('me_mission')
-    local names = {}
 
+    -- Capture the currently-selected country name BEFORE the rebuild so we
+    -- can re-select it after.
+    local prev_text
+    if combo.getSelectedItem then
+        local cur = combo:getSelectedItem()
+        if cur and cur.getText then prev_text = cur:getText() end
+    end
+
+    if combo.removeAllItems then pcall(combo.removeAllItems, combo) end
+
+    local names = {}
     if type(Mission.missionCountry) == 'table' then
         for name in pairs(Mission.missionCountry) do
             if type(name) == 'string' then names[#names + 1] = name end
@@ -78,6 +90,8 @@ local function populate_country_combo(combo)
     end
 
     table.sort(names)
+
+    local match_item
     for _, name in ipairs(names) do
         local ok, item = pcall(ListBoxItem.new, name)
         if ok and item then
@@ -85,7 +99,12 @@ local function populate_country_combo(combo)
             local skin_name = COALITION_SKIN[coal]
             if skin_name then skin_helper.apply(item, skin_name) end
             pcall(combo.insertItem, combo, item)
+            if prev_text and name == prev_text then match_item = item end
         end
+    end
+
+    if match_item and combo.selectItem then
+        pcall(combo.selectItem, combo, match_item)
     end
 end
 
@@ -144,8 +163,8 @@ function M._apply(entities, country_name)
         result.toast = 'Already in ' .. country_name
         result.sev   = 'info'
     elseif #changed_rows == 0 and failed > 0 then
-        local toast = string.format('%d country set', 0)
-        toast = toast .. string.format(' · %d failed', failed)
+        local toast = string.format('%d country set · %d failed', 0, failed)
+        if unchanged > 0 then toast = toast .. string.format(' · %d unchanged', unchanged) end
         result.toast = toast
         result.sev   = 'error'
     else
@@ -257,10 +276,12 @@ function M.new(parent_raw, get_checked, on_after_apply)
                 local entities = (type(get_checked) == 'function') and get_checked() or {}
                 local result = M._apply(entities, picked)
                 if type(on_after_apply) == 'function' then on_after_apply(result) end
-                -- Re-populate the combo after apply because moving entities
-                -- across countries can drain a country bucket (= remove from
-                -- Mission.missionCountry).
-                populate_country_combo(country_combo)
+                -- Re-populate the combo only when entities actually moved —
+                -- a no-op click should not churn the list (or risk wiping the
+                -- user's selection on an idempotent widget redraw).
+                if result and (result.changed or 0) > 0 then
+                    populate_country_combo(country_combo)
+                end
             end)
         end)
     end

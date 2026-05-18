@@ -203,6 +203,28 @@ do
     check('partial-fail: undo recorded (1 success exists)', undo.has_record() == true)
 end
 
+-- Case 9b: 0 changed + 1 no-op + 1 failure → toast mentions both unchanged AND failed.
+do
+    reset()
+    mock.new_mission()
+    local g1 = mock.add_plane({ name = 'A', country = 'Russia', side = 'red' })
+    local g2 = mock.add_plane({ name = 'B' })  -- USA
+    verb_responses[1] = { ok = true, previous_country = 'Russia', country = 'Russia',
+                          coalition_changed = false, no_op = true }
+    verb_responses[2] = { ok = false, error = 'group not found' }
+    local result = form._apply({ g1, g2 }, 'Russia')
+    check('zero-changed-with-mix: changed=0',  result.changed == 0)
+    check('zero-changed-with-mix: unchanged=1', result.unchanged == 1)
+    check('zero-changed-with-mix: failed=1',    result.failed == 1)
+    check('zero-changed-with-mix: toast contains "0 country set"',
+          result.toast:find('0 country set') ~= nil, 'got ' .. tostring(result.toast))
+    check('zero-changed-with-mix: toast contains "1 failed"',
+          result.toast:find('1 failed') ~= nil, 'got ' .. tostring(result.toast))
+    check('zero-changed-with-mix: toast contains "1 unchanged"',
+          result.toast:find('1 unchanged') ~= nil, 'got ' .. tostring(result.toast))
+    check('zero-changed-with-mix: sev = error', result.sev == 'error')
+end
+
 -- Case 10: module exports the expected metadata.
 do
     check('form.scope = group', form.scope == 'group')
