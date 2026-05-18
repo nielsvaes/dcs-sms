@@ -1829,8 +1829,12 @@ function M.group_set_country(args)
         end
     end
 
-    -- Step 9: refresh map objects (color update reflects immediately).
-    refresh_group_view(g)
+    -- Step 9: heavyweight refresh — country change flips coalition color,
+    -- which the lightweight refresh path doesn't pick up. recreate_group_view
+    -- forces a symbol re-render so the new color shows without waiting for
+    -- the user to click the group.
+    local me_refresh = require('dcs_sms_me.me_refresh')
+    me_refresh.recreate_group_view(g)
 
     return { ok = true, id = g.groupId, name = g.name,
              country = newCountry.name, side = newSide,

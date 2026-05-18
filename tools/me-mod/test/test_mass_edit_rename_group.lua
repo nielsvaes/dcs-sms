@@ -116,6 +116,41 @@ do
     check('no-{n}: sev = success', result.sev == 'success')
 end
 
+-- Case 5b: one row already at target name → toast splits "1 renamed · 1 unchanged".
+do
+    undo.clear()
+    mock.new_mission()
+    local g1 = mock.add_plane({ name = 'Foo' })  -- already named Foo
+    local g2 = mock.add_plane({ name = 'B' })
+    local result = form._apply({ g1, g2 }, 'Foo')
+    check('mixed-unchanged: changed=1', result.changed == 1)
+    check('mixed-unchanged: unchanged=1', result.unchanged == 1)
+    check('mixed-unchanged: failed=0',    result.failed == 0)
+    check('mixed-unchanged: g1 unchanged', g1.name == 'Foo')
+    check('mixed-unchanged: g2 renamed',   g2.name == 'Foo')
+    check('mixed-unchanged: toast contains "1 renamed"',
+          result.toast:find('1 renamed') ~= nil, 'got ' .. tostring(result.toast))
+    check('mixed-unchanged: toast contains "1 unchanged"',
+          result.toast:find('1 unchanged') ~= nil, 'got ' .. tostring(result.toast))
+    check('mixed-unchanged: sev = success', result.sev == 'success')
+end
+
+-- Case 5c: all rows already at target → "Already named that (N unchanged)" info toast.
+do
+    undo.clear()
+    mock.new_mission()
+    local g1 = mock.add_plane({ name = 'Foo' })
+    local g2 = mock.add_plane({ name = 'Foo' })  -- duplicate names; mock allows it
+    local result = form._apply({ g1, g2 }, 'Foo')
+    check('all-unchanged: changed=0', result.changed == 0)
+    check('all-unchanged: unchanged=2', result.unchanged == 2)
+    check('all-unchanged: failed=0',    result.failed == 0)
+    check('all-unchanged: toast = "Already named that (2 unchanged)"',
+          result.toast == 'Already named that (2 unchanged)', 'got ' .. tostring(result.toast))
+    check('all-unchanged: sev = info', result.sev == 'info')
+    check('all-unchanged: no undo recorded', undo.has_record() == false)
+end
+
 -- Case 6: writer rejection → row counted as failed.
 do
     undo.clear()

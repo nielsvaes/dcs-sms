@@ -53,7 +53,7 @@ function M._apply(entities, pattern)
     end)
 
     local args = { pattern = pattern, start = 1, step = 1, pad = 2, order = 'name_asc' }
-    local changed_rows, failed = {}, 0
+    local changed_rows, failed, unchanged = {}, 0, 0
     for idx, e in ipairs(sorted) do
         local old = e.name
         local new = transforms.auto_number(old, args, idx)
@@ -65,6 +65,10 @@ function M._apply(entities, pattern)
                 failed = failed + 1
                 log_warn('name_writer.write failed: ' .. tostring(p_ok and w_err or w_ok))
             end
+        else
+            -- Row already matched the target name — no work to do but also
+            -- not a "no changes" situation when other rows are mutating.
+            unchanged = unchanged + 1
         end
     end
 
@@ -75,14 +79,20 @@ function M._apply(entities, pattern)
     local result = {
         changed      = #changed_rows,
         failed       = failed,
+        unchanged    = unchanged,
         changed_rows = changed_rows,
     }
-    if #changed_rows == 0 and failed == 0 then
+    if #changed_rows == 0 and failed == 0 and unchanged == 0 then
         result.toast = 'No changes'
         result.sev   = 'warning'
+    elseif #changed_rows == 0 and failed == 0 then
+        -- All rows already at the target name.
+        result.toast = string.format('Already named that (%d unchanged)', unchanged)
+        result.sev   = 'info'
     else
         local toast = string.format('%d renamed', #changed_rows)
-        if failed > 0 then toast = toast .. string.format(' · %d failed', failed) end
+        if unchanged > 0 then toast = toast .. string.format(' · %d unchanged', unchanged) end
+        if failed > 0    then toast = toast .. string.format(' · %d failed',    failed)    end
         local sev = (failed == 0 and 'success') or (#changed_rows == 0 and 'error') or 'warning'
         result.toast = toast
         result.sev   = sev
