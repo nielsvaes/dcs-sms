@@ -137,10 +137,11 @@ certainty. Plausible paths:
 2. Direct mutation of `selectGroups` (and possibly the rendering hook,
    e.g. `MapWindow.show()` or a redraw call) — riskier but doable.
 
-Implementation reconnaissance happens during the first writer task. If
-both paths fail, ship the `To map` button **disabled, with a tooltip
-explaining why**, and file an issue. `From map` is independent and ships
-either way.
+Implementation reconnaissance found `setSelectingObjectsOutside` in
+`me_multiSelection.lua` immediately (path 1), so neither fallback was
+needed. Any runtime failure of the write path surfaces as a
+`Failed to push: <err>` toast at click-time. `From map` is independent
+and unaffected by write-path failures.
 
 ### D7. Module split
 
@@ -255,15 +256,9 @@ Behavior:
 5. Return `{ ok = true, count = #group_refs }`.
 
 All steps `pcall`-wrapped. Any failure returns `{ ok = false, error = ... }`.
-
-If the writer cannot achieve step 2 or 3 after recon, expose a sentinel:
-
-```
-M.available = false   -- when ME internals don't permit programmatic write
-```
-
-`mass_edit.lua` reads this at button-build time; when `false`, the `To map`
-button is inserted **disabled with a tooltip** `Map write API unavailable in this DCS build`.
+The `To map` button is always enabled; runtime errors surface as a
+`Failed to push: <err>` toast. No `M.available` sentinel, no disabled-button
+path — recon confirmed the API is stable enough to ship unconditionally.
 
 ### Layout changes in mass_edit.lua
 
@@ -295,8 +290,6 @@ New file `tools/me-mod/test/test_me_select_writer.lua`:
 - `set_group_selection({})` returns `{ ok = true, count = 0 }` without
   calling `unselectAll`.
 - `MapWindow.unselectAll` throws → returns `{ ok = false, error = ... }`.
-- The `M.available = false` path is exercised by setting the sentinel
-  manually and re-requiring (or by a `M._set_available_for_tests` helper).
 
 Extend `tools/me-mod/test/test_mass_edit.lua` (or add a new
 `test_mass_edit_map_sync.lua` if the existing file is large):
