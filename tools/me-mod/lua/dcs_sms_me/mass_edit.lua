@@ -30,6 +30,7 @@ local GridHeaderCell;  do local ok, m = pcall(require, 'GridHeaderCell'); if ok 
 local CheckBox;        do local ok, m = pcall(require, 'CheckBox');       if ok then CheckBox       = m end end
 local EditBox;         do local ok, m = pcall(require, 'EditBox');        if ok then EditBox        = m end end
 local Button;          do local ok, m = pcall(require, 'Button');         if ok then Button         = m end end
+local ScrollPane;      do local ok, m = pcall(require, 'ScrollPane');     if ok then ScrollPane     = m end end
 
 -- dxgui module: lets us query live keyboard state during a click handler so
 -- shift-click can extend a checkbox range without ED exposing modifier flags
@@ -116,6 +117,7 @@ local W = {
         sel_clr_btn  = nil,
         from_map_btn = nil,
         to_map_btn   = nil,
+        form_scroll  = nil,
     },
     _built = false,
 }
@@ -263,6 +265,12 @@ local function on_scope_changed(new_scope)
     if M._relayout and W.sms_window and W.sms_window:raw() then
         local cw, ch = W.sms_window:raw():getSize()
         M._relayout(cw, ch)
+    end
+    -- Reset right-pane scroll so a tab switch always starts at the top
+    -- of the (possibly different) form stack. Matches the left-pane
+    -- grid's "rebuild from scratch" behavior on scope switch.
+    if W.widgets.form_scroll and W.widgets.form_scroll.setVertScrollValue then
+        pcall(W.widgets.form_scroll.setVertScrollValue, W.widgets.form_scroll, 0)
     end
 end
 
@@ -698,17 +706,38 @@ local function relayout(w, h)
     local tree_h = math.max(60, sel_strip_y - L.GAP - tree_y)
     set(W.widgets.tree, L.EDGE, tree_y, left_w, tree_h)
 
-    -- Right pane: stack the active scope's forms vertically, starting at row1_y.
+    -- Right pane: ScrollPane wraps the form stack so all forms are
+    -- reachable at any window height. Outer bounds cover the right
+    -- area; child widgets (forms + empty-scope label) use scroll-
+    -- relative coordinates (origin at the pane's top-left, not the
+    -- window's). When no ScrollPane exists (older DCS / test VM
+    -- fallback), forms position at absolute right_x/row1_y as before.
+    local has_pane = W.widgets.form_scroll ~= nil
+    local body_h   = body_bottom - row1_y
+    if has_pane then
+        set(W.widgets.form_scroll, right_x, row1_y, right_w, body_h)
+    end
+
     local active = W.form_panels[W.scope] or {}
-    local y_cursor = row1_y
+    local form_x = has_pane and 0 or right_x
+    local form_y = has_pane and 0 or row1_y
+    local form_w = right_w
+    local y_cursor = form_y
     for _, panel in ipairs(active) do
         local ph = (panel.get_height and panel:get_height()) or 80
-        if panel.set_bounds then panel:set_bounds(right_x, y_cursor, right_w, ph) end
+        if panel.set_bounds then panel:set_bounds(form_x, y_cursor, form_w, ph) end
         y_cursor = y_cursor + ph + L.FORM_GAP
     end
 
     if #active == 0 then
-        set(W.widgets.empty_label, right_x, row1_y, right_w, L.ROW_H)
+        set(W.widgets.empty_label, form_x, form_y, form_w, L.ROW_H)
+    end
+
+    -- ScrollPane doesn't auto-detect child-bound changes — tell it to
+    -- recompute the scroll extent. Without this, the vertical scrollbar
+    -- range stays at whatever it was last time relayout fired.
+    if has_pane and W.widgets.form_scroll.updateWidgetsBounds then
+        pcall(W.widgets.form_scroll.updateWidgetsBounds, W.widgets.form_scroll)
     end
 end
 M._relayout = relayout
@@ -897,16 +926,6 @@ local function build_window()
     W.widgets.from_map_btn = make_bulk_btn('From map', on_fetch_from_map)
     W.widgets.to_map_btn   = make_bulk_btn('To map',   on_push_to_map)
 
-    -- Empty-scope placeholder (shared across scopes; toggled in show_forms_for_active_scope).
-    if Static and Static.new then
-        local ok, s = pcall(Static.new, 'No forms yet for this scope')
-        if ok and s then
-            skin_helper.apply(s, 'staticSkin_ME')
-            pcall(raw.insertWidget, raw, s)
-            W.widgets.empty_label = s
-        end
-    end
-
     -- Cancel button.
     if Button and Button.new then
         local ok, b = pcall(Button.new)
@@ -919,17 +938,43 @@ local function build_window()
         end
     end
 
+    -- Right-pane container — a ScrollPane that holds every scope's
+    -- forms (and the empty-scope placeholder). When dxgui's ScrollPane
+    -- module is unavailable (older DCS / test VMs), fall back to raw
+    -- so behavior matches the pre-scroll layout.
+    local form_parent = raw
+    if ScrollPane and ScrollPane.new then
+        local ok_sp, sp = pcall(ScrollPane.new)
+        if ok_sp and sp then
+            skin_helper.apply(sp, 'scrollPaneSkin_ME')
+            pcall(raw.insertWidget, raw, sp)
+            W.widgets.form_scroll = sp
+            form_parent = sp
+        end
+    end
+
     -- Mount form panels for every scope (one-time allocation per Q2 of the design).
     for _, scope in ipairs(SCOPES) do
         local panels = {}
         for _, form_module in ipairs(mass_forms.forms_for(scope)) do
-            local panel = form_module.new(raw, get_checked_for_active_scope, on_after_apply, get_categories_for_active_scope)
+            local panel = form_module.new(form_parent, get_checked_for_active_scope, on_after_apply, get_categories_for_active_scope)
             if panel then
                 panels[#panels + 1] = panel
                 if panel.hide then panel:hide() end
             end
         end
         W.form_panels[scope] = panels
+    end
+
+    -- Empty-scope placeholder (shared across scopes; toggled in show_forms_for_active_scope).
+    -- Parented to the ScrollPane (or raw if pane unavailable) so it scrolls / hides with the forms.
+    if Static and Static.new then
+        local ok, s = pcall(Static.new, 'No forms yet for this scope')
+        if ok and s then
+            skin_helper.apply(s, 'staticSkin_ME')
+            pcall(form_parent.insertWidget, form_parent, s)
+            W.widgets.empty_label = s
+        end
     end
 
     W._built = true
