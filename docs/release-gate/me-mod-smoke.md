@@ -121,6 +121,24 @@ The Mass Edit window is being rebuilt around an action-panel model
 (see `docs/superpowers/specs/2026-05-18-me-mass-edit-rework-design.md`).
 PR-by-PR each form is added; this section will grow as forms land.
 
+### Right-pane scroll (v0.10.0+)
+
+The right pane is wrapped in a ScrollPane so all stacked forms are
+reachable regardless of window height.
+
+- [ ] Open Mass Edit on Group tab at the default window height. Verify
+      a scrollbar appears on the right pane and all 6 forms (Rename,
+      Find & replace, Add prefix, Add suffix, Set country, Visibility &
+      control) can be reached by scrolling.
+- [ ] Switch to Unit tab, then back to Group. The right pane scroll
+      position resets to top.
+- [ ] Resize the window taller until all 6 forms fit. The scrollbar
+      disappears.
+- [ ] Hide a form (e.g. via Ctrl+Shift+R reload while the window is
+      open) and verify no empty gap is left in the scroll content area.
+      (If gaps appear, hidden forms still contribute to the pane's
+      content height — file as a follow-up.)
+
 ### Rename groups
 
 - [ ] The Rename groups form is the topmost form in the Group scope's right pane.
