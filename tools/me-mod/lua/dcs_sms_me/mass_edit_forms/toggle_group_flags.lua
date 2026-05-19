@@ -157,7 +157,7 @@ function M._apply(entities, settings, categories)
         result.toast = 'Nothing applicable'
         result.sev   = 'warning'
     else
-        local toast = string.format('%d flag changes', changed)
+        local toast = (changed == 1) and '1 flag change' or string.format('%d flag changes', changed)
         if not_applicable_entities > 0 then
             toast = toast .. string.format(' · %d not applicable', not_applicable_entities)
         end

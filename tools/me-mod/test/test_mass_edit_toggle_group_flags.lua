@@ -101,7 +101,7 @@ do
     check('single-on: changed=1',                 result.changed == 1)
     check('single-on: not_applicable=0',          (result.not_applicable or 0) == 0)
     check('single-on: g.hidden = true',           g.hidden == true)
-    check('single-on: toast = "1 flag changes"',  result.toast == '1 flag changes')
+    check('single-on: toast = "1 flag change"',   result.toast == '1 flag change')
     check('single-on: sev = success',             result.sev == 'success')
     check('single-on: undo recorded',             undo.has_record() == true)
     check('single-on: update_hidden_group called (mirrors ED checkbox handler)',
@@ -149,8 +149,8 @@ do
     check('mix-cat: plane uncontrolled = true',   g_plane.uncontrolled == true)
     check('mix-cat: vehicle uncontrolled untouched (false)',
           g_veh.uncontrolled == false)
-    check('mix-cat: toast = "1 flag changes · 1 not applicable"',
-          result.toast == '1 flag changes · 1 not applicable')
+    check('mix-cat: toast = "1 flag change · 1 not applicable"',
+          result.toast == '1 flag change · 1 not applicable')
     check('mix-cat: sev = success',               result.sev == 'success')
     -- update_hidden_group only fired for the plane (the only one we touched).
     check('mix-cat: refresh fired only for plane',

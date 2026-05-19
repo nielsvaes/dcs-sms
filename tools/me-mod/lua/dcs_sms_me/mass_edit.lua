@@ -103,7 +103,6 @@ local W = {
     country_to_side = {},
     widgets = {
         scope_tabs   = {},
-        scope_counts = {},
         tree         = nil,
         tree_headers = {},
         name_filter  = nil,
@@ -186,24 +185,20 @@ local function scope_pool_counts()
 end
 
 -- Get the entities checked in the active scope. Closure handed to each
--- form so its apply handler can read the current selection. Returns a
--- second value -- a categories map keyed by the same entities -- so
--- forms that care about per-entity category (e.g. toggle_group_flags's
--- applicability lookup) can read it. Older forms only assign the first
--- return value; the second is silently discarded.
+-- form so its apply handler can read the current selection.
 local function get_checked_for_active_scope()
     local out = {}
     for _, e in ipairs(W.pool) do
         if W.checked[W.scope][e] then out[#out + 1] = e end
     end
-    return out, W.categories or {}
+    return out
 end
 
--- Closure form so the form contract can take an opaque
--- get_categories() instead of digging into mass_edit's state. Returns
--- the same categories map that get_checked's second return value
--- surfaces. Cheap (just exposes W.categories); each form decides
--- whether to call it.
+-- Companion closure -- exposes the per-entity category map. Passed as
+-- the 4th arg to each form's M.new so forms that need applicability
+-- (e.g. toggle_group_flags) can look up an entity's category without
+-- reaching into mass_edit state directly. Forms that don't need it
+-- ignore the argument.
 local function get_categories_for_active_scope()
     return W.categories or {}
 end
@@ -386,7 +381,16 @@ local function build_tree_widget()
     local raw = W.sms_window:raw()
     if not raw then return end
 
-    if W.widgets.tree then pcall(W.widgets.tree.setVisible, W.widgets.tree, false) end
+    -- Drop the prior grid: detach it from the sms_window container so it
+    -- can be GC'd instead of accumulating on every scope-tab switch.
+    -- removeWidget is on the Window-class API; pcall'd so a dxgui without
+    -- it still degrades to "old grid stays parented and just goes
+    -- invisible" (the previous behavior).
+    if W.widgets.tree then
+        pcall(W.widgets.tree.setVisible, W.widgets.tree, false)
+        if raw.removeWidget then pcall(raw.removeWidget, raw, W.widgets.tree) end
+        W.widgets.tree = nil
+    end
 
     local ok_grid, grid = pcall(Grid.new)
     if not (ok_grid and grid) then return end
@@ -517,6 +521,14 @@ function M.rebuild_treeview()
                         pcall(cb.addChangeCallback, cb, function(box)
                             local state = box.getState and box:getState() == true
                             W.checked[W.scope][entity] = state or nil
+                            -- Also anchor here so a follow-up shift-click
+                            -- on a row body extends from the row whose
+                            -- checkbox the user just toggled. (Shift-clicking
+                            -- the checkbox itself still toggles single --
+                            -- the checkbox widget consumes the click before
+                            -- grid.onMouseDown gets a chance to read the
+                            -- shift state.)
+                            W.anchor[W.scope] = entity
                         end)
                     end
                     pcall(grid.setCell, grid, col_idx - 1, row_idx, cb)
@@ -560,12 +572,15 @@ local SCOPE_LABEL = {
 }
 
 function M.update_scope_counts()
-    if not W.widgets.scope_counts then return end
+    if not W.widgets.scope_tabs then return end
+    -- The count is interpolated into the tab's own text (no separate
+    -- label widget). Walk the scope_tabs map and rewrite each tab's
+    -- caption with the fresh count.
     local counts = scope_pool_counts()
-    for scope, lbl in pairs(W.widgets.scope_counts) do
-        if lbl and lbl.setText then
+    for scope, tab in pairs(W.widgets.scope_tabs) do
+        if tab and tab.setText then
             local text = (SCOPE_LABEL[scope] or scope) .. ' · ' .. tostring(counts[scope] or 0)
-            pcall(lbl.setText, lbl, text)
+            pcall(tab.setText, tab, text)
         end
     end
 end
@@ -670,14 +685,14 @@ local function make_scope_tab(scope_name, label, count_str, on_click)
         local ok3, s = pcall(Static.new)
         if ok3 then tab = s end
     end
-    if not tab then return nil, nil end
+    if not tab then return nil end
     if tab.setText then pcall(tab.setText, tab, label .. ' · ' .. count_str) end
     if tab.addMouseDownCallback then
         pcall(tab.addMouseDownCallback, tab, function() on_click(scope_name) end)
     elseif tab.addMouseUpCallback then
         pcall(tab.addMouseUpCallback, tab, function() on_click(scope_name) end)
     end
-    return tab, tab
+    return tab
 end
 
 local function build_window()
@@ -708,12 +723,11 @@ local function build_window()
 
     -- Scope tabs.
     for _, scope in ipairs(SCOPES) do
-        local tab, count_lbl = make_scope_tab(scope, SCOPE_LABEL[scope], '0', on_scope_changed)
+        local tab = make_scope_tab(scope, SCOPE_LABEL[scope], '0', on_scope_changed)
         if tab then
             if tab.setBounds then pcall(tab.setBounds, tab, 8, 4, 140, 28) end
             pcall(raw.insertWidget, raw, tab)
             W.widgets.scope_tabs[scope] = tab
-            W.widgets.scope_counts[scope] = count_lbl
         end
     end
 
