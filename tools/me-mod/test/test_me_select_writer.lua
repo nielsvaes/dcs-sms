@@ -41,6 +41,49 @@ do
           'must not clear the map on empty input')
 end
 
+-- Case: 3 groups with distinct groupIds -> setSelectingObjectsOutside
+-- called once with the right shape; result counts them.
+do
+    mms_called = false
+    mms_last_input = nil
+    local g1 = { groupId = 101, name = 'Alpha' }
+    local g2 = { groupId = 202, name = 'Bravo' }
+    local g3 = { groupId = 303, name = 'Charlie' }
+    local result = writer.set_group_selection({ g1, g2, g3 })
+    check('happy: ok=true',                       result.ok == true)
+    check('happy: count=3',                       result.count == 3)
+    check('happy: error is nil',                  result.error == nil)
+    check('happy: setSelectingObjectsOutside called', mms_called == true)
+    check('happy: groups_copied has g1 by id',    mms_last_input and mms_last_input.groups_copied
+                                                     and mms_last_input.groups_copied[101] == g1)
+    check('happy: groups_copied has g2 by id',    mms_last_input and mms_last_input.groups_copied
+                                                     and mms_last_input.groups_copied[202] == g2)
+    check('happy: groups_copied has g3 by id',    mms_last_input and mms_last_input.groups_copied
+                                                     and mms_last_input.groups_copied[303] == g3)
+    check('happy: triggerZones_copied present (empty)',
+          type(mms_last_input.triggerZones_copied) == 'table' and next(mms_last_input.triggerZones_copied) == nil)
+    check('happy: draw_copied present (empty)',
+          type(mms_last_input.draw_copied) == 'table' and next(mms_last_input.draw_copied) == nil)
+end
+
+-- Case: group without groupId is silently dropped from the keyed map but
+-- still counted toward the input length (we use the keyed-count for
+-- result.count so the toast doesn't lie). count returned equals the
+-- number actually keyed.
+do
+    mms_called = false
+    mms_last_input = nil
+    local g1 = { groupId = 101, name = 'Alpha' }
+    local g_bad = { name = 'NoId' }  -- missing groupId
+    local result = writer.set_group_selection({ g1, g_bad })
+    check('drop: ok=true',                        result.ok == true)
+    check('drop: count=1 (only g1 keyed)',        result.count == 1)
+    check('drop: groups_copied has only one entry',
+          (function()
+              local n = 0; for _ in pairs(mms_last_input.groups_copied) do n = n + 1 end; return n
+          end)() == 1)
+end
+
 if failures > 0 then
     print(string.format('%d failure(s)', failures))
     os.exit(1)

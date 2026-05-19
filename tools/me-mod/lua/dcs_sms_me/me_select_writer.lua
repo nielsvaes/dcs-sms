@@ -33,8 +33,40 @@ function M.set_group_selection(group_refs)
         return { ok = true, count = 0 }
     end
 
-    -- (impl in next task)
-    return { ok = false, error = 'not yet implemented', count = 0 }
+    local ok_mms, mms = pcall(require, 'me_multiSelection')
+    if not (ok_mms and type(mms) == 'table' and type(mms.setSelectingObjectsOutside) == 'function') then
+        return { ok = false, error = 'me_multiSelection.setSelectingObjectsOutside unavailable', count = 0 }
+    end
+
+    -- Build the keyed table the ME function expects. Drop entries
+    -- without a groupId — they can't be addressed in selectGroups.
+    local groups_copied = {}
+    local count = 0
+    for _, g in ipairs(group_refs) do
+        if type(g) == 'table' and g.groupId then
+            groups_copied[g.groupId] = g
+            count = count + 1
+        end
+    end
+
+    if count == 0 then
+        -- All inputs were unkeyable. Treat as empty — don't call the ME
+        -- function (it would clear the map).
+        return { ok = true, count = 0 }
+    end
+
+    local a_objects = {
+        groups_copied       = groups_copied,
+        triggerZones_copied = {},
+        draw_copied         = {},
+    }
+
+    local ok_call, err = pcall(mms.setSelectingObjectsOutside, a_objects)
+    if not ok_call then
+        return { ok = false, error = tostring(err), count = 0 }
+    end
+
+    return { ok = true, count = count }
 end
 
 return M
