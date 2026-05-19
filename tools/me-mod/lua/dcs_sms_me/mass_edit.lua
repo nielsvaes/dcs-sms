@@ -16,10 +16,12 @@
 
 local M = {}
 
-local sms_window  = require('dcs_sms_me.sms_window')
-local selection   = require('dcs_sms_me.selection')
-local mass_forms  = require('dcs_sms_me.mass_edit_forms')
-local skin_helper = require('dcs_sms_me.skin_helper')
+local sms_window      = require('dcs_sms_me.sms_window')
+local selection       = require('dcs_sms_me.selection')
+local mass_forms      = require('dcs_sms_me.mass_edit_forms')
+local skin_helper     = require('dcs_sms_me.skin_helper')
+local map_sync        = require('dcs_sms_me.mass_edit_map_sync')
+local me_select_writer = require('dcs_sms_me.me_select_writer')
 
 -- dxgui modules. pcall-required so the file still loads in test VMs.
 local Static;          do local ok, m = pcall(require, 'Static');         if ok then Static         = m end end
@@ -112,6 +114,8 @@ local W = {
         sel_all_btn  = nil,
         sel_inv_btn  = nil,
         sel_clr_btn  = nil,
+        from_map_btn = nil,
+        to_map_btn   = nil,
     },
     _built = false,
 }
@@ -837,6 +841,44 @@ local function build_window()
     W.widgets.sel_all_btn = make_bulk_btn('Select all',    on_select_all_visible)
     W.widgets.sel_inv_btn = make_bulk_btn('Invert',        on_invert_visible)
     W.widgets.sel_clr_btn = make_bulk_btn('Clear',         on_clear_selection)
+
+    -- Map-sync buttons: pure compute via map_sync, side effects (writer
+    -- call + rebuild + toast) here. Both are group-scope-only; non-group
+    -- scopes hide the widgets in relayout (see Task 8).
+    local function toast(msg, sev)
+        if W.sms_window and W.sms_window.set_status then
+            pcall(W.sms_window.set_status, W.sms_window, msg, sev or 'info')
+        end
+    end
+
+    local function on_fetch_from_map()
+        pcall(function()
+            local snap = selection.snapshot()
+            local r = map_sync.compute_fetch(W, snap)
+            if r.toast then toast(r.toast, r.sev) end
+            -- compute_fetch already mutated W on success; rebuild reflects it.
+            if r.ok and not r.empty then M.rebuild_treeview() end
+        end)
+    end
+
+    local function on_push_to_map()
+        pcall(function()
+            local r = map_sync.compute_push(W)
+            if r.empty then
+                toast(r.toast, r.sev)
+                return
+            end
+            local wr = me_select_writer.set_group_selection(r.group_refs)
+            if not wr.ok then
+                toast('Failed to push: ' .. tostring(wr.error), 'err')
+                return
+            end
+            toast(string.format('Pushed %d groups to map', wr.count), 'info')
+        end)
+    end
+
+    W.widgets.from_map_btn = make_bulk_btn('From map', on_fetch_from_map)
+    W.widgets.to_map_btn   = make_bulk_btn('To map',   on_push_to_map)
 
     -- Empty-scope placeholder (shared across scopes; toggled in show_forms_for_active_scope).
     if Static and Static.new then
