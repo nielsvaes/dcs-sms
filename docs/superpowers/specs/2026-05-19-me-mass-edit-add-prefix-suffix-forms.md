@@ -204,7 +204,6 @@ M._apply(entities, text) → result table
 {
     changed      = N,
     failed       = N,
-    unchanged    = N,
     changed_rows = [{ entity, old }, ...],
     nothing_selected? = bool,
     nothing_to_apply? = bool,  -- empty text case
@@ -213,8 +212,10 @@ M._apply(entities, text) → result table
 }
 ```
 
-(`unchanged` is included for shape parity with rename_group even though
-it's always 0 in practice — see D4.)
+(No `unchanged` field — these forms follow `find_replace_group_name`'s
+result shape rather than `rename_group`'s. The "unchanged" branch is
+unreachable for prefix/suffix when text is non-empty, so the bookkeeping
+isn't useful.)
 
 `panel` has `show`, `hide`, `get_height`, `set_bounds` — same shape as
 the existing form panels.

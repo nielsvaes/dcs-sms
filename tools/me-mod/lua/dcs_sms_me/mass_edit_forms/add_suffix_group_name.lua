@@ -30,6 +30,10 @@ local Button;   do local ok, m = pcall(require, 'Button');   if ok then Button  
 
 local function log_warn(msg) pcall(function() _G.log.write('sms.me.mass_edit.add_suffix_group_name', _G.log.WARNING or 2, msg) end) end
 
+-- ---------------------------------------------------------------------------
+-- Apply (testable; no dxgui access).
+-- ---------------------------------------------------------------------------
+
 function M._apply(entities, text)
     if type(entities) ~= 'table' or #entities == 0 then
         return {
