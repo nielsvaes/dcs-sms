@@ -946,10 +946,11 @@ local function build_window()
     if ScrollPane and ScrollPane.new then
         local ok_sp, sp = pcall(ScrollPane.new)
         if ok_sp and sp then
-            -- Match me_managerDTC.dlg's content pane skin — the blue-themed
-            -- DTC dialog set uses scrollPane_modul_noinserts for content
-            -- areas. scrollPaneSkin_ME is the legacy gray look.
-            skin_helper.apply(sp, 'scrollPane_modul_noinserts')
+            -- dtc_scroll_pane = me_managerDTC.dlg's noinserts pane background
+            -- + grid4mulnew's thin "tools" scrollbar (the lighter look the
+            -- treeview uses). Plain scrollPane_modul_noinserts ships with
+            -- the dark-gray vertScrollBarSkinSV which clashes.
+            skin_helper.apply(sp, 'dtc_scroll_pane')
             pcall(raw.insertWidget, raw, sp)
             W.widgets.form_scroll = sp
             form_parent = sp

@@ -61,6 +61,27 @@ function M.grid_header()
     return Skin.gridHeaderCellSkinNew and Skin.gridHeaderCellSkinNew() or nil
 end
 
+-- ScrollPane skin that pairs the modern-blue pane background from
+-- me_managerDTC.dlg's scrollPane_modul_noinserts with the thin "tools"
+-- scrollbar definition that grid4mulnew.skin.lua (gridSkin_Multiplayer_-
+-- roleNew) defines inline. The stock noinserts skin references
+-- vertScrollBarSkinSV by name — that's the dark-gray legacy look that
+-- visually clashes with the grid's lighter scrollbar.
+--
+-- We can't override one named skin from another with a stock name —
+-- skin_names.lua doesn't ship a thin-scrollbar pane preset. So we
+-- runtime-clone noinserts and inject the grid's vertScrollBar table.
+function M.scroll_pane()
+    local pane = Skin.scrollPane_modul_noinserts and Skin.scrollPane_modul_noinserts() or nil
+    if not (pane and pane.skinData and pane.skinData.skins) then return pane end
+
+    local grid = Skin.gridSkin_Multiplayer_roleNew and Skin.gridSkin_Multiplayer_roleNew() or nil
+    if grid and grid.skinData and grid.skinData.skins and grid.skinData.skins.vertScrollBar then
+        pane.skinData.skins.vertScrollBar = grid.skinData.skins.vertScrollBar
+    end
+    return pane
+end
+
 -- Icon-bearing Static skin: clone staticSkin and inject a 64x64 picture into
 -- released[1] so a plain Static renders the ME's warning/question glyph.
 -- Mirrors how msg_window.dlg's staticWarning / staticQuestion declare an
