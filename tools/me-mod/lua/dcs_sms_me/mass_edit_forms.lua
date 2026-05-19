@@ -12,13 +12,23 @@ local M = {}
 
 local find_replace_group_name = require('dcs_sms_me.mass_edit_forms.find_replace_group_name')
 local rename_group            = require('dcs_sms_me.mass_edit_forms.rename_group')
+local add_prefix_group_name   = require('dcs_sms_me.mass_edit_forms.add_prefix_group_name')
+local add_suffix_group_name   = require('dcs_sms_me.mass_edit_forms.add_suffix_group_name')
 local set_country             = require('dcs_sms_me.mass_edit_forms.set_country')
 local toggle_group_flags      = require('dcs_sms_me.mass_edit_forms.toggle_group_flags')
 
 M.by_scope = {
-    -- rename on top (most active), find/replace and set_country in the middle,
-    -- toggle_group_flags at the bottom (covers six properties, less frequent).
-    group    = { rename_group, find_replace_group_name, set_country, toggle_group_flags },
+    -- Name-mutating forms first (rename → find/replace → add prefix →
+    -- add suffix), then side-effecting forms (set_country flips
+    -- coalition; toggle_group_flags writes visibility / control fields).
+    group    = {
+        rename_group,
+        find_replace_group_name,
+        add_prefix_group_name,
+        add_suffix_group_name,
+        set_country,
+        toggle_group_flags,
+    },
     unit     = {},
     waypoint = {},
     zone     = {},

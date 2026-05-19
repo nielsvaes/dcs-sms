@@ -22,20 +22,24 @@ check('forms_for is a function', type(forms.forms_for) == 'function')
 
 do
     local list = forms.forms_for('group')
-    check('group: 4 forms',          #list == 4, 'got ' .. tostring(#list))
-    -- Order: rename → find/replace → set_country → toggle_group_flags (top to bottom in the pane).
+    check('group: 6 forms',          #list == 6, 'got ' .. tostring(#list))
+    -- Order: rename → find/replace → add_prefix → add_suffix → set_country → toggle_group_flags.
     check('group: form[1] = rename_group',
           list[1] and list[1].title == 'Rename groups')
     check('group: form[2] = find_replace_group_name',
           list[2] and list[2].title == 'Find & replace in group names')
-    check('group: form[3] = set_country',
-          list[3] and list[3].title == 'Set country')
-    check('group: form[4] = toggle_group_flags',
-          list[4] and list[4].title == 'Visibility & control')
-    check('group: form[1].scope = group',  list[1] and list[1].scope == 'group')
-    check('group: form[2].scope = group',  list[2] and list[2].scope == 'group')
-    check('group: form[3].scope = group',  list[3] and list[3].scope == 'group')
-    check('group: form[4].scope = group',  list[4] and list[4].scope == 'group')
+    check('group: form[3] = add_prefix_group_name',
+          list[3] and list[3].title == 'Add prefix to group names')
+    check('group: form[4] = add_suffix_group_name',
+          list[4] and list[4].title == 'Add suffix to group names')
+    check('group: form[5] = set_country',
+          list[5] and list[5].title == 'Set country')
+    check('group: form[6] = toggle_group_flags',
+          list[6] and list[6].title == 'Visibility & control')
+    for i = 1, 6 do
+        check('group: form[' .. i .. '].scope = group',
+              list[i] and list[i].scope == 'group')
+    end
 end
 
 for _, scope in ipairs({ 'unit', 'waypoint', 'zone', 'drawing' }) do
