@@ -29,6 +29,19 @@ local CheckBox;        do local ok, m = pcall(require, 'CheckBox');       if ok 
 local EditBox;         do local ok, m = pcall(require, 'EditBox');        if ok then EditBox        = m end end
 local Button;          do local ok, m = pcall(require, 'Button');         if ok then Button         = m end end
 
+-- dxgui module: lets us query live keyboard state during a click handler so
+-- shift-click can extend a checkbox range without ED exposing modifier flags
+-- on the mouse-event payload itself.
+local dxgui;           do local ok, m = pcall(require, 'dxgui');          if ok then dxgui          = m end end
+
+local function shift_held()
+    if not (dxgui and dxgui.GetKeyboardButtonPressed) then return false end
+    local ok_l, l = pcall(dxgui.GetKeyboardButtonPressed, 'left shift')
+    if ok_l and l then return true end
+    local ok_r, r = pcall(dxgui.GetKeyboardButtonPressed, 'right shift')
+    return ok_r and r == true
+end
+
 -- ---------------------------------------------------------------------------
 -- Helpers
 -- ---------------------------------------------------------------------------
@@ -65,6 +78,11 @@ local W = {
     pool        = {},
     parent_map  = {},
     checked     = { group = {}, unit = {}, waypoint = {}, zone = {}, drawing = {} },
+    -- Anchor entity (table reference) per scope -- the row a shift-click
+    -- extends FROM. Set on every non-shift click; left untouched by
+    -- shift-clicks so repeated extensions all originate from the same
+    -- anchor (Explorer / GTK style).
+    anchor      = { group = nil, unit = nil, waypoint = nil, zone = nil, drawing = nil },
     filters     = { group = {}, unit = {}, waypoint = {}, zone = {}, drawing = {} },
     sort_state  = {
         group    = { key = 'name',  dir = 'asc' },
@@ -92,6 +110,9 @@ local W = {
         refresh_btn  = nil,
         cancel_btn   = nil,
         empty_label  = nil,
+        sel_all_btn  = nil,
+        sel_inv_btn  = nil,
+        sel_clr_btn  = nil,
     },
     _built = false,
 }
@@ -148,6 +169,10 @@ local function rebuild_pool()
     for _, e in ipairs(W.pool) do in_pool[e] = true end
     for e, _ in pairs(W.checked[W.scope] or {}) do
         if not in_pool[e] then W.checked[W.scope][e] = nil end
+    end
+    -- Clear the shift-click anchor if its entity was deleted between snapshots.
+    if W.anchor[W.scope] and not in_pool[W.anchor[W.scope]] then
+        W.anchor[W.scope] = nil
     end
 end
 
@@ -395,10 +420,42 @@ local function build_tree_widget()
             local col_idx, row_idx = self:getMouseCursorColumnRow(x, y)
             if not (row_idx and row_idx >= 0) then return end
             if col_idx == 0 then return end
-            local r = W._tree_rows and W._tree_rows[row_idx + 1]
+            local rows = W._tree_rows
+            local r = rows and rows[row_idx + 1]
             if not r then return end
-            local new_state = not (W.checked[W.scope][r.entity] == true)
-            W.checked[W.scope][r.entity] = new_state or nil
+
+            local scope_checked = W.checked[W.scope]
+            local anchor_entity = W.anchor[W.scope]
+            local anchor_idx
+            if anchor_entity then
+                for i, rr in ipairs(rows) do
+                    if rr.entity == anchor_entity then anchor_idx = i; break end
+                end
+            end
+
+            if shift_held() and anchor_idx then
+                -- Range-fill from anchor to clicked row, inclusive. Every
+                -- row in the range is set to the anchor's current checked
+                -- state, matching Explorer / GTK shift-click semantics:
+                -- the click defines the end of the range, the anchor's
+                -- state defines what to apply across it. Anchor itself is
+                -- NOT updated, so repeated shift-clicks always extend from
+                -- the same origin.
+                local clicked_idx  = row_idx + 1
+                local from         = math.min(anchor_idx, clicked_idx)
+                local to           = math.max(anchor_idx, clicked_idx)
+                local target_state = scope_checked[anchor_entity] == true
+                for i = from, to do
+                    local e = rows[i] and rows[i].entity
+                    if e then scope_checked[e] = target_state or nil end
+                end
+            else
+                -- Plain click: toggle this row, re-anchor here so the next
+                -- shift-click extends from this position.
+                local new_state = not (scope_checked[r.entity] == true)
+                scope_checked[r.entity] = new_state or nil
+                W.anchor[W.scope] = r.entity
+            end
             M.rebuild_treeview()
         end)
     end
@@ -432,6 +489,19 @@ function M.rebuild_treeview()
 
     local grid = W.widgets.tree
     if not grid then return end
+
+    -- Capture scroll position so the rebuild doesn't jump the view back to
+    -- the top after every checkbox click / range fill / bulk-button press.
+    -- Grid:removeAllRows + insertRow re-emits the whole tree, which loses
+    -- the user's scroll context unless we restore it after.
+    local saved_v, saved_h
+    if grid.getVertScrollPosition then
+        local ok_v, v = pcall(grid.getVertScrollPosition, grid); if ok_v then saved_v = v end
+    end
+    if grid.getHorzScrollPosition then
+        local ok_h, hp = pcall(grid.getHorzScrollPosition, grid); if ok_h then saved_h = hp end
+    end
+
     pcall(grid.removeAllRows, grid)
 
     local cols = SCOPE_COLUMNS[W.scope] or {}
@@ -468,6 +538,15 @@ function M.rebuild_treeview()
                 end
             end
         end
+    end
+
+    -- Restore the user's pre-rebuild scroll position. Has to happen after
+    -- every insertRow so the grid knows its max scroll extent.
+    if saved_v and grid.setVertScrollPosition then
+        pcall(grid.setVertScrollPosition, grid, saved_v)
+    end
+    if saved_h and grid.setHorzScrollPosition then
+        pcall(grid.setHorzScrollPosition, grid, saved_h)
     end
 end
 
@@ -538,9 +617,21 @@ local function relayout(w, h)
     local body_bottom = btn_y - L.GAP
     set(W.widgets.cancel_btn, w - L.EDGE - L.BTN_W, btn_y, L.BTN_W, L.BTN_H)
 
-    -- Left pane: tree fills from row1_y to body_bottom.
+    -- Bulk-selection button strip: directly under the left pane,
+    -- right-aligned to the tree's right edge. Order left→right:
+    -- Select all · Invert · Clear.
+    local sel_btn_w   = 70
+    local sel_strip_y = body_bottom - L.BTN_H
+    local sel_total_w = sel_btn_w * 3 + L.GAP * 2
+    local sel_x       = L.EDGE + left_w - sel_total_w
+    if sel_x < L.EDGE then sel_x = L.EDGE end
+    set(W.widgets.sel_all_btn, sel_x, sel_strip_y, sel_btn_w, L.BTN_H)
+    set(W.widgets.sel_inv_btn, sel_x + sel_btn_w + L.GAP, sel_strip_y, sel_btn_w, L.BTN_H)
+    set(W.widgets.sel_clr_btn, sel_x + (sel_btn_w + L.GAP) * 2, sel_strip_y, sel_btn_w, L.BTN_H)
+
+    -- Left pane: tree fills from row1_y to just above the bulk-button strip.
     local tree_y = row1_y + L.ROW_H + L.GAP
-    local tree_h = math.max(60, body_bottom - tree_y)
+    local tree_h = math.max(60, sel_strip_y - L.GAP - tree_y)
     set(W.widgets.tree, L.EDGE, tree_y, left_w, tree_h)
 
     -- Right pane: stack the active scope's forms vertically, starting at row1_y.
@@ -654,6 +745,56 @@ local function build_window()
             W.widgets.name_filter = ed
         end
     end
+
+    -- Bulk-selection buttons. All three act on the LEFT-pane treeview's
+    -- current scope and (where it matters) its currently-visible rows --
+    -- i.e. whatever passes the name filter. "Select all visible" and
+    -- "Invert visible" work on the post-filter set; "Clear" wipes the
+    -- whole scope's selection regardless of filter (which is almost
+    -- always what the user wants when they hit Clear).
+    local function for_each_visible(fn)
+        local rows = W._tree_rows or {}
+        for _, r in ipairs(rows) do fn(r.entity) end
+    end
+
+    local function on_select_all_visible()
+        pcall(function()
+            for_each_visible(function(e) W.checked[W.scope][e] = true end)
+            M.rebuild_treeview()
+        end)
+    end
+
+    local function on_invert_visible()
+        pcall(function()
+            for_each_visible(function(e)
+                W.checked[W.scope][e] = (W.checked[W.scope][e] ~= true) or nil
+            end)
+            M.rebuild_treeview()
+        end)
+    end
+
+    local function on_clear_selection()
+        pcall(function()
+            W.checked[W.scope] = {}
+            W.anchor[W.scope] = nil
+            M.rebuild_treeview()
+        end)
+    end
+
+    local function make_bulk_btn(label, cb)
+        if not (Button and Button.new) then return nil end
+        local ok, b = pcall(Button.new)
+        if not (ok and b) then return nil end
+        skin_helper.apply(b, 'dtc_button')
+        if b.setText then pcall(b.setText, b, label) end
+        if b.addMouseDownCallback then pcall(b.addMouseDownCallback, b, cb) end
+        pcall(raw.insertWidget, raw, b)
+        return b
+    end
+
+    W.widgets.sel_all_btn = make_bulk_btn('Select all',    on_select_all_visible)
+    W.widgets.sel_inv_btn = make_bulk_btn('Invert',        on_invert_visible)
+    W.widgets.sel_clr_btn = make_bulk_btn('Clear',         on_clear_selection)
 
     -- Empty-scope placeholder (shared across scopes; toggled in show_forms_for_active_scope).
     if Static and Static.new then
