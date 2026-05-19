@@ -196,3 +196,30 @@ These items cover the left-pane selection ergonomics; they apply to every scope 
 - [ ] `Clear` button wipes the scope's selection entirely (including any rows currently filtered out). The shift-click anchor is reset; the next click is a fresh anchor.
 - [ ] Scroll to the bottom of a long list. Click a checkbox or row body. The list stays scrolled to roughly that position (within a row or two) — does NOT jump back to row 0.
 - [ ] Switch scope tabs (Group → Unit → Group). The prior tab's tree widget is detached from the window — the new tab's grid is the only one rendered. Repeated switching across all 5 scope tabs should not visibly slow the window over a long session (no orphan-grid accumulation).
+
+### Map selection sync (group scope)
+
+The Group-scope bulk-button strip has two extra buttons — `From map`
+(pull map selection into Mass Edit checkboxes) and `To map` (push
+checked groups onto the map selection). Replace semantics in both
+directions; group scope only.
+
+- [ ] Open Mass Edit on Group tab. Select 3 groups on the map (marquee).
+      Click `From map`. The same 3 groups are now checked in Mass Edit;
+      toast reads `Fetched 3 groups from map`.
+- [ ] Uncheck one and check two different ones (now 4 checked). Click
+      `To map`. The 4 checked groups are now marqueed on the map and the
+      right-side group panel reflects the new selection; toast reads
+      `Pushed 4 groups to map`.
+- [ ] Switch to Unit tab. Both `From map` and `To map` disappear; only
+      `Select all` / `Invert` / `Clear` remain. Switch back to Group —
+      both reappear.
+- [ ] With an empty map selection, click `From map`. Toast reads
+      `Map selection empty`; the existing Mass Edit checkboxes are
+      **unchanged** (no wipe).
+- [ ] Select a group on the map, then in Mass Edit clear all
+      checkboxes, then click `To map`. Toast reads
+      `Nothing checked to push`; the map's existing selection is
+      **unchanged** (no `unselectAll` call).
+- [ ] Hot-reload via `dcs-sms.exe reload-me-mod` while the window is
+      open. `From map` and `To map` still work.
