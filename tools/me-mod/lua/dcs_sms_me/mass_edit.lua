@@ -243,6 +243,15 @@ local function show_forms_for_active_scope()
     end
 end
 
+local function update_map_buttons_visibility()
+    local visible = (W.scope == 'group')
+    local function show(btn, v)
+        if btn and btn.setVisible then pcall(btn.setVisible, btn, v) end
+    end
+    show(W.widgets.from_map_btn, visible)
+    show(W.widgets.to_map_btn,   visible)
+end
+
 local function on_scope_changed(new_scope)
     if new_scope == W.scope then return end
     W.scope = new_scope
@@ -250,6 +259,7 @@ local function on_scope_changed(new_scope)
     M._build_tree_widget()
     M.rebuild_treeview()
     show_forms_for_active_scope()
+    update_map_buttons_visibility()
     if M._relayout and W.sms_window and W.sms_window:raw() then
         local cw, ch = W.sms_window:raw():getSize()
         M._relayout(cw, ch)
@@ -666,15 +676,22 @@ local function relayout(w, h)
 
     -- Bulk-selection button strip: directly under the left pane,
     -- right-aligned to the tree's right edge. Order left→right:
-    -- Select all · Invert · Clear.
+    -- Select all · Invert · Clear · [From map · To map] -- the last
+    -- two only on group scope (other scopes hide them; see below).
     local sel_btn_w   = 70
     local sel_strip_y = body_bottom - L.BTN_H
-    local sel_total_w = sel_btn_w * 3 + L.GAP * 2
+    local on_group    = W.scope == 'group'
+    local strip_n     = on_group and 5 or 3
+    local sel_total_w = sel_btn_w * strip_n + L.GAP * (strip_n - 1)
     local sel_x       = L.EDGE + left_w - sel_total_w
     if sel_x < L.EDGE then sel_x = L.EDGE end
     set(W.widgets.sel_all_btn, sel_x, sel_strip_y, sel_btn_w, L.BTN_H)
     set(W.widgets.sel_inv_btn, sel_x + sel_btn_w + L.GAP, sel_strip_y, sel_btn_w, L.BTN_H)
     set(W.widgets.sel_clr_btn, sel_x + (sel_btn_w + L.GAP) * 2, sel_strip_y, sel_btn_w, L.BTN_H)
+    if on_group then
+        set(W.widgets.from_map_btn, sel_x + (sel_btn_w + L.GAP) * 3, sel_strip_y, sel_btn_w, L.BTN_H)
+        set(W.widgets.to_map_btn,   sel_x + (sel_btn_w + L.GAP) * 4, sel_strip_y, sel_btn_w, L.BTN_H)
+    end
 
     -- Left pane: tree fills from row1_y to just above the bulk-button strip.
     local tree_y = row1_y + L.ROW_H + L.GAP
@@ -928,6 +945,7 @@ function M.show()
     M.update_scope_counts()
     M.rebuild_treeview()
     show_forms_for_active_scope()
+    update_map_buttons_visibility()
     pcall(function() local cw, ch = W.sms_window:raw():getSize(); relayout(cw, ch) end)
     W.sms_window:show()
 end
