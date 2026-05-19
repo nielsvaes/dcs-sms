@@ -946,7 +946,10 @@ local function build_window()
     if ScrollPane and ScrollPane.new then
         local ok_sp, sp = pcall(ScrollPane.new)
         if ok_sp and sp then
-            skin_helper.apply(sp, 'scrollPaneSkin_ME')
+            -- Match me_managerDTC.dlg's content pane skin — the blue-themed
+            -- DTC dialog set uses scrollPane_modul_noinserts for content
+            -- areas. scrollPaneSkin_ME is the legacy gray look.
+            skin_helper.apply(sp, 'scrollPane_modul_noinserts')
             pcall(raw.insertWidget, raw, sp)
             W.widgets.form_scroll = sp
             form_parent = sp
