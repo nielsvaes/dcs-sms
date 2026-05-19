@@ -520,14 +520,42 @@ function M.rebuild_treeview()
                         local entity = r.entity
                         pcall(cb.addChangeCallback, cb, function(box)
                             local state = box.getState and box:getState() == true
+                            local rows  = W._tree_rows or {}
+                            local anchor_entity = W.anchor[W.scope]
+
+                            -- Shift-click on a checkbox: same range-fill
+                            -- semantics as shift-click on the row body. dxgui
+                            -- has already toggled the checkbox visually by
+                            -- the time this callback fires, so we have to
+                            -- find the anchor and the clicked row indices in
+                            -- the visible-row order, overwrite every entity
+                            -- in the range with the anchor's checked state,
+                            -- and trigger a rebuild so the just-toggled
+                            -- checkbox's display matches the new W.checked
+                            -- value. Anchor stays put.
+                            if shift_held() and anchor_entity and anchor_entity ~= entity then
+                                local anchor_idx, clicked_idx
+                                for i, rr in ipairs(rows) do
+                                    if rr.entity == anchor_entity then anchor_idx  = i end
+                                    if rr.entity == entity        then clicked_idx = i end
+                                end
+                                if anchor_idx and clicked_idx then
+                                    local from = math.min(anchor_idx, clicked_idx)
+                                    local to   = math.max(anchor_idx, clicked_idx)
+                                    local target_state = W.checked[W.scope][anchor_entity] == true
+                                    for i = from, to do
+                                        local e = rows[i] and rows[i].entity
+                                        if e then W.checked[W.scope][e] = target_state or nil end
+                                    end
+                                    M.rebuild_treeview()
+                                    return
+                                end
+                            end
+
+                            -- Plain click on the checkbox: record the toggle
+                            -- and update the anchor so a follow-up shift-
+                            -- click extends from here.
                             W.checked[W.scope][entity] = state or nil
-                            -- Also anchor here so a follow-up shift-click
-                            -- on a row body extends from the row whose
-                            -- checkbox the user just toggled. (Shift-clicking
-                            -- the checkbox itself still toggles single --
-                            -- the checkbox widget consumes the click before
-                            -- grid.onMouseDown gets a chance to read the
-                            -- shift state.)
                             W.anchor[W.scope] = entity
                         end)
                     end
