@@ -223,3 +223,45 @@ directions; group scope only.
       **unchanged** (no `unselectAll` call).
 - [ ] Hot-reload via `dcs-sms.exe reload-me-mod` while the window is
       open. `From map` and `To map` still work.
+
+### Add prefix to group names
+
+Single-input form. Prepends the typed text to every checked group's
+name. Writes through DCS's collision-safe rename path (`check_group_name`
+auto-disambiguates duplicates with `-1` / `-2` suffixes). Per-form undo.
+
+- [ ] Open Mass Edit on Group tab. Check 3 groups with distinct names
+      (e.g. `Alpha`, `Bravo`, `Charlie`). In the `Add prefix to group
+      names` form, type `BLUE-`. Click `Add prefix`. All 3 names become
+      `BLUE-Alpha` / `BLUE-Bravo` / `BLUE-Charlie`. Toast reads
+      `3 prefixed`.
+- [ ] With two groups both named `Foo` checked, type `X-` and click
+      `Add prefix`. The two names become `X-Foo` and `X-Foo-1` (DCS
+      auto-disambiguation through `check_group_name`).
+- [ ] With nothing checked, click `Add prefix`. Toast reads
+      `Nothing selected`. No mutation.
+- [ ] With groups checked but the text box empty, click `Add prefix`.
+      Toast reads `Text is empty`. Names unchanged.
+- [ ] After a successful prefix run, press `Ctrl+Z`. Every prior name
+      is restored exactly (no residual `-1` suffixes leaking through
+      the undo path).
+
+### Add suffix to group names
+
+Mirror of the prefix form — appends the typed text instead of
+prepending. Same write path, same undo behaviour.
+
+- [ ] Open Mass Edit on Group tab. Check 3 groups with distinct names
+      (e.g. `Alpha`, `Bravo`, `Charlie`). In the `Add suffix to group
+      names` form, type `-TEST`. Click `Add suffix`. All 3 names become
+      `Alpha-TEST` / `Bravo-TEST` / `Charlie-TEST`. Toast reads
+      `3 suffixed`.
+- [ ] With two groups both named `Foo` checked, type `-DEL` and click
+      `Add suffix`. The two names become `Foo-DEL` and `Foo-DEL-1`
+      (DCS auto-disambiguation).
+- [ ] With nothing checked, click `Add suffix`. Toast reads
+      `Nothing selected`.
+- [ ] With groups checked but the text box empty, click `Add suffix`.
+      Toast reads `Text is empty`. Names unchanged.
+- [ ] After a successful suffix run, press `Ctrl+Z`. Every prior name
+      is restored exactly.
