@@ -77,4 +77,36 @@ function M.compute_fetch(W, snap)
     }
 end
 
+-- compute_push(W)
+--   W: same shape as compute_fetch.
+--
+-- Returns:
+--   { ok = true,
+--     empty? = bool,
+--     group_refs? = [g, g, ...]  -- pool order, only those in W.checked.group
+--     toast?, sev? }
+--
+-- Walks W.pool (not W.checked) so the output order is deterministic and
+-- matches the user's visible row order in the entity list. This makes
+-- the count predictable across runs and lets the host pass group_refs
+-- straight into me_select_writer.set_group_selection.
+function M.compute_push(W)
+    local checked = W.checked.group or {}
+    local refs = {}
+    for _, e in ipairs(W.pool or {}) do
+        if checked[e] then refs[#refs + 1] = e end
+    end
+
+    if #refs == 0 then
+        return {
+            ok    = true,
+            empty = true,
+            toast = 'Nothing checked to push',
+            sev   = 'warn',
+        }
+    end
+
+    return { ok = true, group_refs = refs }
+end
+
 return M
