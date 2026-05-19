@@ -84,6 +84,46 @@ do
           end)() == 1)
 end
 
+-- Case: setSelectingObjectsOutside throws -> ok=false, error captured.
+do
+    -- Temporarily swap the stub to one that throws.
+    local saved = stub_mms.setSelectingObjectsOutside
+    stub_mms.setSelectingObjectsOutside = function(a_objects)
+        error('simulated DCS internal failure')
+    end
+
+    local g1 = { groupId = 101 }
+    local result = writer.set_group_selection({ g1 })
+
+    -- Restore for any tests that come after.
+    stub_mms.setSelectingObjectsOutside = saved
+
+    check('err: ok=false',                        result.ok == false)
+    check('err: error contains simulated message',
+          type(result.error) == 'string' and result.error:find('simulated DCS internal failure', 1, true) ~= nil,
+          'got: ' .. tostring(result.error))
+    check('err: count=0',                         result.count == 0)
+end
+
+-- Case: me_multiSelection module is unavailable -> ok=false with a
+-- descriptive error. We can't truly remove the preloaded stub from a
+-- live require cache, but we can swap setSelectingObjectsOutside to nil
+-- to simulate the API-missing condition the impl checks.
+do
+    local saved = stub_mms.setSelectingObjectsOutside
+    stub_mms.setSelectingObjectsOutside = nil
+
+    local g1 = { groupId = 101 }
+    local result = writer.set_group_selection({ g1 })
+
+    stub_mms.setSelectingObjectsOutside = saved
+
+    check('missing-api: ok=false',                result.ok == false)
+    check('missing-api: error mentions setSelectingObjectsOutside',
+          type(result.error) == 'string' and result.error:find('setSelectingObjectsOutside', 1, true) ~= nil,
+          'got: ' .. tostring(result.error))
+end
+
 if failures > 0 then
     print(string.format('%d failure(s)', failures))
     os.exit(1)
