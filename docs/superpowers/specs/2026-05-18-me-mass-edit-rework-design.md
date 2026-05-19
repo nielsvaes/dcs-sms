@@ -368,17 +368,15 @@ The fourth form. First multi-property form — exercises a tri-state control pat
 
 Loader registration: `group = { rename_group, find_replace_group_name, set_country, toggle_group_flags }` — toggle at the bottom of the stack.
 
-**Three-state control.** Each property is rendered as a single `Button` (or `ToggleButton` reused as a stateful button) whose label cycles on click through three states:
+**Three-state control.** Each property is rendered as a single `Button` whose label cycles on click through three states:
 
-| State | Label suffix | Tint skin | Semantics on apply |
+| State | Button label suffix | Skin | Semantics on apply |
 |---|---|---|---|
-| `LEAVE` | `—` | `dtc_button` (default grey) | Skip this property for every selected group |
-| `ON` | `ON` | `dtc_button_coal_blue` (or `dtc_button_set_on`, see Decisions) | Set the field to `true` |
-| `OFF` | `OFF` | `dtc_button_coal_red` (or `dtc_button_set_off`) | Set the field to `false` |
+| `LEAVE` | `—` | `dtc_button` | Skip this property for every selected group |
+| `ON` | `ON` | `dtc_button` | Set the field to `true` |
+| `OFF` | `OFF` | `dtc_button` | Set the field to `false` |
 
-Click cycle: `LEAVE → ON → OFF → LEAVE`. Default for every property on form mount and after each successful apply is `LEAVE`. The button's full text reads e.g. `Hidden on map —` / `Hidden on map ON` / `Hidden on map OFF` so the label communicates state in addition to the tint.
-
-If `dtc_button_set_on` / `dtc_button_set_off` skins don't already exist, the PR creates them in `dtc_skins.lua` as static-tinted variants of `dtc_button`. If suitable existing coalition-tinted skins (`dtc_button_coal_blue` / `dtc_button_coal_red`) are visually clear enough, those are reused — the choice is settled in the implementation plan after a quick visual check during widget construction.
+Click cycle: `LEAVE → ON → OFF → LEAVE`. Default for every property on form mount and after each successful apply is `LEAVE`. The button's full text reads e.g. `Hidden on map —` / `Hidden on map ON` / `Hidden on map OFF`. All three states use the same `dtc_button` skin — state is communicated purely by the label suffix. (Earlier drafts considered color-tinted ON/OFF skins; we shipped without them since the label suffix is unambiguous and the extra skin work was YAGNI. Re-add tinted variants in a follow-up if user testing shows the label alone is hard to scan.)
 
 **Apply behavior.**
 
@@ -448,30 +446,31 @@ After adding, run `tools/dcs-sms.exe doc` to regenerate `docs/cli/`. Update the 
 - Module shape (`scope`, `title`, `new`, `_apply`).
 - `_apply` empty selection → `nothing_selected`.
 - `_apply` empty settings (all LEAVE) → `nothing_to_apply`.
-- Single plane, one property ON → verb called, `changed=1`, snapshot has the row.
-- Single plane, two properties (ON, OFF) → both verbs called, `changed=2`.
-- Plane and vehicle, property `uncontrolled` set ON → verb called for plane only; vehicle counted as `not_applicable`.
-- Plane and static, property `hidden` set ON → verb called for both; no not_applicable.
+- Single plane, one property ON → field mutated, `changed=1`, snapshot has the row, refresh fired once.
+- Single plane, two properties (ON, OFF) → both fields mutated, `changed=2`, refresh fired once (deduped per entity).
+- Plane and vehicle, property `uncontrolled` set ON → plane mutated; vehicle counted as `not_applicable` (uncontrolled is plane/heli only). Refresh fires only for the plane.
+- Plane and static, property `hidden` set ON → both mutated; no not_applicable. Refresh fires for both.
 - Static and only plane-only properties → static counted as not_applicable; if it has no applicable fields and no other entity does either, `changed=0, not_applicable>0` → `Nothing applicable` toast.
-- Verb returns `ok=false` → counted as `failed`; not snapshot-included.
-- Verb throws → counted as `failed`; logged via `log_warn` (stub).
-- Undo handler called against a snapshot of 3 rows mixing `hidden`/`uncontrolled`/`lateActivation` → reverse-order verb calls restore old values. Partial-failure case: 2 ok, 1 throws → handler returns `true, "1 partial failures"`.
+- Undo handler called against a snapshot of 3 rows mixing `hidden`/`uncontrolled`/`lateActivation` → reverse-iteration restores old values.
+- Per-field direct-write semantics (each of `hiddenOnPlanner`, `hiddenOnMFD`, `uncontrollable`, `uncontrolled`, `lateActivation`) hits the right field on the entity table.
+- Non-boolean `hiddenOnMFD = {}` default normalizes to `false` in the snapshot so undo restores a boolean.
+- `categories = nil` → every entity treated as `'unknown'` which matches no `APPLIES_TO` row, so nothing applies.
 
-The verb-stub pattern matches `test_mass_edit_set_country.lua`: monkey-patch `verbs.group_set_hidden_on_planner` (etc.) on `require('dcs_sms_me.verbs')` to record calls and return controllable results.
+Note: there is no `failed` counter and no verb-failure tests — direct table writes can't fail under normal conditions, and the form does not route through `verbs.group_set_*`. The standalone toggle verbs added in this PR (`group_set_hidden_on_planner` etc.) exist for the CLI surface and are not exercised from the form.
 
 **Acceptance criteria.**
 
 - Open Mass Edit → Group tab. The Visibility & control form is visible at the bottom of the right pane.
 - Form shows 2 rows × 3 columns of state buttons, all defaulting to `—` (LEAVE).
-- Clicking a state button cycles `— → ON → OFF → —` with the label suffix and tint updating each click.
+- Clicking a state button cycles `— → ON → OFF → —` with the label suffix updating each click.
 - Apply with nothing checked → toast `Nothing selected` (warning).
 - Apply with everything at LEAVE → toast `Nothing to apply` (warning).
-- Check 2 plane groups. Set `Hidden on map` to ON. Apply. Both groups' `hidden = true`. Toast: `2 flag changes`. Map markers disappear (host's `recreate_group_view` ran).
+- Check 2 plane groups. Set `Hidden on map` to ON. Apply. Both groups' `hidden = true`. Toast: `2 flag changes`. Map markers disappear (host's `update_hidden_group` ran).
 - Check the same 2 planes. Set `Hidden on map` to OFF. Apply. Markers return.
-- Check 1 plane + 1 vehicle. Set `Uncontrolled` to ON. Apply. Plane's `uncontrolled = true`; vehicle untouched. Toast: `1 flag changes · 1 not applicable`.
-- Check 1 static group. Set `Hidden on map` to ON + `Uncontrolled` to ON. Apply. Static's `hidden = true`; `uncontrolled` skipped. Toast: `1 flag changes · 1 not applicable` (the static, hit by an inapplicable field).
+- Check 1 plane + 1 vehicle. Set `Uncontrolled` to ON. Apply. Plane's `uncontrolled = true`; vehicle untouched. Toast: `1 flag change · 1 not applicable`.
+- Check 1 static group. Set `Hidden on map` to ON + `Uncontrolled` to ON. Apply. Static's `hidden = true`; `uncontrolled` skipped. Toast: `1 flag change · 1 not applicable` (the static, hit by an inapplicable field).
 - Ctrl+Z after a multi-field apply reverts all changes from the most recent apply (multi-row snapshot).
-- After a successful apply, all state buttons reset to LEAVE.
+- After a successful apply with at least one mutation, all state buttons reset to LEAVE. After a `Nothing applicable` apply (no entity matched), the buttons retain their state so the user can re-check the selection without reconfiguring.
 - `tools/me-mod/test/run-tests.ps1` passes with the new tests.
 
 ## Decisions (PR 4)
@@ -479,15 +478,15 @@ The verb-stub pattern matches `test_mass_edit_set_country.lua`: monkey-patch `ve
 Best-judgement calls made autonomously and recorded here so they can be revisited if needed:
 
 - **Single form, six tri-state buttons in 2×3** rather than per-property mini-forms. Fewer widgets, naturally grouped, one click per property to set state then one Apply for all. Chosen during brainstorming.
-- **Tri-state control = single cycling button** (label suffix `—`/`ON`/`OFF` + color tint) rather than a horizontal trio of radio-style toggles or a combobox. Most compact for the 2×3 grid; clear affordance because the label IS the button.
+- **Tri-state control = single cycling button** (label suffix `—`/`ON`/`OFF`, all states sharing the `dtc_button` skin) rather than a horizontal trio of radio-style toggles or a combobox. Most compact for the 2×3 grid; clear affordance because the label IS the button. Color-tinted variants were considered and deferred (see State-button skin decision below).
 - **Initial state always LEAVE on every mount and after every apply.** The form does NOT inspect the current selection to pre-fill checkboxes. Rationale: matches existing forms (Rename's input starts empty, Set country's combo unselected), simpler implementation, no need to refresh state when checked-set changes. Future enhancement could add a "reflect selection" mode but it's out of scope here.
 - **Applicability handling = skip-and-report.** Inapplicable (field, entity) pairs are silently skipped; the *entity* is counted toward `not_applicable` once if any of its fields were skipped. Toast surfaces the count. Alternative ("reject whole batch") rejected as too restrictive for mixed-category selections.
 - **Per-property applicability is hard-coded** in the form module (the `APPLIES_TO` table), not introspected from the ME. Trade-off: simpler, but tight coupling to ED's per-category visibility rules. If ED changes (e.g., adds `hiddenOnPlanner` to vehicles), the table needs an update. Acceptable — this set of fields has been stable since at least DCS 2.5.
 - **New verbs follow the existing toggle convention** (`hidden_on_planner`/`hidden_on_mfd` take `args.hidden`; `uncontrollable` takes `args.enabled`). Naming asymmetry is preserved to match the existing pattern (`group_set_hidden` uses `hidden`, `group_set_uncontrolled` uses `enabled`).
 - **Verb-pair completeness:** Lua verbs + Go CLI + doc updates land in the same PR. Skipping the Go side would leave 3 Lua-only verbs and break the consistent verb table; not worth the inconsistency to save ~30 min of boilerplate. These verbs exist for **CLI scripting** of the same flags — they are not called by the toggle form itself.
 - **Form writes fields directly**, NOT through the new verbs. Departs from `set_country`'s verb-roundtrip pattern because the toggle verbs are trivial passthroughs (`g.field = value` with no side effects) — routing through them is overhead with no functional gain. The verbs exist for the CLI surface; the form has no reason to call them. Undo also writes fields directly for the same reason.
-- **Group view refresh:** the form's `on_after_apply` callback drives `me_refresh.refresh_group_view` (lightweight) per entity. The heavyweight `recreate_group_view` is unnecessary here — these flags don't affect category, coalition, or unit composition, just visibility. Empirical verification belongs in smoke; if a flag like `lateActivation` does affect rendering (deferred icons), fall back to `recreate_group_view`.
-- **State-button skin:** prefer reusing `dtc_button` (default) for LEAVE and either existing `dtc_button_coal_red/blue` skins or new `dtc_button_set_on/off` static-tinted variants for ON/OFF. The implementation plan picks one after a quick check of `dtc_skins.lua` — does not block the design.
+- **Group view refresh:** the form's `_apply` calls a new `me_refresh.update_hidden_group(g)` per mutated entity (mirroring `MapWindow.updateHiddenGroup`, which is what ED's own "HIDDEN ON MAP" checkbox handler calls). Smoke surfaced that `update_group_map_objects` alone (the lightweight `refresh_group_view`) doesn't drop the map symbol when `hidden` flips to true — the data layer updates but the renderer keeps the icon. `update_hidden_group` does the proper remove/recreate dance based on the current `g.hidden` state. `refresh_group_view` and `recreate_group_view` remain available in `me_refresh.lua` for callers that need them (e.g. `set_country` uses `recreate_group_view` for coalition flips). The form also calls `me_refresh.refresh_group_panels()` so the ME's right-side group panel (if mounted) re-reads the new state — checkbox widgets there flip live.
+- **State-button skin:** `dtc_button` for all three states (LEAVE / ON / OFF), distinguished only by the label suffix (`—` / `ON` / `OFF`). Color-tinted variants (e.g. `dtc_button_set_on/_off`) were considered but deferred — the label is unambiguous and adding tinted skins is YAGNI until user testing demonstrates the need.
 - **No "Apply all six" shortcut button** in v1 (e.g. "Hide everywhere"). YAGNI; users can cycle three buttons faster than they'd find such a shortcut.
 
 ## Future work (after PR 4)

@@ -151,7 +151,7 @@ PR-by-PR each form is added; this section will grow as forms land.
 
 ### Set country
 
-- [ ] The Set country form is the bottom form in the Group scope's right pane (below Find & replace).
+- [ ] The Set country form sits below Find & replace and above Visibility & control in the Group scope's right pane.
 - [ ] The country dropdown lists every country present in the mission. Each entry is coalition-tinted (red, blue, or neutral). Countries that have no entities in the current mission are NOT listed.
 - [ ] After picking a country, the closed dropdown shows the country name with the matching coalition tint — no blank closed display.
 - [ ] Check 2 groups currently in USA. Pick `Russia` in the dropdown. Click Set country. Both groups move to Russia and to the red coalition. Footer toast: `2 country set`.
@@ -165,18 +165,34 @@ PR-by-PR each form is added; this section will grow as forms land.
 
 - [ ] The Visibility & control form is the bottom form in the Group scope's right pane (below Set country).
 - [ ] Form shows six state buttons in 2 rows × 3 columns: `Hidden on map`, `Hidden on planner`, `Hidden on MFD` (top row); `Game Master Only`, `Uncontrolled`, `Late activation` (bottom row).
-- [ ] All six buttons default to LEAVE state (suffix `—`, grey tint) on first mount.
-- [ ] Click `Hidden on map —` once → label becomes `Hidden on map ON` with green/blue tint. Click again → `Hidden on map OFF` with red tint. Click again → back to `—` grey.
+- [ ] All six buttons default to LEAVE state (suffix `—`) on first mount. All three states share the same `dtc_button` skin — only the label suffix changes.
+- [ ] Click `Hidden on map —` once → label becomes `Hidden on map ON`. Click again → `Hidden on map OFF`. Click again → back to `—`.
 - [ ] Click `Apply` with nothing checked in the left pane → toast `Nothing selected` (warning). No mutation.
 - [ ] Click `Apply` with all six buttons at LEAVE → toast `Nothing to apply` (warning). No mutation.
 - [ ] Check 2 plane groups. Set `Hidden on map` to ON. Click Apply. Both groups disappear from the map; their list-pane Type cell unchanged. Toast: `2 flag changes` (success).
+- [ ] If a group's right-side panel was open when Apply ran, the panel's `HIDDEN ON MAP` checkbox now reflects the new state without needing to reselect the group.
 - [ ] All six state buttons reset to LEAVE after the successful apply.
 - [ ] Re-check the same 2 planes. Set `Hidden on map` to OFF. Click Apply. Map markers return.
-- [ ] Check 1 plane + 1 vehicle. Set `Uncontrolled` to ON. Click Apply. Plane's `uncontrolled` flips on; vehicle untouched. Toast contains `1 flag changes` and `1 not applicable`.
-- [ ] Check 1 static group. Set `Hidden on map` to ON and `Uncontrolled` to ON. Click Apply. Static is hidden; `uncontrolled` skipped for it. Toast contains `1 flag changes` and `1 not applicable`.
+- [ ] Check 1 plane + 1 vehicle. Set `Uncontrolled` to ON. Click Apply. Plane's `uncontrolled` flips on; vehicle untouched. Toast: `1 flag change · 1 not applicable`.
+- [ ] Check 1 static group. Set `Hidden on map` to ON and `Uncontrolled` to ON. Click Apply. Static is hidden; `uncontrolled` skipped for it. Toast: `1 flag change · 1 not applicable`.
 - [ ] Check 2 planes. Set `Late activation` and `Hidden on MFD` both to ON in the same form (don't apply between). Click Apply. Both fields flip on both planes. Toast: `4 flag changes`.
 - [ ] Press Ctrl+Z after the previous step. All four mutations are reverted (both planes back to their pre-apply state on both fields). Toast: `Undo successful`.
 - [ ] Save the .miz and reopen. The flag values persist in the saved file.
 - [ ] `dcs-sms me group set-hidden-on-planner --name <plane> --hidden=true` (CLI sanity check): flag flips on the named plane.
 - [ ] `dcs-sms me group set-hidden-on-mfd --name <plane> --hidden=true`: same.
 - [ ] `dcs-sms me group set-uncontrollable --name <plane> --enabled=true`: GAME MASTER ONLY checkbox in the ME's right panel ticks on for that group.
+
+### Entity list multi-select (shift-click + bulk buttons + scroll preserve)
+
+These items cover the left-pane selection ergonomics; they apply to every scope tab (not just Group). Use a mission populated with >50 entities so scroll behavior is observable — `tools/cmd/dcs-sms/exec --target gui --file ...` with a bulk-create snippet works.
+
+- [ ] Click any row's text cell (not the checkbox). It toggles the row's checkbox and becomes the anchor for shift-click.
+- [ ] Shift-click the row text 10 rows below. Every row from the anchor to the clicked row gets set to the **anchor's current checked state**. Click the same shift-click target again (without holding shift, then shift-click again) → range still extends from the original anchor, not the previous shift-click target.
+- [ ] Click a row 30 rows below the anchor without holding shift. New anchor is set. Shift-click 5 rows above it. Range fills from there.
+- [ ] Click a checkbox directly (not the row text). The row toggles and the anchor moves to that row. A follow-up shift-click on another row's text body extends from the just-clicked checkbox row.
+- [ ] Type a name-substring filter that hides the current anchor. Shift-click extends only within the visible (filtered) rows, treating the off-screen anchor as missing → behaves like a plain click.
+- [ ] `Select all` button checks every row passing the current name filter. Hidden (filter-excluded) rows are untouched.
+- [ ] `Invert` button flips the checked state of every visible row. Hidden rows are untouched.
+- [ ] `Clear` button wipes the scope's selection entirely (including any rows currently filtered out). The shift-click anchor is reset; the next click is a fresh anchor.
+- [ ] Scroll to the bottom of a long list. Click a checkbox or row body. The list stays scrolled to roughly that position (within a row or two) — does NOT jump back to row 0.
+- [ ] Switch scope tabs (Group → Unit → Group). The prior tab's tree widget is detached from the window — the new tab's grid is the only one rendered. Repeated switching across all 5 scope tabs should not visibly slow the window over a long session (no orphan-grid accumulation).
