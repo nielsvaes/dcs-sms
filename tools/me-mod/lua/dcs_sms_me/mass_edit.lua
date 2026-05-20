@@ -132,8 +132,9 @@ local W = {
 
 local SCOPES = { 'group', 'unit', 'waypoint', 'zone', 'drawing' }
 
--- Map a coalition side → dtc-coalition-skin name for the Country cell in
--- group scope. Unknown sides fall back to staticSkin_ME (no tint).
+-- Map a coalition side → dtc-coalition-skin name for the Coalition and
+-- Country cells in group scope. Unknown sides fall back to staticSkin_ME
+-- (no tint).
 local COALITION_CELL_SKIN = {
     red     = 'dtc_coal_red',
     blue    = 'dtc_coal_blue',
@@ -300,11 +301,12 @@ end
 
 local SCOPE_COLUMNS = {
     group = {
-        { key = 'check',   label = '',        width = 28,  type = 'check'  },
-        { key = 'name',    label = 'Name',    width = 170, type = 'string' },
-        { key = 'country', label = 'Country', width = 100, type = 'string' },
-        { key = 'type',    label = 'Type',    width = 80,  type = 'string' },
-        { key = 'units',   label = '# Units', width = 50,  type = 'number' },
+        { key = 'check',     label = '',          width = 28,  type = 'check'  },
+        { key = 'name',      label = 'Name',      width = 130, type = 'string' },
+        { key = 'coalition', label = 'Coalition', width = 60,  type = 'string' },
+        { key = 'country',   label = 'Country',   width = 80,  type = 'string' },
+        { key = 'type',      label = 'Type',      width = 80,  type = 'string' },
+        { key = 'units',     label = '# Units',   width = 50,  type = 'number' },
     },
     unit = {
         { key = 'check', label = '',      width = 28,  type = 'check'  },
@@ -336,14 +338,17 @@ local SCOPE_COLUMNS = {
 local function row_values(scope, entity, group)
     if scope == 'group' then
         -- Country lives on the back-reference (g.boss → country table);
-        -- category lives in W.categories (populated from snapshot_mission).
-        -- Neither is a field on the group object itself.
-        local country = (entity.boss and entity.boss.name) or ''
-        local category = W.categories[entity] or ''
-        return { name = tostring(entity.name or ''),
-                 country = tostring(country),
-                 type    = tostring(category),
-                 units   = #(entity.units or {}) }
+        -- coalition is derived from country via W.country_to_side; category
+        -- lives in W.categories (populated from snapshot_mission). None
+        -- are fields on the group object itself.
+        local country   = (entity.boss and entity.boss.name) or ''
+        local coalition = (entity.boss and W.country_to_side[entity.boss]) or ''
+        local category  = W.categories[entity] or ''
+        return { name      = tostring(entity.name or ''),
+                 coalition = tostring(coalition),
+                 country   = tostring(country),
+                 type      = tostring(category),
+                 units     = #(entity.units or {}) }
     elseif scope == 'unit' then
         return { name  = tostring(entity.name or ''),
                  type  = tostring(entity.type or ''),
@@ -619,7 +624,7 @@ function M.rebuild_treeview()
                     -- echoes the colored marker the country ComboList already
                     -- shows on its ListBoxItem entries. Skin override has to
                     -- happen after make_cell's default staticSkin_ME apply.
-                    if cell and W.scope == 'group' and c.key == 'country' then
+                    if cell and W.scope == 'group' and (c.key == 'country' or c.key == 'coalition') then
                         local side = W.country_to_side[r.entity.boss]
                         local skin = COALITION_CELL_SKIN[side]
                         if skin then skin_helper.apply(cell, skin) end

@@ -153,9 +153,9 @@ reachable regardless of window height.
 
 - [ ] The Rename groups form is the topmost form in the Group scope's right pane.
 - [ ] Hovering the Rename button shows a tooltip: `Use {n} for sequence, e.g. "Foo-{n}"`.
-- [ ] Check 3 groups, type `X-{n}` in the New name field, click Rename. Names become `X-01`, `X-02`, `X-03` in name-ascending order (alphabetical by previous name, not by check order). Footer toast: `3 renamed`.
+- [ ] Check 3 groups, type `X-{n}` in the Name field, click Rename. Names become `X-01`, `X-02`, `X-03` in name-ascending order (alphabetical by previous name, not by check order). Footer toast: `3 renamed`.
 - [ ] Type `Foo` (no `{n}` token) and click Rename with the same 3 groups checked. All three get a name based on `Foo` — DCS auto-disambiguates the collision. Toast: `3 renamed`.
-- [ ] Click Rename with the New name field empty. Toast: `New name is empty` (warning). No names mutate.
+- [ ] Click Rename with the Name field empty. Toast: `Name is empty` (warning). No names mutate.
 - [ ] Click Rename with nothing checked. Toast: `Nothing selected` (warning).
 - [ ] Press `Ctrl+Z` while the window has focus. The most recent rename reverts.
 - [ ] After a rename, the entity list refreshes and shows the new names.

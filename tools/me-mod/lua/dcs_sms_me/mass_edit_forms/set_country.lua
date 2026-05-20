@@ -213,7 +213,9 @@ end)
 
 local LAYOUT = {
     PAD_X        = 8,
-    LABEL_W      = 60,
+    -- Matches the other single-input forms so the country combo's left
+    -- edge aligns with their EditBox left edges.
+    LABEL_W      = 56,
     ROW_H        = 24,
     -- Right-edge widths are uniform across every form for visual
     -- alignment of the apply column and toggle column.

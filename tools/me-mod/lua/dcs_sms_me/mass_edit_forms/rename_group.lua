@@ -40,7 +40,7 @@ function M._apply(entities, pattern)
     if type(pattern) ~= 'string' or pattern == '' then
         return {
             changed = 0, failed = 0, changed_rows = {},
-            toast = 'New name is empty', sev = 'warning',
+            toast = 'Name is empty', sev = 'warning',
         }
     end
 
@@ -114,7 +114,9 @@ end)
 
 local LAYOUT = {
     PAD_X      = 8,
-    LABEL_W    = 70,
+    -- Matches find_replace / add_prefix / add_suffix so the input
+    -- column lines up across all four single-input forms.
+    LABEL_W    = 56,
     ROW_H      = 24,
     BTN_W      = 90,
     GAP_X      = 6,
@@ -139,7 +141,7 @@ function M.new(parent_raw, get_checked, on_after_apply)
     local pat_lbl, pat_box, apply_btn
 
     if Static and Static.new then
-        local ok, s = pcall(Static.new, 'New name:')
+        local ok, s = pcall(Static.new, 'Name:')
         if ok and s then skin_helper.apply(s, 'staticSkin_ME'); pat_lbl = add(s) end
     end
     if EditBox and EditBox.new then
