@@ -25,6 +25,7 @@ local me_select_writer = require('dcs_sms_me.me_select_writer')
 local me_camera        = require('dcs_sms_me.me_camera')
 local me_group_focus   = require('dcs_sms_me.me_group_focus')
 local splitter_mod     = require('dcs_sms_me.splitter')
+local clearable_edit   = require('dcs_sms_me.clearable_edit')
 
 -- dxgui modules. pcall-required so the file still loads in test VMs.
 local Static;          do local ok, m = pcall(require, 'Static');         if ok then Static         = m end end
@@ -727,7 +728,9 @@ local function relayout(w, h)
 
     -- Row 1: name filter (left half).
     local row1_y = L.TOP_Y + L.TAB_H + L.GAP
-    set(W.widgets.name_filter, L.EDGE, row1_y, left_w, L.ROW_H)
+    if W.widgets.name_filter and W.widgets.name_filter.set_bounds then
+        W.widgets.name_filter:set_bounds(L.EDGE, row1_y, left_w, L.ROW_H)
+    end
 
     -- Bottom button band (right-anchored Cancel only — no Apply in this UI).
     local btn_y       = h - L.FOOTER_RESERVED - L.BTN_H - L.GAP
@@ -908,22 +911,16 @@ local function build_window()
         end
     end
 
-    -- Name filter.
-    if EditBox and EditBox.new then
-        local ok, ed = pcall(EditBox.new)
-        if ok and ed then
-            skin_helper.apply(ed, 'editBoxSkin_ME')
-            if ed.addChangeCallback then
-                pcall(ed.addChangeCallback, ed, function(box)
-                    local txt = box.getText and box:getText() or ''
-                    W.filters[W.scope].name_substr = txt
-                    M.rebuild_treeview()
-                end)
-            end
-            pcall(raw.insertWidget, raw, ed)
-            W.widgets.name_filter = ed
-        end
-    end
+    -- Name filter. clearable_edit wraps an EditBox + an inline × clear
+    -- button that auto-hides when the filter is empty, so the user can
+    -- wipe the active filter with one click instead of selecting +
+    -- backspacing.
+    W.widgets.name_filter = clearable_edit.new(raw, {
+        on_change = function(txt)
+            W.filters[W.scope].name_substr = txt
+            M.rebuild_treeview()
+        end,
+    })
 
     -- Bulk-selection buttons. All three act on the LEFT-pane treeview's
     -- current scope and (where it matters) its currently-visible rows --

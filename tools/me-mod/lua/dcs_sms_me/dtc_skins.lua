@@ -68,6 +68,42 @@ end
 function M.button_on()  return button_colored('0x44dd44ff') end  -- green
 function M.button_off() return button_colored('0xff5555ff') end  -- red
 
+-- Translucent button variant: clones M.button() and scales every
+-- 0xRRGGBBAA hex color in the skin tree by an alpha multiplier (default
+-- 0.75 = 75% opacity). Used for inline clear-buttons (clearable_edit)
+-- and other affordances that should sit visually softer than the
+-- standard chunky dtc_button.
+local function scale_hex_alpha(hex_str, factor)
+    if type(hex_str) ~= 'string' or #hex_str ~= 10 then return hex_str end
+    if not hex_str:match('^0x%x+$') then return hex_str end
+    local rgb       = hex_str:sub(1, 8)
+    local alpha_hex = hex_str:sub(9, 10)
+    local alpha = tonumber(alpha_hex, 16)
+    if not alpha then return hex_str end
+    local new_alpha = math.floor(alpha * factor + 0.5)
+    if new_alpha > 255 then new_alpha = 255 end
+    if new_alpha < 0   then new_alpha = 0   end
+    return rgb .. string.format('%02x', new_alpha)
+end
+
+local function scale_all_alpha(node, factor, depth)
+    if type(node) ~= 'table' or (depth or 0) > 10 then return end
+    for k, v in pairs(node) do
+        if type(v) == 'string' then
+            node[k] = scale_hex_alpha(v, factor)
+        elseif type(v) == 'table' then
+            scale_all_alpha(v, factor, (depth or 0) + 1)
+        end
+    end
+end
+
+function M.button_translucent(opacity)
+    local s = M.button()
+    if not (s and s.skinData and s.skinData.states) then return s end
+    scale_all_alpha(s.skinData.states, tonumber(opacity) or 0.75)
+    return s
+end
+
 function M.grid()
     local s = Skin.gridSkin_Multiplayer_roleNew and Skin.gridSkin_Multiplayer_roleNew() or nil
     if not s then return nil end
