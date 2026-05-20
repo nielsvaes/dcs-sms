@@ -97,6 +97,11 @@ local W = {
         drawing  = { key = 'name',  dir = 'asc' },
     },
     form_panels = { group = {}, unit = {}, waypoint = {}, zone = {}, drawing = {} },
+    -- Per-scope thin horizontal separator widgets (Static + dtc_separator
+    -- skin) drawn between consecutive form panels. Length is always
+    -- #form_panels[scope] - 1 (zero when the scope has 0 or 1 forms);
+    -- shown/hidden along with the active scope's form stack.
+    form_separators = { group = {}, unit = {}, waypoint = {}, zone = {}, drawing = {} },
     -- entity → 'plane' | 'helicopter' | 'vehicle' | 'ship' | 'static' | 'unknown'
     -- Populated from selection.snapshot_mission(). Reads the Type column for
     -- the group treeview (the category lives at container-key level in the
@@ -225,10 +230,13 @@ local function on_after_apply(result)
 end
 
 local function show_forms_for_active_scope()
-    -- Hide every panel in every scope.
+    -- Hide every panel + separator in every scope.
     for _, scope in ipairs(SCOPES) do
         for _, panel in ipairs(W.form_panels[scope] or {}) do
             if panel.hide then panel:hide() end
+        end
+        for _, sep in ipairs(W.form_separators[scope] or {}) do
+            if sep.setVisible then pcall(sep.setVisible, sep, false) end
         end
     end
     -- Show the active scope's panels (or the empty-label fallback).
@@ -243,6 +251,9 @@ local function show_forms_for_active_scope()
         end
         for _, panel in ipairs(active) do
             if panel.show then panel:show() end
+        end
+        for _, sep in ipairs(W.form_separators[W.scope] or {}) do
+            if sep.setVisible then pcall(sep.setVisible, sep, true) end
         end
     end
 end
@@ -670,7 +681,11 @@ local LAYOUT = {
     -- form pane absorbs all horizontal slack as the window grows / shrinks.
     LEFT_PANE_W     = 440,
     FOOTER_RESERVED = 80,
-    FORM_GAP        = 8,
+    -- Total vertical space between consecutive form panels. A 1px
+    -- separator is drawn at the midpoint, leaving ~7px of breathing
+    -- room on each side.
+    FORM_GAP        = 16,
+    SEPARATOR_H     = 1,
 }
 
 local function relayout(w, h)
@@ -738,14 +753,27 @@ local function relayout(w, h)
     end
 
     local active = W.form_panels[W.scope] or {}
+    local seps   = W.form_separators[W.scope] or {}
     local form_x = has_pane and 0 or right_x
     local form_y = has_pane and 0 or row1_y
     local form_w = right_w
     local y_cursor = form_y
-    for _, panel in ipairs(active) do
+    for i, panel in ipairs(active) do
         local ph = (panel.get_height and panel:get_height()) or 80
         if panel.set_bounds then panel:set_bounds(form_x, y_cursor, form_w, ph) end
-        y_cursor = y_cursor + ph + L.FORM_GAP
+        y_cursor = y_cursor + ph
+        -- Draw a separator between consecutive forms; positioned at the
+        -- midpoint of the FORM_GAP so it has breathing room on both sides.
+        if i < #active then
+            local sep = seps[i]
+            if sep and sep.setBounds then
+                local sep_x = form_x + L.EDGE
+                local sep_y = y_cursor + math.floor((L.FORM_GAP - L.SEPARATOR_H) / 2)
+                local sep_w = form_w - 2 * L.EDGE
+                pcall(sep.setBounds, sep, sep_x, sep_y, sep_w, L.SEPARATOR_H)
+            end
+            y_cursor = y_cursor + L.FORM_GAP
+        end
     end
 
     if #active == 0 then
@@ -987,6 +1015,23 @@ local function build_window()
             end
         end
         W.form_panels[scope] = panels
+
+        -- Allocate N-1 separator widgets to slot between consecutive
+        -- forms in this scope. Hidden by default; show_forms_for_active_scope
+        -- toggles them along with the panels.
+        local seps = {}
+        for _ = 1, math.max(0, #panels - 1) do
+            if Static and Static.new then
+                local ok, s = pcall(Static.new, '')
+                if ok and s then
+                    skin_helper.apply(s, 'dtc_separator')
+                    pcall(form_parent.insertWidget, form_parent, s)
+                    if s.setVisible then pcall(s.setVisible, s, false) end
+                    seps[#seps + 1] = s
+                end
+            end
+        end
+        W.form_separators[scope] = seps
     end
 
     -- Empty-scope placeholder (shared across scopes; toggled in show_forms_for_active_scope).

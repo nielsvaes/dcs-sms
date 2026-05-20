@@ -215,8 +215,10 @@ local LAYOUT = {
     PAD_X        = 8,
     LABEL_W      = 60,
     ROW_H        = 24,
-    BTN_W        = 100,
-    COMBAT_BTN_W = 70,   -- "Combat"/"All" toggle to the left of Set country
+    -- Right-edge widths are uniform across every form for visual
+    -- alignment of the apply column and toggle column.
+    BTN_W        = 90,
+    COMBAT_BTN_W = 90,
     GAP_X        = 6,
     GAP_Y        = 4,
     FOOTER_PAD   = 6,
@@ -264,7 +266,7 @@ function M.new(parent_raw, get_checked, on_after_apply)
         local ok, b = pcall(Button.new)
         if ok and b then
             skin_helper.apply(b, 'dtc_button')
-            if b.setText then pcall(b.setText, b, 'Set country') end
+            if b.setText then pcall(b.setText, b, 'Set') end
             apply_btn = add(b)
         end
     end

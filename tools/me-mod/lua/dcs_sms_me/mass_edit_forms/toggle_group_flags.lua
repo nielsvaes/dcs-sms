@@ -211,7 +211,9 @@ local LAYOUT = {
     GAP_X     = 6,
     GAP_Y     = 4,
     ROW_H     = 24,
-    APPLY_W   = 100,
+    -- 90 matches every other form's right-edge action button so the
+    -- Apply column lines up across the whole right pane.
+    APPLY_W   = 90,
     FOOTER_PAD = 6,
 }
 

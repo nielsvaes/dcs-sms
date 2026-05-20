@@ -22,6 +22,25 @@ check('add_prefix nil old',            T.add_prefix(nil,   { text = 'Foo-' }, 1)
 check('add_suffix basic',              T.add_suffix('Foo', { text = '-Bar' }, 1) == 'Foo-Bar')
 check('add_suffix nil old',            T.add_suffix(nil,   { text = '-x'   }, 1) == '-x')
 
+-- add_suffix with keep_num: insert before trailing -<digits> / _<digits>.
+check('keep_num: -N',                  T.add_suffix('Viper-1',  { text = 'Sfx', keep_num = true }, 1) == 'ViperSfx-1')
+check('keep_num: _N',                  T.add_suffix('Viper_1',  { text = 'Sfx', keep_num = true }, 1) == 'ViperSfx_1')
+check('keep_num: -001 (leading zeros)', T.add_suffix('Viper-001', { text = 'X',   keep_num = true }, 1) == 'ViperX-001')
+check('keep_num: multi-digit',         T.add_suffix('Viper-42', { text = 'X',   keep_num = true }, 1) == 'ViperX-42')
+check('keep_num: no trailing num → append', T.add_suffix('Viper', { text = 'X', keep_num = true }, 1) == 'ViperX')
+check('keep_num: trailing letters only → append',
+                                       T.add_suffix('Viper-Hot', { text = 'X', keep_num = true }, 1) == 'Viper-HotX')
+check('keep_num: dash but no digits → append',
+                                       T.add_suffix('Viper-',   { text = 'X', keep_num = true }, 1) == 'Viper-X')
+check('keep_num: only trailing block matches',
+                                       T.add_suffix('Viper-1-2', { text = 'X', keep_num = true }, 1) == 'Viper-1X-2')
+check('keep_num: mixed [-_]<digits>',  T.add_suffix('A-1_2',    { text = 'X', keep_num = true }, 1) == 'A-1X_2')
+check('keep_num: empty old',           T.add_suffix('',         { text = 'X', keep_num = true }, 1) == 'X')
+check('keep_num: stem-only -1',        T.add_suffix('-1',       { text = 'X', keep_num = true }, 1) == 'X-1')
+-- keep_num=false (or absent) preserves the old append-only behavior.
+check('keep_num=false: still appends', T.add_suffix('Viper-1',  { text = 'X', keep_num = false }, 1) == 'Viper-1X')
+check('keep_num=nil: still appends',   T.add_suffix('Viper-1',  { text = 'X'                  }, 1) == 'Viper-1X')
+
 -- escape_pattern: escapes Lua metacharacters so find_replace stays plain-text.
 check('escape_pattern dot',            T.escape_pattern('a.b')   == 'a%.b')
 check('escape_pattern dash',           T.escape_pattern('a-b')   == 'a%-b')

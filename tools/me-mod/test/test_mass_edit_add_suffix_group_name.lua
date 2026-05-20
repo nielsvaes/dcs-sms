@@ -52,7 +52,7 @@ do
     check('empty text: changed=0',  result.changed == 0)
     check('empty text: failed=0',   result.failed == 0)
     check('empty text: g unchanged', g.name == 'A')
-    check('empty text: toast = Text is empty', result.toast == 'Text is empty')
+    check('empty text: toast = Suffix is empty', result.toast == 'Suffix is empty')
     check('empty text: sev = warning', result.sev == 'warning')
     check('empty text: no undo recorded',  undo.has_record() == false)
 end
@@ -148,6 +148,39 @@ do
           form.title == 'Add suffix to group names')
     check('form.new is a function', type(form.new) == 'function')
     check('form._apply is a function', type(form._apply) == 'function')
+end
+
+-- Case 9: keep_num routes through the transform.
+do
+    undo.clear()
+    mock.new_mission()
+    local g1 = mock.add_plane({ name = 'Viper-1' })
+    local g2 = mock.add_plane({ name = 'Hornet_2' })
+    local g3 = mock.add_plane({ name = 'Eagle' })
+    local result = form._apply({ g1, g2, g3 }, 'Sfx', { keep_num = true })
+    check('keep_num: changed=3',                result.changed == 3)
+    check('keep_num: Viper-1 → ViperSfx-1',     g1.name == 'ViperSfx-1')
+    check('keep_num: Hornet_2 → HornetSfx_2',   g2.name == 'HornetSfx_2')
+    check('keep_num: Eagle → EagleSfx',         g3.name == 'EagleSfx')
+end
+
+-- Case 10: opts absent / opts.keep_num=false preserves plain-append.
+do
+    undo.clear()
+    mock.new_mission()
+    local g = mock.add_plane({ name = 'Viper-1' })
+    local result = form._apply({ g }, 'Sfx')                -- no opts
+    check('no opts: appends',                   g.name == 'Viper-1Sfx')
+    undo.clear()
+    mock.new_mission()
+    g = mock.add_plane({ name = 'Viper-1' })
+    result = form._apply({ g }, 'Sfx', {})                  -- empty opts
+    check('opts={}: appends',                   g.name == 'Viper-1Sfx')
+    undo.clear()
+    mock.new_mission()
+    g = mock.add_plane({ name = 'Viper-1' })
+    result = form._apply({ g }, 'Sfx', { keep_num = false })
+    check('keep_num=false: appends',            g.name == 'Viper-1Sfx')
 end
 
 if failures > 0 then print(failures .. ' failure(s)'); os.exit(1) end

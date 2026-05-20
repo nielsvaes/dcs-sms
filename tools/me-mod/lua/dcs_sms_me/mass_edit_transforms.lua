@@ -24,7 +24,20 @@ function M.add_prefix(old, args, idx)
 end
 
 function M.add_suffix(old, args, idx)
-    return (old or '') .. (args.text or '')
+    local base = old or ''
+    local text = args.text or ''
+    -- args.keep_num: if the name ends in `-<digits>` or `_<digits>`
+    -- (e.g. `Viper-1`, `Foo_001`) the suffix is inserted BEFORE that
+    -- trailing block instead of after, so `Viper-1` + `Sfx` becomes
+    -- `ViperSfx-1`. Falls back to plain append when no trailing
+    -- number is present.
+    if args.keep_num then
+        local stem, tail = base:match('^(.-)([%-_]%d+)$')
+        if stem and tail then
+            return stem .. text .. tail
+        end
+    end
+    return base .. text
 end
 
 function M.find_replace(old, args, idx)

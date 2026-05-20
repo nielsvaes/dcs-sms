@@ -132,6 +132,10 @@ reachable regardless of window height.
       control) can be reached by scrolling.
 - [ ] Switch to Unit tab, then back to Group. The right pane scroll
       position resets to top.
+- [ ] Each consecutive pair of forms in the right pane is separated
+      by a thin dark horizontal line with a small bit of vertical
+      breathing room above and below. The line is hidden when the
+      scope has 0 or 1 forms (e.g. Unit / Waypoint / Zone / Drawing).
 - [ ] Resize the window taller until all 6 forms fit. The scrollbar
       disappears.
 - [ ] Hide a form (e.g. via Ctrl+Shift+R reload while the window is
@@ -172,10 +176,10 @@ reachable regardless of window height.
 - [ ] The Set country form sits below Find & replace and above Visibility & control in the Group scope's right pane.
 - [ ] The country dropdown lists every country present in the mission. Each entry is coalition-tinted (red, blue, or neutral). Countries that have no entities in the current mission are NOT listed.
 - [ ] After picking a country, the closed dropdown shows the country name with the matching coalition tint — no blank closed display.
-- [ ] Check 2 groups currently in USA. Pick `Russia` in the dropdown. Click Set country. Both groups move to Russia and to the red coalition. Footer toast: `2 country set`.
-- [ ] Click Set country with nothing picked in the dropdown. Toast: `Pick a country` (warning).
-- [ ] Click Set country with nothing checked. Toast: `Nothing selected` (warning).
-- [ ] Check a group currently in Russia. Pick `Russia`. Click Set country. Toast: `Already in Russia` (info). No mutation.
+- [ ] Check 2 groups currently in USA. Pick `Russia` in the dropdown. Click `Set`. Both groups move to Russia and to the red coalition. Footer toast: `2 country set`.
+- [ ] Click `Set` with nothing picked in the dropdown. Toast: `Pick a country` (warning).
+- [ ] Click `Set` with nothing checked. Toast: `Nothing selected` (warning).
+- [ ] Check a group currently in Russia. Pick `Russia`. Click `Set`. Toast: `Already in Russia` (info). No mutation.
 - [ ] Check two groups, one in USA and one in Russia. Pick `Russia`. Click. Toast contains `1 country set` and `1 unchanged`.
 - [ ] Ctrl+Z reverts the most recent country-change.
 
@@ -252,15 +256,15 @@ auto-disambiguates duplicates with `-1` / `-2` suffixes). Per-form undo.
 
 - [ ] Open Mass Edit on Group tab. Check 3 groups with distinct names
       (e.g. `Alpha`, `Bravo`, `Charlie`). In the `Add prefix to group
-      names` form, type `BLUE-`. Click `Add prefix`. All 3 names become
+      names` form, type `BLUE-`. Click `Add` (prefix form). All 3 names become
       `BLUE-Alpha` / `BLUE-Bravo` / `BLUE-Charlie`. Toast reads
       `3 prefixed`.
 - [ ] With two groups both named `Foo` checked, type `X-` and click
-      `Add prefix`. The two names become `X-Foo` and `X-Foo-1` (DCS
+      `Add` (prefix form). The two names become `X-Foo` and `X-Foo-1` (DCS
       auto-disambiguation through `check_group_name`).
-- [ ] With nothing checked, click `Add prefix`. Toast reads
+- [ ] With nothing checked, click `Add` (prefix form). Toast reads
       `Nothing selected`. No mutation.
-- [ ] With groups checked but the text box empty, click `Add prefix`.
+- [ ] With groups checked but the text box empty, click `Add` (prefix form).
       Toast reads `Text is empty`. Names unchanged.
 - [ ] After a successful prefix run, press `Ctrl+Z`. Every prior name
       is restored exactly (no residual `-1` suffixes leaking through
@@ -273,15 +277,24 @@ prepending. Same write path, same undo behaviour.
 
 - [ ] Open Mass Edit on Group tab. Check 3 groups with distinct names
       (e.g. `Alpha`, `Bravo`, `Charlie`). In the `Add suffix to group
-      names` form, type `-TEST`. Click `Add suffix`. All 3 names become
+      names` form, type `-TEST`. Click `Add` (suffix form). All 3 names become
       `Alpha-TEST` / `Bravo-TEST` / `Charlie-TEST`. Toast reads
       `3 suffixed`.
 - [ ] With two groups both named `Foo` checked, type `-DEL` and click
-      `Add suffix`. The two names become `Foo-DEL` and `Foo-DEL-1`
+      `Add` (suffix form). The two names become `Foo-DEL` and `Foo-DEL-1`
       (DCS auto-disambiguation).
-- [ ] With nothing checked, click `Add suffix`. Toast reads
+- [ ] With nothing checked, click `Add` (suffix form). Toast reads
       `Nothing selected`.
-- [ ] With groups checked but the text box empty, click `Add suffix`.
-      Toast reads `Text is empty`. Names unchanged.
+- [ ] With groups checked but the text box empty, click `Add` (suffix form).
+      Toast reads `Suffix is empty`. Names unchanged.
 - [ ] After a successful suffix run, press `Ctrl+Z`. Every prior name
       is restored exactly.
+- [ ] Keep Num toggle (**ON by default**). With groups named `Viper-1`,
+      `Hornet_2`, `Eagle` checked, type `Sfx` and click `Add` (suffix form).
+      Names become `ViperSfx-1`, `HornetSfx_2`, `EagleSfx` (the toggle
+      inserts the suffix BEFORE a trailing `-<digits>` or `_<digits>`
+      block; falls back to plain append when no trailing number is
+      present). Hovering the toggle shows a tooltip explaining the
+      behavior.
+- [ ] Toggle `Keep Num` OFF and rerun the same input on `Viper-1` →
+      becomes `Viper-1Sfx` (plain append).

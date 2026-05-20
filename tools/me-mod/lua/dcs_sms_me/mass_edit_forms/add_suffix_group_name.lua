@@ -10,7 +10,12 @@
 --   M.scope   : 'group'
 --   M.title   : 'Add suffix to group names'
 --   M.new(parent_raw, get_checked, on_after_apply)
---   M._apply(entities, text)
+--   M._apply(entities, text, opts)
+--             opts.keep_num: if true, names ending in `-<digits>` or
+--                            `_<digits>` get the suffix inserted BEFORE
+--                            that trailing block (so `Viper-1` + `Sfx`
+--                            → `ViperSfx-1`). Default: false (plain
+--                            append).
 --             → { changed, failed, changed_rows, nothing_selected?,
 --                 nothing_to_apply?, toast, sev }
 
@@ -24,9 +29,10 @@ local undo        = require('dcs_sms_me.undo')
 local skin_helper = require('dcs_sms_me.skin_helper')
 local name_writer = require('dcs_sms_me.group_name_writer')
 
-local Static;   do local ok, m = pcall(require, 'Static');   if ok then Static   = m end end
-local EditBox;  do local ok, m = pcall(require, 'EditBox');  if ok then EditBox  = m end end
-local Button;   do local ok, m = pcall(require, 'Button');   if ok then Button   = m end end
+local Static;       do local ok, m = pcall(require, 'Static');       if ok then Static       = m end end
+local EditBox;      do local ok, m = pcall(require, 'EditBox');      if ok then EditBox      = m end end
+local Button;       do local ok, m = pcall(require, 'Button');       if ok then Button       = m end end
+local ToggleButton; do local ok, m = pcall(require, 'ToggleButton'); if ok then ToggleButton = m end end
 
 local function log_warn(msg) pcall(function() _G.log.write('sms.me.mass_edit.add_suffix_group_name', _G.log.WARNING or 2, msg) end) end
 
@@ -34,7 +40,8 @@ local function log_warn(msg) pcall(function() _G.log.write('sms.me.mass_edit.add
 -- Apply (testable; no dxgui access).
 -- ---------------------------------------------------------------------------
 
-function M._apply(entities, text)
+function M._apply(entities, text, opts)
+    opts = opts or {}
     if type(entities) ~= 'table' or #entities == 0 then
         return {
             changed = 0, failed = 0, changed_rows = {},
@@ -46,14 +53,14 @@ function M._apply(entities, text)
         return {
             changed = 0, failed = 0, changed_rows = {},
             nothing_to_apply = true,
-            toast = 'Text is empty', sev = 'warning',
+            toast = 'Suffix is empty', sev = 'warning',
         }
     end
 
     local changed_rows, failed = {}, 0
     for _, e in ipairs(entities) do
         local old = e.name
-        local new = transforms.add_suffix(old, { text = text })
+        local new = transforms.add_suffix(old, { text = text, keep_num = opts.keep_num == true })
         if new ~= old then
             local p_ok, w_ok, _actual, w_err = pcall(name_writer.write, e, new)
             if p_ok and w_ok then
@@ -102,13 +109,14 @@ undo.register_handler('mass_edit.add_suffix_group_name', function(snapshot)
 end)
 
 local LAYOUT = {
-    PAD_X      = 8,
-    LABEL_W    = 56,
-    ROW_H      = 24,
-    BTN_W      = 90,
-    GAP_X      = 6,
-    GAP_Y      = 4,
-    FOOTER_PAD = 6,
+    PAD_X       = 8,
+    LABEL_W     = 56,
+    ROW_H       = 24,
+    BTN_W       = 90,
+    KEEPNUM_W   = 90,
+    GAP_X       = 6,
+    GAP_Y       = 4,
+    FOOTER_PAD  = 6,
 }
 
 local function form_height()
@@ -125,7 +133,7 @@ function M.new(parent_raw, get_checked, on_after_apply)
         return widget
     end
 
-    local txt_lbl, txt_box, apply_btn
+    local txt_lbl, txt_box, keep_num_btn, apply_btn
 
     if Static and Static.new then
         local ok, s = pcall(Static.new, 'Suffix:')
@@ -136,11 +144,30 @@ function M.new(parent_raw, get_checked, on_after_apply)
         if ok and e then skin_helper.apply(e, 'editBoxSkin_ME'); txt_box = add(e) end
     end
 
+    if ToggleButton and ToggleButton.new then
+        local ok, t = pcall(ToggleButton.new)
+        if ok and t then
+            skin_helper.apply(t, 'dtc_button')
+            if t.setText then pcall(t.setText, t, 'Keep Num') end
+            if t.setTooltipText then
+                pcall(t.setTooltipText, t,
+                    'When ON, names ending in -<n> or _<n> get the ' ..
+                    'suffix inserted BEFORE that trailing number ' ..
+                    '(e.g. "Viper-1" + "Sfx" -> "ViperSfx-1").')
+            end
+            -- Default ON: the keep-num-aware insert is what users want
+            -- almost every time on DCS-named groups (Viper-1, etc.); the
+            -- plain-append behavior is rare enough to be opt-out.
+            if t.setState then pcall(t.setState, t, true) end
+            keep_num_btn = add(t)
+        end
+    end
+
     if Button and Button.new then
         local ok, b = pcall(Button.new)
         if ok and b then
             skin_helper.apply(b, 'dtc_button')
-            if b.setText then pcall(b.setText, b, 'Add suffix') end
+            if b.setText then pcall(b.setText, b, 'Add') end
             apply_btn = add(b)
         end
     end
@@ -149,8 +176,9 @@ function M.new(parent_raw, get_checked, on_after_apply)
         pcall(apply_btn.addMouseDownCallback, apply_btn, function()
             pcall(function()
                 local text     = (txt_box and txt_box.getText and txt_box:getText()) or ''
+                local keep_num = (keep_num_btn and keep_num_btn.getState and keep_num_btn:getState()) == true
                 local entities = (type(get_checked) == 'function') and get_checked() or {}
-                local result = M._apply(entities, text)
+                local result = M._apply(entities, text, { keep_num = keep_num })
                 if type(on_after_apply) == 'function' then on_after_apply(result) end
             end)
         end)
@@ -178,15 +206,20 @@ function M.new(parent_raw, get_checked, on_after_apply)
             if widget and widget.setBounds then pcall(widget.setBounds, widget, px, py, pw, ph) end
         end
 
-        local row_y = y
-        local input_x = x + L.PAD_X + L.LABEL_W + L.GAP_X
-        local input_w = w - L.PAD_X * 2 - L.LABEL_W - L.GAP_X - L.BTN_W - L.GAP_X
+        -- Right-anchored: Add suffix (rightmost), Keep Num toggle to its
+        -- left. Input fills the remaining width after the label and the
+        -- two right-side buttons.
+        local row_y    = y
+        local apply_x  = x + w - L.PAD_X - L.BTN_W
+        local keep_x   = apply_x - L.GAP_X - L.KEEPNUM_W
+        local input_x  = x + L.PAD_X + L.LABEL_W + L.GAP_X
+        local input_w  = keep_x - L.GAP_X - input_x
         if input_w < 80 then input_w = 80 end
-        set(txt_lbl, x + L.PAD_X, row_y, L.LABEL_W, L.ROW_H)
-        set(txt_box, input_x,      row_y, input_w,  L.ROW_H)
 
-        local btn_x = x + w - L.PAD_X - L.BTN_W
-        set(apply_btn, btn_x, row_y, L.BTN_W, L.ROW_H)
+        set(txt_lbl,      x + L.PAD_X, row_y, L.LABEL_W,    L.ROW_H)
+        set(txt_box,      input_x,     row_y, input_w,      L.ROW_H)
+        set(keep_num_btn, keep_x,      row_y, L.KEEPNUM_W,  L.ROW_H)
+        set(apply_btn,    apply_x,     row_y, L.BTN_W,      L.ROW_H)
     end
 
     return panel
