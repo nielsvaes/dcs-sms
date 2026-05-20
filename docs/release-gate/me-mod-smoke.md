@@ -184,10 +184,10 @@ Single-button form. For each checked group, renames every unit to
 units array). Writes via `Mission.renameUnit` so DCS's per-unit
 collision detection applies.
 
-- [ ] The Auto-name units form sits between `Add suffix to group names`
-      and `Set country` in the Group scope's right pane. It's a
-      single right-anchored `Auto name units` button (wider than the
-      other Apply buttons to fit the label; right edge still aligns).
+- [ ] The Auto-name units form sits directly under `Rename groups`
+      in the Group scope's right pane (rename-the-group + sync-the-
+      units is a natural one-two flow). It's a single `Auto name units`
+      button that spans the full form width.
 - [ ] Check a group named `Viper-1` with two oddly-named units. Click
       `Auto name units`. Units become `Viper-1-1` / `Viper-1-2`. Toast:
       `2 units renamed`.

@@ -19,16 +19,18 @@ local set_country             = require('dcs_sms_me.mass_edit_forms.set_country'
 local toggle_group_flags      = require('dcs_sms_me.mass_edit_forms.toggle_group_flags')
 
 M.by_scope = {
-    -- Name-mutating forms first (rename → find/replace → add prefix →
-    -- add suffix → auto-name units), then side-effecting forms
-    -- (set_country flips coalition; toggle_group_flags writes
+    -- Name-mutating forms first. rename_group + auto_name_units sit next
+    -- to each other since "rename the group" and "now sync the unit
+    -- names" is a common one-two flow. Then the rest of the name forms
+    -- (find/replace → add prefix → add suffix), then side-effecting
+    -- forms (set_country flips coalition; toggle_group_flags writes
     -- visibility / control fields).
     group    = {
         rename_group,
+        auto_name_units_group,
         find_replace_group_name,
         add_prefix_group_name,
         add_suffix_group_name,
-        auto_name_units_group,
         set_country,
         toggle_group_flags,
     },

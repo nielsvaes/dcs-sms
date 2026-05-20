@@ -118,10 +118,6 @@ end)
 local LAYOUT = {
     PAD_X      = 8,
     ROW_H      = 24,
-    -- Wider than the standard 90 because "Auto name units" is a long
-    -- label. The right edge still aligns with the other forms' Apply
-    -- buttons (right-anchored via x + w - PAD_X - BTN_W).
-    BTN_W      = 130,
     FOOTER_PAD = 6,
 }
 
@@ -182,9 +178,13 @@ function M.new(parent_raw, get_checked, on_after_apply)
 
     function panel:set_bounds(x, y, w, h)
         local L = LAYOUT
-        local btn_x = x + w - L.PAD_X - L.BTN_W
+        -- Spans the full form width (minus PAD_X on each side). Distinct
+        -- from every other form's right-anchored fixed-width button —
+        -- this is a single-action form so the wide button makes the
+        -- click target obvious.
+        local btn_w = math.max(40, w - 2 * L.PAD_X)
         if apply_btn and apply_btn.setBounds then
-            pcall(apply_btn.setBounds, apply_btn, btn_x, y, L.BTN_W, L.ROW_H)
+            pcall(apply_btn.setBounds, apply_btn, x + L.PAD_X, y, btn_w, L.ROW_H)
         end
     end
 
