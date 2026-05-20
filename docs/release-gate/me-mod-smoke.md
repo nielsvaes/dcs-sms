@@ -142,10 +142,10 @@ reachable regardless of window height.
 ### Rename groups
 
 - [ ] The Rename groups form is the topmost form in the Group scope's right pane.
-- [ ] Pattern input has a sibling hint line "(use {n} for sequence, e.g. "Foo-{n}")".
-- [ ] Check 3 groups, type `X-{n}` in Pattern, click Rename. Names become `X-01`, `X-02`, `X-03` in name-ascending order (alphabetical by previous name, not by check order). Footer toast: `3 renamed`.
+- [ ] Hovering the Rename button shows a tooltip: `Use {n} for sequence, e.g. "Foo-{n}"`.
+- [ ] Check 3 groups, type `X-{n}` in the New name field, click Rename. Names become `X-01`, `X-02`, `X-03` in name-ascending order (alphabetical by previous name, not by check order). Footer toast: `3 renamed`.
 - [ ] Type `Foo` (no `{n}` token) and click Rename with the same 3 groups checked. All three get a name based on `Foo` — DCS auto-disambiguates the collision. Toast: `3 renamed`.
-- [ ] Click Rename with the pattern field empty. Toast: `Pattern is empty` (warning). No names mutate.
+- [ ] Click Rename with the New name field empty. Toast: `New name is empty` (warning). No names mutate.
 - [ ] Click Rename with nothing checked. Toast: `Nothing selected` (warning).
 - [ ] Press `Ctrl+Z` while the window has focus. The most recent rename reverts.
 - [ ] After a rename, the entity list refreshes and shows the new names.
@@ -183,6 +183,7 @@ reachable regardless of window height.
 
 - [ ] The Visibility & control form is the bottom form in the Group scope's right pane (below Set country).
 - [ ] Form shows six state buttons in 2 rows × 3 columns: `Hidden on map`, `Hidden on planner`, `Hidden on MFD` (top row); `Game Master Only`, `Uncontrolled`, `Late activation` (bottom row).
+- [ ] LEAVE-state buttons render with neutral text; ON cycles to green text; OFF cycles to red text.
 - [ ] All six buttons default to LEAVE state (suffix `—`) on first mount. All three states share the same `dtc_button` skin — only the label suffix changes.
 - [ ] Click `Hidden on map —` once → label becomes `Hidden on map ON`. Click again → `Hidden on map OFF`. Click again → back to `—`.
 - [ ] Click `Apply` with nothing checked in the left pane → toast `Nothing selected` (warning). No mutation.

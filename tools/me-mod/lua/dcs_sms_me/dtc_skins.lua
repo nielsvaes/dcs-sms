@@ -45,6 +45,29 @@ function M.button()
     return s
 end
 
+-- Tinted button variants for tri-state buttons (tri_state_button.lua).
+-- Builds on M.button() and overrides the label color in every state so the
+-- text reads green / red across hover / pressed / released alike. Bkg image
+-- stays the same (btnmean2) — only the label tint changes.
+local function button_colored(hex)
+    local s = M.button()
+    if not (s and s.skinData and s.skinData.states) then return s end
+    for _, state_name in pairs({'released', 'hover', 'pressed', 'disabled', 'checked'}) do
+        local st = s.skinData.states[state_name]
+        if type(st) == 'table' then
+            for _, layer in pairs(st) do
+                if type(layer) == 'table' and type(layer.text) == 'table' then
+                    layer.text.color = hex
+                end
+            end
+        end
+    end
+    return s
+end
+
+function M.button_on()  return button_colored('0x44dd44ff') end  -- green
+function M.button_off() return button_colored('0xff5555ff') end  -- red
+
 function M.grid()
     local s = Skin.gridSkin_Multiplayer_roleNew and Skin.gridSkin_Multiplayer_roleNew() or nil
     if not s then return nil end

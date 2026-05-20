@@ -119,13 +119,12 @@ local LAYOUT = {
     BTN_W      = 90,
     GAP_X      = 6,
     GAP_Y      = 4,
-    TITLE_H    = 22,
     FOOTER_PAD = 6,
 }
 
 local function form_height()
     local L = LAYOUT
-    return L.TITLE_H + L.GAP_Y + L.ROW_H + L.FOOTER_PAD
+    return L.ROW_H + L.FOOTER_PAD
 end
 
 function M.new(parent_raw, get_checked, on_after_apply)
@@ -137,15 +136,10 @@ function M.new(parent_raw, get_checked, on_after_apply)
         return widget
     end
 
-    local title_lbl, txt_lbl, txt_box, apply_btn
+    local txt_lbl, txt_box, apply_btn
 
     if Static and Static.new then
-        local ok, s = pcall(Static.new, M.title)
-        if ok and s then skin_helper.apply(s, 'staticSkin_ME'); title_lbl = add(s) end
-    end
-
-    if Static and Static.new then
-        local ok, s = pcall(Static.new, 'Text:')
+        local ok, s = pcall(Static.new, 'Prefix:')
         if ok and s then skin_helper.apply(s, 'staticSkin_ME'); txt_lbl = add(s) end
     end
     if EditBox and EditBox.new then
@@ -195,9 +189,7 @@ function M.new(parent_raw, get_checked, on_after_apply)
             if widget and widget.setBounds then pcall(widget.setBounds, widget, px, py, pw, ph) end
         end
 
-        set(title_lbl, x + L.PAD_X, y, w - 2 * L.PAD_X, L.TITLE_H)
-
-        local row_y = y + L.TITLE_H + L.GAP_Y
+        local row_y = y
         local input_x = x + L.PAD_X + L.LABEL_W + L.GAP_X
         local input_w = w - L.PAD_X * 2 - L.LABEL_W - L.GAP_X - L.BTN_W - L.GAP_X
         if input_w < 80 then input_w = 80 end

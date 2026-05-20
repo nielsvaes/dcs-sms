@@ -23,8 +23,9 @@ local M = {}
 M.scope = 'group'
 M.title = 'Visibility & control'
 
-local undo        = require('dcs_sms_me.undo')
-local skin_helper = require('dcs_sms_me.skin_helper')
+local undo             = require('dcs_sms_me.undo')
+local skin_helper      = require('dcs_sms_me.skin_helper')
+local tri_state_button = require('dcs_sms_me.tri_state_button')
 local me_refresh;   do local ok, m = pcall(require, 'dcs_sms_me.me_refresh'); if ok then me_refresh = m end end
 
 local Static; do local ok, m = pcall(require, 'Static'); if ok then Static = m end end
@@ -199,20 +200,16 @@ end)
 -- Widget construction
 -- ---------------------------------------------------------------------------
 
--- Internal tri-state. 0 = LEAVE, 1 = ON, 2 = OFF. Cycle next = (cur+1) % 3.
-local STATE_LEAVE, STATE_ON, STATE_OFF = 0, 1, 2
-
-local STATE_SUFFIX = {
-    [STATE_LEAVE] = '—',
-    [STATE_ON]    = 'ON',
-    [STATE_OFF]   = 'OFF',
-}
+-- Tri-state behavior lives in tri_state_button.lua; this form just owns
+-- one tri-state button per PROPS entry and reads its state on Apply.
+local STATE_LEAVE = tri_state_button.STATE_LEAVE
+local STATE_ON    = tri_state_button.STATE_ON
+local STATE_OFF   = tri_state_button.STATE_OFF
 
 local LAYOUT = {
     PAD_X     = 8,
     GAP_X     = 6,
     GAP_Y     = 4,
-    TITLE_H   = 22,
     ROW_H     = 24,
     APPLY_W   = 100,
     FOOTER_PAD = 6,
@@ -220,8 +217,8 @@ local LAYOUT = {
 
 local function form_height()
     local L = LAYOUT
-    -- title + two rows of state buttons + one row for Apply + footer pad
-    return L.TITLE_H + L.GAP_Y + L.ROW_H + L.GAP_Y + L.ROW_H + L.GAP_Y + L.ROW_H + L.FOOTER_PAD
+    -- two rows of state buttons (3-col grid) + one row for Apply + footer pad
+    return L.ROW_H + L.GAP_Y + L.ROW_H + L.GAP_Y + L.ROW_H + L.FOOTER_PAD
 end
 
 function M.new(parent_raw, get_checked, on_after_apply, get_categories)
@@ -233,53 +230,26 @@ function M.new(parent_raw, get_checked, on_after_apply, get_categories)
         return widget
     end
 
-    -- Title
-    local title_lbl
-    if Static and Static.new then
-        local ok, s = pcall(Static.new, M.title)
-        if ok and s then skin_helper.apply(s, 'staticSkin_ME'); title_lbl = add(s) end
-    end
-
-    -- State buttons, one per property, in PROPS order.
-    -- property_state[field] = STATE_*
-    local property_state = {}
-    local btn_by_field   = {}
-
-    local function set_state(field, new_state)
-        property_state[field] = new_state
-        local btn = btn_by_field[field]
-        local label = PROP_BY_FIELD[field].label
-        local suffix = STATE_SUFFIX[new_state] or STATE_SUFFIX[STATE_LEAVE]
-        if btn and btn.setText then pcall(btn.setText, btn, label .. ' ' .. suffix) end
-    end
+    -- One tri-state button per property. tri_state_button owns the cycle
+    -- + skin swap + label suffix; we just hold the references and read
+    -- state on Apply.
+    local tsb_by_field = {}
 
     local function reset_all_states()
-        for _, p in ipairs(PROPS) do set_state(p.field, STATE_LEAVE) end
+        for _, p in ipairs(PROPS) do
+            local tsb = tsb_by_field[p.field]
+            if tsb then tsb:set_state(STATE_LEAVE) end
+        end
     end
 
     for _, p in ipairs(PROPS) do
-        local btn
-        if Button and Button.new then
-            local ok, b = pcall(Button.new)
-            if ok and b then
-                skin_helper.apply(b, 'dtc_button')
-                btn = add(b)
-            end
-        end
-        btn_by_field[p.field] = btn
-        property_state[p.field] = STATE_LEAVE
-        -- Set initial label.
-        if btn and btn.setText then pcall(btn.setText, btn, p.label .. ' ' .. STATE_SUFFIX[STATE_LEAVE]) end
-
-        if btn and btn.addMouseDownCallback then
-            local field = p.field
-            pcall(btn.addMouseDownCallback, btn, function()
-                pcall(function()
-                    local cur = property_state[field] or STATE_LEAVE
-                    local next_state = (cur + 1) % 3
-                    set_state(field, next_state)
-                end)
-            end)
+        local tsb = tri_state_button.new(parent_raw, p.label)
+        if tsb then
+            tsb_by_field[p.field] = tsb
+            -- Track the underlying widget in `owned` so show/hide and the
+            -- parent's insertWidget bookkeeping still work uniformly with
+            -- the Apply button below.
+            owned[#owned + 1] = tsb:widget()
         end
     end
 
@@ -299,7 +269,8 @@ function M.new(parent_raw, get_checked, on_after_apply, get_categories)
             pcall(function()
                 local settings = {}
                 for _, p in ipairs(PROPS) do
-                    local st = property_state[p.field]
+                    local tsb = tsb_by_field[p.field]
+                    local st  = tsb and tsb:get_state() or STATE_LEAVE
                     if st == STATE_ON then
                         settings[p.field] = true
                     elseif st == STATE_OFF then
@@ -342,29 +313,27 @@ function M.new(parent_raw, get_checked, on_after_apply, get_categories)
             if widget and widget.setBounds then pcall(widget.setBounds, widget, px, py, pw, ph) end
         end
 
-        set(title_lbl, x + L.PAD_X, y, w - 2 * L.PAD_X, L.TITLE_H)
-
-        -- 3 columns of equal width across the form's content area.
+        -- 3 columns × 2 rows across the form's content area.
         local content_w = w - 2 * L.PAD_X
         local col_w = math.floor((content_w - 2 * L.GAP_X) / 3)
         if col_w < 60 then col_w = 60 end
 
-        local row1_y = y + L.TITLE_H + L.GAP_Y
+        local row1_y = y
         local row2_y = row1_y + L.ROW_H + L.GAP_Y
 
         -- Place the 6 state buttons: PROPS[1..3] on row 1, PROPS[4..6] on row 2.
         for i = 1, 6 do
             local p = PROPS[i]
             if p then
-                local btn = btn_by_field[p.field]
+                local tsb = tsb_by_field[p.field]
                 local col = ((i - 1) % 3)
                 local px = x + L.PAD_X + col * (col_w + L.GAP_X)
                 local py = (i <= 3) and row1_y or row2_y
-                set(btn, px, py, col_w, L.ROW_H)
+                if tsb then tsb:set_bounds(px, py, col_w, L.ROW_H) end
             end
         end
 
-        -- Apply button: right-anchored on a third row below the grid.
+        -- Apply button: right-anchored on a row below the grid.
         local apply_y = row2_y + L.ROW_H + L.GAP_Y
         set(apply_btn, x + w - L.PAD_X - L.APPLY_W, apply_y, L.APPLY_W, L.ROW_H)
     end

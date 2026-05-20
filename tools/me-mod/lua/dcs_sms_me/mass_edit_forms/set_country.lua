@@ -219,14 +219,12 @@ local LAYOUT = {
     COMBAT_BTN_W = 70,   -- "Combat"/"All" toggle to the left of Set country
     GAP_X        = 6,
     GAP_Y        = 4,
-    TITLE_H      = 22,
-    HINT_H       = 18,
     FOOTER_PAD   = 6,
 }
 
 local function form_height()
     local L = LAYOUT
-    return L.TITLE_H + L.GAP_Y + L.ROW_H + L.GAP_Y + L.HINT_H + L.FOOTER_PAD
+    return L.ROW_H + L.FOOTER_PAD
 end
 
 function M.new(parent_raw, get_checked, on_after_apply)
@@ -238,12 +236,7 @@ function M.new(parent_raw, get_checked, on_after_apply)
         return widget
     end
 
-    local title_lbl, country_lbl, country_combo, hint_lbl, apply_btn, combat_btn
-
-    if Static and Static.new then
-        local ok, s = pcall(Static.new, M.title)
-        if ok and s then skin_helper.apply(s, 'staticSkin_ME'); title_lbl = add(s) end
-    end
+    local country_lbl, country_combo, apply_btn, combat_btn
 
     if Static and Static.new then
         local ok, s = pcall(Static.new, 'Country:')
@@ -256,11 +249,6 @@ function M.new(parent_raw, get_checked, on_after_apply)
             country_combo = add(c)
             populate_country_combo(country_combo, false)
         end
-    end
-
-    if Static and Static.new then
-        local ok, s = pcall(Static.new, '(coalition will change if the country switches sides)')
-        if ok and s then skin_helper.apply(s, 'staticSkin_ME'); hint_lbl = add(s) end
     end
 
     if ToggleButton and ToggleButton.new then
@@ -337,9 +325,7 @@ function M.new(parent_raw, get_checked, on_after_apply)
             if widget and widget.setBounds then pcall(widget.setBounds, widget, px, py, pw, ph) end
         end
 
-        set(title_lbl, x + L.PAD_X, y, w - 2 * L.PAD_X, L.TITLE_H)
-
-        local row_y = y + L.TITLE_H + L.GAP_Y
+        local row_y = y
 
         -- Right-anchored: Set country (rightmost), then Combat/All toggle to
         -- its left. Country combo fills the rest of the row from after the
@@ -354,9 +340,6 @@ function M.new(parent_raw, get_checked, on_after_apply)
         set(country_combo, input_x,     row_y, input_w,        L.ROW_H)
         set(combat_btn,    combat_x,    row_y, L.COMBAT_BTN_W, L.ROW_H)
         set(apply_btn,     apply_x,     row_y, L.BTN_W,        L.ROW_H)
-
-        local hint_y = row_y + L.ROW_H + L.GAP_Y
-        set(hint_lbl, x + L.PAD_X, hint_y, w - 2 * L.PAD_X, L.HINT_H)
     end
 
     return panel

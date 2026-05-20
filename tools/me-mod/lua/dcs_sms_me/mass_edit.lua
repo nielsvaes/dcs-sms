@@ -650,6 +650,9 @@ local LAYOUT = {
     BTN_W           = 80,
     REFRESH_W       = 90,
     SPLIT_GUTTER    = 4,
+    -- Left pane (treeview) width is fixed so its columns always fit; the
+    -- form pane absorbs all horizontal slack as the window grows / shrinks.
+    LEFT_PANE_W     = 440,
     FOOTER_RESERVED = 80,
     FORM_GAP        = 8,
 }
@@ -669,9 +672,9 @@ local function relayout(w, h)
     end
     set(W.widgets.refresh_btn, w - L.EDGE - L.REFRESH_W, L.TOP_Y, L.REFRESH_W, L.TAB_H)
 
-    local left_w  = math.floor((w - 2 * L.EDGE - L.SPLIT_GUTTER) / 2)
+    local left_w  = L.LEFT_PANE_W
     local right_x = L.EDGE + left_w + L.SPLIT_GUTTER
-    local right_w = w - L.EDGE - right_x
+    local right_w = math.max(0, w - L.EDGE - right_x)
 
     -- Row 1: name filter (left half).
     local row1_y = L.TOP_Y + L.TAB_H + L.GAP

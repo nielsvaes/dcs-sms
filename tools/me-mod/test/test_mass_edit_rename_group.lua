@@ -54,7 +54,7 @@ do
     check('empty pattern: changed=0',  result.changed == 0)
     check('empty pattern: failed=0',   result.failed == 0)
     check('empty pattern: g unchanged', g.name == 'A')
-    check('empty pattern: toast = Pattern is empty', result.toast == 'Pattern is empty')
+    check('empty pattern: toast = New name is empty', result.toast == 'New name is empty')
     check('empty pattern: sev = warning', result.sev == 'warning')
     check('empty pattern: no undo recorded',  undo.has_record() == false)
 end
