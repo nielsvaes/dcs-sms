@@ -132,6 +132,12 @@ reachable regardless of window height.
       control) can be reached by scrolling.
 - [ ] Switch to Unit tab, then back to Group. The right pane scroll
       position resets to top.
+- [ ] A thin vertical splitter handle sits in the gutter between the
+      tree pane and the form pane. Click + drag it left and right —
+      the tree and form panes resize live, clamped between a usable
+      minimum form width (~340) and a usable minimum tree width
+      (~220). Releasing the mouse stops the drag. Resizing the whole
+      window afterwards keeps the user's chosen split.
 - [ ] Each consecutive pair of forms in the right pane is separated
       by a thin dark horizontal line with a small bit of vertical
       breathing room above and below. The line is hidden when the

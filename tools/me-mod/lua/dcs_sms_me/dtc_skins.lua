@@ -166,6 +166,31 @@ function M.separator()
     }
 end
 
+-- Vertical drag-handle skin for the mass_edit pane splitter. Same
+-- structure as separator(), but a lighter neutral color so the user
+-- sees a visible grab bar between the panes (dxgui has no setCursor
+-- API so we can't show a horizontal-resize cursor on hover — the
+-- visible bar IS the affordance).
+function M.splitter()
+    return {
+        skinData = {
+            states = {
+                released = {
+                    [1] = {
+                        bkg = {
+                            center_center = '0x6c6e70ff',
+                            file          = '',
+                            insets = { bottom = 0, left = 0, right = 0, top = 0 },
+                        },
+                    },
+                },
+            },
+            type = 'Static',
+        },
+        version = 1,
+    }
+end
+
 -- ME's static-panel dial visual: clone dialSkin_ME and swap the picture
 -- file in both released + disabled states to the m1/elements version, with
 -- middle-alignment (not stretch). me_static_panel.dlg's d_heading does this

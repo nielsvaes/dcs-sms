@@ -24,6 +24,7 @@ local map_sync        = require('dcs_sms_me.mass_edit_map_sync')
 local me_select_writer = require('dcs_sms_me.me_select_writer')
 local me_camera        = require('dcs_sms_me.me_camera')
 local me_group_focus   = require('dcs_sms_me.me_group_focus')
+local splitter_mod     = require('dcs_sms_me.splitter')
 
 -- dxgui modules. pcall-required so the file still loads in test VMs.
 local Static;          do local ok, m = pcall(require, 'Static');         if ok then Static         = m end end
@@ -676,13 +677,21 @@ local LAYOUT = {
     BTN_H           = 26,
     BTN_W           = 80,
     REFRESH_W       = 90,
-    SPLIT_GUTTER    = 4,
-    -- Right pane (forms) is fixed-width so the single-row form layouts
-    -- stay comfortably sized; the left (tree) pane absorbs all
-    -- horizontal slack as the window grows / shrinks. Value matches
-    -- the prior fixed left-pane width so the default 900px window
-    -- looks identical to before — only the resize direction flips.
+    -- Gap between tree and form panes. The splitter sits inside it
+    -- centered, leaving SPLITTER_MARGIN of breathing room on each side
+    -- so the grab bar doesn't visually butt against either pane.
+    SPLITTER_W      = 6,
+    SPLITTER_MARGIN = 10,
+    SPLIT_GUTTER    = 26,  -- 10 + 6 + 10 — keep in sync with the two above
+    -- Right pane (forms) starts at this width and the left (tree) pane
+    -- absorbs all horizontal slack as the window grows / shrinks. The
+    -- user can drag the inter-pane splitter to override this value.
     FORM_PANE_W     = 440,
+    -- Clamp range for the user-draggable splitter. Min keeps the form
+    -- pane wide enough for label + input + toggle + button on a single
+    -- row; max leaves at least ~260px for the tree.
+    FORM_PANE_MIN_W = 340,
+    FORM_PANE_MAX_W = 640,
     FOOTER_RESERVED = 80,
     -- Total vertical space between consecutive form panels. A 1px
     -- separator is drawn at the midpoint, leaving ~7px of breathing
@@ -709,6 +718,7 @@ local function relayout(w, h)
     local right_w = L.FORM_PANE_W
     local left_w  = math.max(60, w - 2 * L.EDGE - L.SPLIT_GUTTER - right_w)
     local right_x = L.EDGE + left_w + L.SPLIT_GUTTER
+    local split_x = L.EDGE + left_w   -- splitter occupies the SPLIT_GUTTER strip
 
     -- Row 1: name filter (left half).
     local row1_y = L.TOP_Y + L.TAB_H + L.GAP
@@ -742,6 +752,24 @@ local function relayout(w, h)
     local tree_y = row1_y + L.ROW_H + L.GAP
     local tree_h = math.max(60, sel_strip_y - L.GAP - tree_y)
     set(W.widgets.tree, L.EDGE, tree_y, left_w, tree_h)
+
+    -- Splitter handle: thin vertical grab bar centered in the SPLIT_GUTTER
+    -- strip with SPLITTER_MARGIN of breathing room on each side. Spans
+    -- the full body height — top of the name-filter row to bottom of the
+    -- Cancel button — so the user has a tall grab target instead of just
+    -- the tree-pane slice.
+    local splitter_y = row1_y
+    local splitter_h = (btn_y + L.BTN_H) - splitter_y
+    if W.splitter then
+        W.splitter:set_bounds(split_x + L.SPLITTER_MARGIN, splitter_y, L.SPLITTER_W, splitter_h)
+        -- Keep its draggable range in sync with the current window size.
+        -- Cap the max at "window minus minimum tree width" so the user
+        -- can't drag past the point where the tree would collapse.
+        local tree_min = 220
+        local max_form = math.max(L.FORM_PANE_MIN_W, w - 2 * L.EDGE - L.SPLIT_GUTTER - tree_min)
+        W.splitter:set_range(L.FORM_PANE_MIN_W, math.min(L.FORM_PANE_MAX_W, max_form))
+        W.splitter:set_value(L.FORM_PANE_W)
+    end
 
     -- Right pane: ScrollPane wraps the form stack so all forms are
     -- reachable at any window height. Outer bounds cover the right
@@ -987,6 +1015,25 @@ local function build_window()
             W.widgets.cancel_btn = b
         end
     end
+
+    -- Inter-pane splitter: thin vertical drag bar between the tree and
+    -- the form ScrollPane. Parented to the raw window so it sits in the
+    -- gutter strip (NOT inside either pane). on_drag mutates the layout
+    -- constant and re-runs relayout, which repositions every pane plus
+    -- the splitter itself (set_value below in relayout keeps the widget
+    -- consistent if anyone else mutates FORM_PANE_W externally).
+    W.splitter = splitter_mod.new(raw, {
+        initial  = LAYOUT.FORM_PANE_W,
+        min      = LAYOUT.FORM_PANE_MIN_W,
+        max      = LAYOUT.FORM_PANE_MAX_W,
+        skin     = 'dtc_splitter',
+        invert   = true,  -- dragging RIGHT shrinks the right (form) pane
+        on_drag  = function(new_w)
+            LAYOUT.FORM_PANE_W = new_w
+            local cw, ch = raw:getSize()
+            relayout(cw, ch)
+        end,
+    })
 
     -- Right-pane container — a ScrollPane that holds every scope's
     -- forms (and the empty-scope placeholder). When dxgui's ScrollPane
