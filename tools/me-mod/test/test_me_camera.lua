@@ -3,6 +3,13 @@
 
 package.path = '../?.lua;../lua/dcs_sms_me/?.lua;../lua/?.lua;' .. package.path
 
+-- Stub me_mission with a valid .mission.map so pan_to's guard passes.
+-- Individual tests override package.loaded['me_mission'] to exercise the
+-- no-mission-open path.
+package.preload['me_mission'] = function()
+    return { mission = { map = {} } }
+end
+
 local me_camera = require('dcs_sms_me.me_camera')
 
 local failures = 0
@@ -92,6 +99,31 @@ do
     }
     me_camera.pan_to(10, 20)
     check('setScale untouched (RDP-safe)', set_scale_calls == 0)
+end
+
+-- ---------------------------------------------------------------------------
+-- No mission open: me_mission.mission.map is missing → ok=false, setCamera
+-- never called. Mirrors verbs.camera_focus's guard against ED throwing on
+-- the menu / MP-browser / startup screen.
+-- ---------------------------------------------------------------------------
+do
+    local cam_calls = 0
+    _G.MapWindow = { setCamera = function() cam_calls = cam_calls + 1 end }
+
+    package.loaded['me_mission'] = { mission = nil }
+    local r1 = me_camera.pan_to(1, 2)
+    check('no mission.mission: ok=false',           r1.ok == false)
+    check('no mission.mission: error mentions mission',
+          type(r1.error) == 'string' and r1.error:find('mission') ~= nil)
+
+    package.loaded['me_mission'] = { mission = { map = nil } }
+    local r2 = me_camera.pan_to(1, 2)
+    check('no mission.map: ok=false',               r2.ok == false)
+
+    check('no mission: setCamera never called',     cam_calls == 0)
+
+    -- Restore so subsequent tests don't trip the guard.
+    package.loaded['me_mission'] = { mission = { map = {} } }
 end
 
 print('')

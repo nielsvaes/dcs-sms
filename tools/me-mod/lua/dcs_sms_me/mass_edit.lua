@@ -1022,25 +1022,6 @@ local function build_window()
         end
     end
 
-    -- Inter-pane splitter: thin vertical drag bar between the tree and
-    -- the form ScrollPane. Parented to the raw window so it sits in the
-    -- gutter strip (NOT inside either pane). on_drag mutates the layout
-    -- constant and re-runs relayout, which repositions every pane plus
-    -- the splitter itself (set_value below in relayout keeps the widget
-    -- consistent if anyone else mutates FORM_PANE_W externally).
-    W.splitter = splitter_mod.new(raw, {
-        initial  = LAYOUT.FORM_PANE_W,
-        min      = LAYOUT.FORM_PANE_MIN_W,
-        max      = LAYOUT.FORM_PANE_MAX_W,
-        skin     = 'dtc_splitter',
-        invert   = true,  -- dragging RIGHT shrinks the right (form) pane
-        on_drag  = function(new_w)
-            LAYOUT.FORM_PANE_W = new_w
-            local cw, ch = raw:getSize()
-            relayout(cw, ch)
-        end,
-    })
-
     -- Right-pane container — a ScrollPane that holds every scope's
     -- forms (and the empty-scope placeholder). When dxgui's ScrollPane
     -- module is unavailable (older DCS / test VMs), fall back to raw
@@ -1059,6 +1040,31 @@ local function build_window()
             form_parent = sp
         end
     end
+
+    -- Inter-pane splitter: thin vertical drag bar between the tree and
+    -- the form ScrollPane. Parented to the raw window so it sits in the
+    -- gutter strip (NOT inside either pane). Constructed AFTER the
+    -- ScrollPane so it inserts later in dxgui's z-order — even if a
+    -- future LAYOUT.SPLIT_GUTTER tweak made the splitter's right edge
+    -- bleed into the ScrollPane's x range, the splitter would stay
+    -- clickable instead of being silently swallowed.
+    --
+    -- on_drag mutates the layout constant and re-runs relayout, which
+    -- repositions every pane plus the splitter itself (set_value below
+    -- in relayout keeps the widget consistent if anyone else mutates
+    -- FORM_PANE_W externally).
+    W.splitter = splitter_mod.new(raw, {
+        initial  = LAYOUT.FORM_PANE_W,
+        min      = LAYOUT.FORM_PANE_MIN_W,
+        max      = LAYOUT.FORM_PANE_MAX_W,
+        skin     = 'dtc_splitter',
+        invert   = true,  -- dragging RIGHT shrinks the right (form) pane
+        on_drag  = function(new_w)
+            LAYOUT.FORM_PANE_W = new_w
+            local cw, ch = raw:getSize()
+            relayout(cw, ch)
+        end,
+    })
 
     -- Mount form panels for every scope (one-time allocation per Q2 of the design).
     for _, scope in ipairs(SCOPES) do

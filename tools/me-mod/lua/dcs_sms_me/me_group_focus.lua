@@ -65,11 +65,14 @@ function M.focus(group, opt_unit)
     -- Mirrors me_units_list.selectGroup (visible-group branch).
     -- The order matters: unselectAll first to drop the prior panel
     -- binding, then set the new active group/unit, then
-    -- respondToSelectedUnit triggers the panel mount.
+    -- respondToSelectedUnit triggers the panel mount. All three writes
+    -- are pcall-guarded — DCS patches occasionally swap a plain field
+    -- for a setter with side effects, and we'd rather degrade than
+    -- propagate a throw to the caller.
     if type(MapWindow.unselectAll) == 'function' then
         pcall(MapWindow.unselectAll)
     end
-    MapWindow.selectedGroup = group
+    pcall(function() MapWindow.selectedGroup = group end)
     if type(MapWindow.setSelectedUnit) == 'function' then
         pcall(MapWindow.setSelectedUnit, unit)
     end
