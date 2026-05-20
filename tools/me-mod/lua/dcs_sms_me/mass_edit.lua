@@ -22,6 +22,8 @@ local mass_forms      = require('dcs_sms_me.mass_edit_forms')
 local skin_helper     = require('dcs_sms_me.skin_helper')
 local map_sync        = require('dcs_sms_me.mass_edit_map_sync')
 local me_select_writer = require('dcs_sms_me.me_select_writer')
+local me_camera        = require('dcs_sms_me.me_camera')
+local me_group_focus   = require('dcs_sms_me.me_group_focus')
 
 -- dxgui modules. pcall-required so the file still loads in test VMs.
 local Static;          do local ok, m = pcall(require, 'Static');         if ok then Static         = m end end
@@ -460,13 +462,11 @@ local function build_tree_widget()
             end
 
             if shift_held() and anchor_idx then
-                -- Range-fill from anchor to clicked row, inclusive. Every
-                -- row in the range is set to the anchor's current checked
-                -- state, matching Explorer / GTK shift-click semantics:
-                -- the click defines the end of the range, the anchor's
-                -- state defines what to apply across it. Anchor itself is
-                -- NOT updated, so repeated shift-clicks always extend from
-                -- the same origin.
+                -- Shift-click on the row body keeps the existing
+                -- Explorer/GTK range-fill behavior: every row from the
+                -- anchor to the clicked row, inclusive, gets the anchor's
+                -- checked state. Anchor itself is NOT updated so repeated
+                -- shift-clicks extend from the same origin.
                 local clicked_idx  = row_idx + 1
                 local from         = math.min(anchor_idx, clicked_idx)
                 local to           = math.max(anchor_idx, clicked_idx)
@@ -475,14 +475,30 @@ local function build_tree_widget()
                     local e = rows[i] and rows[i].entity
                     if e then scope_checked[e] = target_state or nil end
                 end
+                M.rebuild_treeview()
             else
-                -- Plain click: toggle this row, re-anchor here so the next
-                -- shift-click extends from this position.
-                local new_state = not (scope_checked[r.entity] == true)
-                scope_checked[r.entity] = new_state or nil
-                W.anchor[W.scope] = r.entity
+                -- Plain click on a row body: mirror the vanilla ME Unit
+                -- List behavior — single-select the entity's group on
+                -- the map AND mount its right-side properties panel,
+                -- then pan the camera onto it. Does NOT touch the Mass
+                -- Edit checkbox; batch inclusion is via the checkbox
+                -- column only. Re-anchors here so a follow-up shift-
+                -- click extends from this row.
+                local entity       = r.entity
+                local parent_group = W.parent_map[entity] or entity
+                local cam_x = (type(entity.x)       == 'number' and entity.x)
+                           or (type(parent_group.x) == 'number' and parent_group.x)
+                local cam_y = (type(entity.y)       == 'number' and entity.y)
+                           or (type(parent_group.y) == 'number' and parent_group.y)
+                if cam_x and cam_y then me_camera.pan_to(cam_x, cam_y) end
+                if type(parent_group) == 'table' and parent_group.groupId then
+                    -- Unit scope: surface the clicked unit inside the
+                    -- panel. Other scopes default to units[1].
+                    local opt_unit = (W.scope == 'unit') and entity or nil
+                    me_group_focus.focus(parent_group, opt_unit)
+                end
+                W.anchor[W.scope] = entity
             end
-            M.rebuild_treeview()
         end)
     end
 
@@ -926,8 +942,8 @@ local function build_window()
         end)
     end
 
-    W.widgets.from_map_btn = make_bulk_btn('From map', on_fetch_from_map)
-    W.widgets.to_map_btn   = make_bulk_btn('To map',   on_push_to_map)
+    W.widgets.from_map_btn = make_bulk_btn('From map',  on_fetch_from_map)
+    W.widgets.to_map_btn   = make_bulk_btn('Highlight', on_push_to_map)
 
     -- Cancel button.
     if Button and Button.new then

@@ -205,9 +205,10 @@ reachable regardless of window height.
 
 These items cover the left-pane selection ergonomics; they apply to every scope tab (not just Group). Use a mission populated with >50 entities so scroll behavior is observable — `tools/cmd/dcs-sms/exec --target gui --file ...` with a bulk-create snippet works.
 
-- [ ] Click any row's text cell (not the checkbox). It toggles the row's checkbox and becomes the anchor for shift-click.
-- [ ] Shift-click the row text 10 rows below. Every row from the anchor to the clicked row gets set to the **anchor's current checked state**. Click the same shift-click target again (without holding shift, then shift-click again) → range still extends from the original anchor, not the previous shift-click target.
-- [ ] Click a row 30 rows below the anchor without holding shift. New anchor is set. Shift-click 5 rows above it. Range fills from there.
+- [ ] Click any row's text cell (not the checkbox). Mirrors the vanilla ME Unit List: the row's group becomes the **single** map selection, the right-side **group properties panel opens** with that group's fields editable, and the F10 camera **pans** onto it (zoom is left untouched). The row's checkbox is **not** toggled — batch inclusion is via the checkbox column only. The clicked row also becomes the anchor for a follow-up shift-click.
+- [ ] On Unit scope, clicking a unit row opens the panel with **that unit** active (not the group's first unit).
+- [ ] Shift-click a row's text 10 rows below the anchor. The shift-click still range-fills the checkboxes (Explorer/GTK semantics) — the camera does NOT pan and the map selection is NOT replaced. Anchor is preserved across repeated shift-clicks.
+- [ ] Click a row 30 rows below the anchor without holding shift. Camera pans there, that group becomes the map selection, and the new anchor is set. Shift-click 5 rows above → range-fill from the new anchor.
 - [ ] Click a checkbox directly (not the row text). The row toggles and the anchor moves to that row. A follow-up shift-click on another row's text body extends from the just-clicked checkbox row.
 - [ ] Type a name-substring filter that hides the current anchor. Shift-click extends only within the visible (filtered) rows, treating the off-screen anchor as missing → behaves like a plain click.
 - [ ] `Select all` button checks every row passing the current name filter. Hidden (filter-excluded) rows are untouched.
@@ -219,7 +220,7 @@ These items cover the left-pane selection ergonomics; they apply to every scope 
 ### Map selection sync (group scope)
 
 The Group-scope bulk-button strip has two extra buttons — `From map`
-(pull map selection into Mass Edit checkboxes) and `To map` (push
+(pull map selection into Mass Edit checkboxes) and `Highlight` (push
 checked groups onto the map selection). Replace semantics in both
 directions; group scope only.
 
@@ -227,21 +228,21 @@ directions; group scope only.
       Click `From map`. The same 3 groups are now checked in Mass Edit;
       toast reads `Fetched 3 groups from map`.
 - [ ] Uncheck one and check two different ones (now 4 checked). Click
-      `To map`. The 4 checked groups are now marqueed on the map and the
+      `Highlight`. The 4 checked groups are now marqueed on the map and the
       right-side group panel reflects the new selection; toast reads
       `Pushed 4 groups to map`.
-- [ ] Switch to Unit tab. Both `From map` and `To map` disappear; only
+- [ ] Switch to Unit tab. Both `From map` and `Highlight` disappear; only
       `Select all` / `Invert` / `Clear` remain. Switch back to Group —
       both reappear.
 - [ ] With an empty map selection, click `From map`. Toast reads
       `Map selection empty`; the existing Mass Edit checkboxes are
       **unchanged** (no wipe).
 - [ ] Select a group on the map, then in Mass Edit clear all
-      checkboxes, then click `To map`. Toast reads
+      checkboxes, then click `Highlight`. Toast reads
       `Nothing checked to push`; the map's existing selection is
       **unchanged** (no `unselectAll` call).
 - [ ] Hot-reload via `dcs-sms.exe reload-me-mod` while the window is
-      open. `From map` and `To map` still work.
+      open. `From map` and `Highlight` still work.
 
 ### Add prefix to group names
 
