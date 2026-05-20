@@ -23,14 +23,14 @@ local M = {}
 M.scope = 'group'
 M.title = 'Find & replace in group names'
 
-local transforms  = require('dcs_sms_me.mass_edit_transforms')
-local undo        = require('dcs_sms_me.undo')
-local skin_helper = require('dcs_sms_me.skin_helper')
-local name_writer = require('dcs_sms_me.group_name_writer')
+local transforms     = require('dcs_sms_me.mass_edit_transforms')
+local undo           = require('dcs_sms_me.undo')
+local skin_helper    = require('dcs_sms_me.skin_helper')
+local name_writer    = require('dcs_sms_me.group_name_writer')
+local clearable_edit = require('dcs_sms_me.clearable_edit')
 
 -- dxgui modules (pcall-guarded so the module loads in the test VM).
 local Static;   do local ok, m = pcall(require, 'Static');   if ok then Static   = m end end
-local EditBox;  do local ok, m = pcall(require, 'EditBox');  if ok then EditBox  = m end end
 local Button;   do local ok, m = pcall(require, 'Button');   if ok then Button   = m end end
 
 local function log_warn(msg) pcall(function() _G.log.write('sms.me.mass_edit.find_replace_group_name', _G.log.WARNING or 2, msg) end) end
@@ -144,19 +144,15 @@ function M.new(parent_raw, get_checked, on_after_apply)
         local ok, s = pcall(Static.new, 'Find:')
         if ok and s then skin_helper.apply(s, 'staticSkin_ME'); find_lbl = add(s) end
     end
-    if EditBox and EditBox.new then
-        local ok, e = pcall(EditBox.new)
-        if ok and e then skin_helper.apply(e, 'editBoxSkin_ME'); find_box = add(e) end
-    end
+    find_box = clearable_edit.new(parent_raw, {})
+    if find_box then owned[#owned + 1] = find_box end
 
     if Static and Static.new then
         local ok, s = pcall(Static.new, 'Replace:')
         if ok and s then skin_helper.apply(s, 'staticSkin_ME'); repl_lbl = add(s) end
     end
-    if EditBox and EditBox.new then
-        local ok, e = pcall(EditBox.new)
-        if ok and e then skin_helper.apply(e, 'editBoxSkin_ME'); repl_box = add(e) end
-    end
+    repl_box = clearable_edit.new(parent_raw, {})
+    if repl_box then owned[#owned + 1] = repl_box end
 
     if Button and Button.new then
         local ok, b = pcall(Button.new)

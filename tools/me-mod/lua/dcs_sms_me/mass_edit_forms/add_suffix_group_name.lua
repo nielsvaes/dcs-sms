@@ -24,13 +24,13 @@ local M = {}
 M.scope = 'group'
 M.title = 'Add suffix to group names'
 
-local transforms  = require('dcs_sms_me.mass_edit_transforms')
-local undo        = require('dcs_sms_me.undo')
-local skin_helper = require('dcs_sms_me.skin_helper')
-local name_writer = require('dcs_sms_me.group_name_writer')
+local transforms     = require('dcs_sms_me.mass_edit_transforms')
+local undo           = require('dcs_sms_me.undo')
+local skin_helper    = require('dcs_sms_me.skin_helper')
+local name_writer    = require('dcs_sms_me.group_name_writer')
+local clearable_edit = require('dcs_sms_me.clearable_edit')
 
 local Static;       do local ok, m = pcall(require, 'Static');       if ok then Static       = m end end
-local EditBox;      do local ok, m = pcall(require, 'EditBox');      if ok then EditBox      = m end end
 local Button;       do local ok, m = pcall(require, 'Button');       if ok then Button       = m end end
 local ToggleButton; do local ok, m = pcall(require, 'ToggleButton'); if ok then ToggleButton = m end end
 
@@ -139,10 +139,8 @@ function M.new(parent_raw, get_checked, on_after_apply)
         local ok, s = pcall(Static.new, 'Suffix:')
         if ok and s then skin_helper.apply(s, 'staticSkin_ME'); txt_lbl = add(s) end
     end
-    if EditBox and EditBox.new then
-        local ok, e = pcall(EditBox.new)
-        if ok and e then skin_helper.apply(e, 'editBoxSkin_ME'); txt_box = add(e) end
-    end
+    txt_box = clearable_edit.new(parent_raw, {})
+    if txt_box then owned[#owned + 1] = txt_box end
 
     if ToggleButton and ToggleButton.new then
         local ok, t = pcall(ToggleButton.new)
