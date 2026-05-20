@@ -712,13 +712,13 @@ local function relayout(w, h)
         if widget and widget.setBounds then pcall(widget.setBounds, widget, x, y, ww, hh) end
     end
 
-    -- Row 0: scope tabs + refresh button.
+    -- Row 0: scope tabs only. Refresh moved to the bottom-left of the
+    -- tree pane (positioned with the bulk-button strip below).
     local tab_x = L.EDGE
     for _, scope in ipairs(SCOPES) do
         set(W.widgets.scope_tabs[scope], tab_x, L.TOP_Y, L.TAB_W, L.TAB_H)
         tab_x = tab_x + L.TAB_W + L.GAP
     end
-    set(W.widgets.refresh_btn, w - L.EDGE - L.REFRESH_W, L.TOP_Y, L.REFRESH_W, L.TAB_H)
 
     local right_w = L.FORM_PANE_W
     local left_w  = math.max(60, w - 2 * L.EDGE - L.SPLIT_GUTTER - right_w)
@@ -734,17 +734,21 @@ local function relayout(w, h)
     local body_bottom = btn_y - L.GAP
     set(W.widgets.cancel_btn, w - L.EDGE - L.BTN_W, btn_y, L.BTN_W, L.BTN_H)
 
-    -- Bulk-selection button strip: directly under the left pane,
-    -- right-aligned to the tree's right edge. Order left→right:
-    -- Select all · Invert · Clear · [From map · To map] -- the last
-    -- two only on group scope (other scopes hide them; see below).
+    -- Bottom-of-left-pane button strip: Refresh on the left, bulk-
+    -- selection buttons right-aligned to the tree's right edge.
+    -- Bulk order left→right: Select all · Invert · Clear · [From map
+    -- · Highlight] -- the last two only on group scope (other scopes
+    -- hide them; see below).
     local sel_btn_w   = 70
     local sel_strip_y = body_bottom - L.BTN_H
+    set(W.widgets.refresh_btn, L.EDGE, sel_strip_y, L.REFRESH_W, L.BTN_H)
     local on_group    = W.scope == 'group'
     local strip_n     = on_group and 5 or 3
     local sel_total_w = sel_btn_w * strip_n + L.GAP * (strip_n - 1)
     local sel_x       = L.EDGE + left_w - sel_total_w
-    if sel_x < L.EDGE then sel_x = L.EDGE end
+    -- Don't overlap the left-anchored Refresh button if the tree is narrow.
+    local refresh_right = L.EDGE + L.REFRESH_W + L.GAP
+    if sel_x < refresh_right then sel_x = refresh_right end
     set(W.widgets.sel_all_btn, sel_x, sel_strip_y, sel_btn_w, L.BTN_H)
     set(W.widgets.sel_inv_btn, sel_x + sel_btn_w + L.GAP, sel_strip_y, sel_btn_w, L.BTN_H)
     set(W.widgets.sel_clr_btn, sel_x + (sel_btn_w + L.GAP) * 2, sel_strip_y, sel_btn_w, L.BTN_H)
