@@ -177,6 +177,28 @@ reachable regardless of window height.
 - [ ] Click `Refresh`. The list re-walks the mission; any external rename (e.g. via ME group panel) is picked up.
 - [ ] Click `Cancel`. The window hides. DCS-SMS → Mass Edit reopens it.
 
+### Auto-name units
+
+Single-button form. For each checked group, renames every unit to
+`<groupname>-<idx>` (idx is the 1-based position in the group's
+units array). Writes via `Mission.renameUnit` so DCS's per-unit
+collision detection applies.
+
+- [ ] The Auto-name units form sits between `Add suffix to group names`
+      and `Set country` in the Group scope's right pane. It's a
+      single right-anchored `Auto name units` button (wider than the
+      other Apply buttons to fit the label; right edge still aligns).
+- [ ] Check a group named `Viper-1` with two oddly-named units. Click
+      `Auto name units`. Units become `Viper-1-1` / `Viper-1-2`. Toast:
+      `2 units renamed`.
+- [ ] Click `Auto name units` with nothing checked. Toast: `Nothing
+      selected`.
+- [ ] Click `Auto name units` on a group whose units are ALREADY
+      named correctly. Toast: `No changes` (warning); no mutation.
+- [ ] Press `Ctrl+Z` after a successful auto-name. Every unit name
+      is restored.
+- [ ] Hover the button — tooltip explains the rename pattern.
+
 ### Set country
 
 - [ ] The Set country form sits below Find & replace and above Visibility & control in the Group scope's right pane.

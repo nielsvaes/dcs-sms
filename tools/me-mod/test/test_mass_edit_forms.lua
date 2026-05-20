@@ -22,8 +22,8 @@ check('forms_for is a function', type(forms.forms_for) == 'function')
 
 do
     local list = forms.forms_for('group')
-    check('group: 6 forms',          #list == 6, 'got ' .. tostring(#list))
-    -- Order: rename → find/replace → add_prefix → add_suffix → set_country → toggle_group_flags.
+    check('group: 7 forms',          #list == 7, 'got ' .. tostring(#list))
+    -- Order: rename → find/replace → add_prefix → add_suffix → auto_name_units → set_country → toggle_group_flags.
     check('group: form[1] = rename_group',
           list[1] and list[1].title == 'Rename groups')
     check('group: form[2] = find_replace_group_name',
@@ -32,11 +32,13 @@ do
           list[3] and list[3].title == 'Add prefix to group names')
     check('group: form[4] = add_suffix_group_name',
           list[4] and list[4].title == 'Add suffix to group names')
-    check('group: form[5] = set_country',
-          list[5] and list[5].title == 'Set country')
-    check('group: form[6] = toggle_group_flags',
-          list[6] and list[6].title == 'Visibility & control')
-    for i = 1, 6 do
+    check('group: form[5] = auto_name_units_group',
+          list[5] and list[5].title == 'Auto-name units')
+    check('group: form[6] = set_country',
+          list[6] and list[6].title == 'Set country')
+    check('group: form[7] = toggle_group_flags',
+          list[7] and list[7].title == 'Visibility & control')
+    for i = 1, 7 do
         check('group: form[' .. i .. '].scope = group',
               list[i] and list[i].scope == 'group')
     end
