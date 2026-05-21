@@ -105,6 +105,11 @@ This is the first tag after a long quiet period — `sms.version` had been froze
 
 ## ME-mod
 
+### [0.11.0] — 2026-05-21
+
+**Added**
+- New `dcs-sms dev-reload` subcommand (CLI only, not in the interactive menu): contributor convenience verb that chains `go build ./cmd/dcs-sms` + `install-me-mod` + `reload-me-mod` into one command. Run from anywhere inside the dcs-sms checkout. Replaces the three-command manual iteration recipe in `tools/me-mod/AGENTS.md` §2.3. Closes [#63](https://github.com/nielsvaes/dcs-sms/issues/63).
+
 ### [0.10.0] — 2026-05-18
 
 Closes part of [#60](https://github.com/nielsvaes/dcs-sms/issues/60) — gaps found in AI-assisted mission scripting. Six existing verbs get filters / batch / file-input ergonomics; one new verb lands. Gaps 1, 8, 10 (waypoint_get red-side bug, route-overlay composite, polygon-union) remain open for a follow-up session.
