@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"errors"
 	"io"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -61,6 +63,81 @@ func TestDevReload_HappyPath(t *testing.T) {
 	}
 }
 
-// errors import is used by later tests in this file; declared here so this
-// scaffolding task lands a buildable test file.
-var _ = errors.New
+func TestFindToolsDirImpl_MatchAtCwd(t *testing.T) {
+	tmp := t.TempDir()
+	mustWriteFile(t, filepath.Join(tmp, "go.mod"),
+		"module github.com/nielsvaes/dcs-sms/tools\n\ngo 1.25.0\n")
+	got, err := findToolsDirImpl(tmp)
+	if err != nil {
+		t.Fatalf("err: %v", err)
+	}
+	if got != tmp {
+		t.Errorf("got %q, want %q", got, tmp)
+	}
+}
+
+func TestFindToolsDirImpl_MatchAtAncestor(t *testing.T) {
+	tmp := t.TempDir()
+	mustWriteFile(t, filepath.Join(tmp, "go.mod"),
+		"module github.com/nielsvaes/dcs-sms/tools\n\ngo 1.25.0\n")
+	sub := filepath.Join(tmp, "cmd", "dcs-sms")
+	if err := os.MkdirAll(sub, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	got, err := findToolsDirImpl(sub)
+	if err != nil {
+		t.Fatalf("err: %v", err)
+	}
+	if got != tmp {
+		t.Errorf("got %q, want %q", got, tmp)
+	}
+}
+
+func TestFindToolsDirImpl_WrongModule(t *testing.T) {
+	tmp := t.TempDir()
+	mustWriteFile(t, filepath.Join(tmp, "go.mod"),
+		"module example.com/other/project\n\ngo 1.25.0\n")
+	_, err := findToolsDirImpl(tmp)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "not inside the dcs-sms repo") {
+		t.Errorf("error %q does not name the missing condition", err.Error())
+	}
+}
+
+func TestFindToolsDirImpl_NoGoMod(t *testing.T) {
+	tmp := t.TempDir()
+	_, err := findToolsDirImpl(tmp)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+}
+
+func TestDevReload_NotInRepoExits2(t *testing.T) {
+	hooks := newFakeDevReloadHooks()
+	hooks.findToolsDirFn = func(cwd string) (string, error) {
+		return "", errors.New("not inside the dcs-sms repo (no go.mod with module \"github.com/nielsvaes/dcs-sms/tools\" found walking up from " + cwd + ")")
+	}
+	buildCalled := false
+	hooks.runBuildFn = func(_ string, _, _ io.Writer) int { buildCalled = true; return 0 }
+
+	var stdout, stderr bytes.Buffer
+	code := devReloadCmdWith(nil, &stdout, &stderr, hooks)
+	if code != 2 {
+		t.Errorf("exit %d, want 2", code)
+	}
+	if buildCalled {
+		t.Error("runBuild was called despite findToolsDir error")
+	}
+	if !strings.Contains(stderr.String(), "not inside the dcs-sms repo") {
+		t.Errorf("stderr does not name the condition: %q", stderr.String())
+	}
+}
+
+func mustWriteFile(t *testing.T, path, content string) {
+	t.Helper()
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
