@@ -138,6 +138,9 @@ Given parsed fields `folder`, `category`, `attribute[]` per entry, route as foll
 | `sms.units.air_defence.radar.<x>` | `category = "Air Defence"` AND attributes include `"EWR"` |
 | `sms.units.air_defence.manpads.<x>` | `category = "Air Defence"` AND attributes include `"MANPADS"` or `"MANPADS AUX"` |
 | `sms.units.air_defence.misc.<x>` | `category = "Air Defence"` AND none of the above (catch-all for command vehicles, generators) |
+
+> Note: the implementation evaluates air-defence rules in the order **MANPADS → AAA → EWR (radar) → SAM → misc**, which differs from the table's listing order above (SAM → AAA → radar → MANPADS → misc). The two orderings are semantically equivalent because MANPADS-first short-circuits before the SAM check; no entry carries both `"MANPADS"` and SAM-class attributes, so the SAM rule never needs to explicitly negate MANPADS or AAA — the earlier checks already claimed those entries.
+
 | `sms.units.artillery.<x>` | `category = "Artillery"` |
 | `sms.units.infantry.<x>` | `category = "Infantry"` |
 | `sms.units.unarmed.<x>` | `category = "Unarmed"` |
