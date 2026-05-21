@@ -177,13 +177,23 @@ You do **not** have:
 
 ## 2.3 The embed workflow
 
-`tools/me-mod/lua/` is `go:embed`ed into `dcs-sms.exe`. When you edit any Lua file in this tree:
+`tools/me-mod/lua/` is `go:embed`ed into `dcs-sms.exe`. When you edit any Lua file in this tree, the iteration loop is one command:
 
-1. **Rebuild the binary.** `cd tools && go build ./cmd/dcs-sms` — produces `tools/dcs-sms.exe`. The Lua changes don't reach the user's DCS install yet.
-2. **Reinstall.** `dcs-sms install-me-mod` — copies the embedded Lua tree to `<DCS install>/MissionEditor/modules/dcs_sms_me/`, overwriting the previous copy. The `MissionEditor.lua` patch line stays put.
-3. **Restart DCS.** Lua under `MissionEditor.lua` loads once at DCS start; you cannot hot-reload without a full restart. (Dev-reload via `Ctrl+Shift+R` inside the ME *partially* reloads things but does not re-run `MissionEditor.lua` — don't rely on it.)
+```sh
+dcs-sms dev-reload
+```
 
-A common contributor mistake: editing Lua, rebuilding, and forgetting to reinstall. The installed copy under `<DCS>/MissionEditor/modules/` is what runs; the source tree is dead until reinstalled.
+Run it from anywhere inside the dcs-sms checkout. It chains three steps:
+
+1. **Rebuild the binary.** `go build ./cmd/dcs-sms` from `tools/`. Produces an updated `dcs-sms.exe` with the new embedded Lua tree.
+2. **Reinstall.** Calls `install-me-mod` to copy the embedded Lua to `<DCS install>/MissionEditor/modules/dcs_sms_me/`. If DCS lives under Program Files, this step returns exit code 5 (needs elevation) and prints the admin-re-launch hint; re-run from an admin terminal in that case.
+3. **Hot-reload.** Calls `reload-me-mod` to clear `package.loaded.dcs_sms_me.*` in the running ME and `dofile` the new `init.lua`. No DCS restart needed — your Lua changes are live in the open Mission Editor.
+
+The hot-reload step needs the gui bridge active. Open the Mission Editor and click **DCS-SMS → External execution: OFF → ON** at least once per DCS session. `dev-reload` returns exit code 4 with a clear message if the toggle is off.
+
+If you've edited the ME-mod bootstrap (`init.lua`, `menu.lua`) in ways that change top-level menu registration or the `MissionEditor.lua` patch itself, a full DCS restart may still be needed. For the common case (iterating on individual modules like `prefab_manager.lua`, `verbs.lua`, etc.), the hot-reload is enough.
+
+A common contributor mistake pre-`dev-reload`: editing Lua, rebuilding, and forgetting to reinstall. The installed copy under `<DCS>/MissionEditor/modules/` is what runs; the source tree is dead until reinstalled. `dev-reload` makes this impossible to forget.
 
 ## 2.4 Failure model for verbs
 
