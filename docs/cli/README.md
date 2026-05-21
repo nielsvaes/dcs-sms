@@ -8,6 +8,7 @@ Every command on the dcs-sms CLI, grouped by namespace.
 
 | Command | Description |
 |---|---|
+| [`dev-reload`](dev-reload.md) | build the .exe, reinstall the ME mod, and hot-reload it in one shot (contributor workflow) |
 | [`doc`](doc.md) | regenerate docs/cli/ — per-command markdown reference + index |
 | [`exec`](exec.md) | execute a Lua snippet (use --target mission\|gui\|auto, default auto) |
 | [`gen-units`](gen-units.md) | regenerate framework/constants/{units,statics}.lua from dcs-lua-datamine |
