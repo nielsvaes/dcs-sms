@@ -96,6 +96,7 @@ func printUsage(w io.Writer) {
 	fmt.Fprintln(w, "  status        report whether the hook is alive and a mission is loaded")
 	fmt.Fprintln(w, "  screenshot    capture the DCS window to a PNG (Windows only)")
 	fmt.Fprintln(w, "  setup         update dcs-sms.exe, then install the ME mod and the hook in one shot")
+	fmt.Fprintln(w, "  dev-reload    contributor: build the .exe, reinstall the ME mod, hot-reload it in one shot")
 	fmt.Fprintln(w, "  tail-log      read recent lines from dcs.log")
 	fmt.Fprintln(w, "  teardown      remove the ME mod and the hook in one shot")
 	fmt.Fprintln(w, "  install-hook  install/update the Lua hook + patch MissionScripting.lua to allow it")
