@@ -141,3 +141,80 @@ func mustWriteFile(t *testing.T, path, content string) {
 		t.Fatal(err)
 	}
 }
+
+func TestDevReload_StopsOnBuildFailure(t *testing.T) {
+	hooks := newFakeDevReloadHooks()
+	hooks.runBuildFn = func(_ string, _, stderr io.Writer) int {
+		stderr.Write([]byte("./cmd/dcs-sms/foo.go:1:1: syntax error\n"))
+		return 1
+	}
+	installCalled := false
+	reloadCalled := false
+	hooks.installMeModFn = func(_ []string, _, _ io.Writer) int { installCalled = true; return 0 }
+	hooks.reloadMeModFn = func(_ []string, _, _ io.Writer) int { reloadCalled = true; return 0 }
+
+	var stdout, stderr bytes.Buffer
+	code := devReloadCmdWith(nil, &stdout, &stderr, hooks)
+	if code != 1 {
+		t.Errorf("exit %d, want 1", code)
+	}
+	if installCalled || reloadCalled {
+		t.Errorf("install=%v reload=%v, want neither called", installCalled, reloadCalled)
+	}
+	if !strings.Contains(stderr.String(), "syntax error") {
+		t.Errorf("stderr did not forward build output: %q", stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "build failed") {
+		t.Errorf("stderr missing build-failed marker: %q", stderr.String())
+	}
+}
+
+func TestDevReload_StopsOnInstallFailure(t *testing.T) {
+	hooks := newFakeDevReloadHooks()
+	hooks.installMeModFn = func(_ []string, _, _ io.Writer) int { return 1 }
+	reloadCalled := false
+	hooks.reloadMeModFn = func(_ []string, _, _ io.Writer) int { reloadCalled = true; return 0 }
+
+	var stdout, stderr bytes.Buffer
+	code := devReloadCmdWith(nil, &stdout, &stderr, hooks)
+	if code != 1 {
+		t.Errorf("exit %d, want 1", code)
+	}
+	if reloadCalled {
+		t.Error("reload was called despite install failure")
+	}
+}
+
+func TestDevReload_PropagatesElevationExit5(t *testing.T) {
+	hooks := newFakeDevReloadHooks()
+	hooks.installMeModFn = func(_ []string, _, stderr io.Writer) int {
+		stderr.Write([]byte("dcs-sms install-me-mod: <DCS>/MissionEditor is not writable.\n"))
+		stderr.Write([]byte("  Re-run dcs-sms.exe from an admin terminal, or use the interactive menu (double-click) to be prompted.\n"))
+		return 5
+	}
+	reloadCalled := false
+	hooks.reloadMeModFn = func(_ []string, _, _ io.Writer) int { reloadCalled = true; return 0 }
+
+	var stdout, stderr bytes.Buffer
+	code := devReloadCmdWith(nil, &stdout, &stderr, hooks)
+	if code != 5 {
+		t.Errorf("exit %d, want 5", code)
+	}
+	if reloadCalled {
+		t.Error("reload was called despite elevation requirement")
+	}
+	if !strings.Contains(stderr.String(), "admin terminal") {
+		t.Errorf("stderr does not forward install hint: %q", stderr.String())
+	}
+}
+
+func TestDevReload_PropagatesReloadBridgeOff(t *testing.T) {
+	hooks := newFakeDevReloadHooks()
+	hooks.reloadMeModFn = func(_ []string, _, _ io.Writer) int { return 4 }
+
+	var stdout, stderr bytes.Buffer
+	code := devReloadCmdWith(nil, &stdout, &stderr, hooks)
+	if code != 4 {
+		t.Errorf("exit %d, want 4 (bridge off)", code)
+	}
+}
