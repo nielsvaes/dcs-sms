@@ -107,6 +107,22 @@ func TestEmitUnits_idempotent(t *testing.T) {
 	}
 }
 
+func TestEmitUnits_emptyCommit(t *testing.T) {
+	units, _ := sampleEmitInputs()
+	var sb strings.Builder
+	if err := EmitUnits(&sb, units, "", "2026-05-21T00:00:00Z"); err != nil {
+		t.Fatalf("EmitUnits: %v", err)
+	}
+	out := sb.String()
+	if strings.Contains(out, "@ ") {
+		t.Errorf("empty commit produced '@ ' in banner:\n%s", out)
+	}
+	want := "-- Source: dcs-lua-datamine (regenerated 2026-05-21T00:00:00Z)"
+	if !strings.Contains(out, want) {
+		t.Errorf("banner missing expected line %q\n--- output ---\n%s", want, out)
+	}
+}
+
 func TestEmitStatics_outputShape(t *testing.T) {
 	_, statics := sampleEmitInputs()
 	var sb strings.Builder
