@@ -218,3 +218,101 @@ func TestDevReload_PropagatesReloadBridgeOff(t *testing.T) {
 		t.Errorf("exit %d, want 4 (bridge off)", code)
 	}
 }
+
+func TestDevReload_ForwardsDCSPathToInstall(t *testing.T) {
+	hooks := newFakeDevReloadHooks()
+	var installArgs []string
+	var reloadArgs []string
+	hooks.installMeModFn = func(a []string, _, _ io.Writer) int {
+		installArgs = append([]string(nil), a...)
+		return 0
+	}
+	hooks.reloadMeModFn = func(a []string, _, _ io.Writer) int {
+		reloadArgs = append([]string(nil), a...)
+		return 0
+	}
+
+	var stdout, stderr bytes.Buffer
+	code := devReloadCmdWith([]string{"--dcs-path", "D:/DCS"}, &stdout, &stderr, hooks)
+	if code != 0 {
+		t.Fatalf("exit %d, stderr: %s", code, stderr.String())
+	}
+	wantInstall := []string{"--dcs-path", "D:/DCS"}
+	if !stringSliceEqual(installArgs, wantInstall) {
+		t.Errorf("install args = %v, want %v", installArgs, wantInstall)
+	}
+	for _, a := range reloadArgs {
+		if a == "--dcs-path" {
+			t.Error("--dcs-path leaked into reload args")
+		}
+	}
+}
+
+func TestDevReload_ForwardsReloadFlags(t *testing.T) {
+	hooks := newFakeDevReloadHooks()
+	var installArgs []string
+	var reloadArgs []string
+	hooks.installMeModFn = func(a []string, _, _ io.Writer) int {
+		installArgs = append([]string(nil), a...)
+		return 0
+	}
+	hooks.reloadMeModFn = func(a []string, _, _ io.Writer) int {
+		reloadArgs = append([]string(nil), a...)
+		return 0
+	}
+
+	var stdout, stderr bytes.Buffer
+	code := devReloadCmdWith(
+		[]string{"--saved-games", "D:/Saved Games", "--timeout", "5s", "--wait"},
+		&stdout, &stderr, hooks,
+	)
+	if code != 0 {
+		t.Fatalf("exit %d, stderr: %s", code, stderr.String())
+	}
+	wantReload := []string{"--saved-games", "D:/Saved Games", "--timeout", "5s", "--wait"}
+	if !stringSliceEqual(reloadArgs, wantReload) {
+		t.Errorf("reload args = %v, want %v", reloadArgs, wantReload)
+	}
+	for _, a := range installArgs {
+		if a == "--saved-games" || a == "--timeout" || a == "--wait" {
+			t.Errorf("reload flag %q leaked into install args", a)
+		}
+	}
+}
+
+func TestDevReload_DefaultTimeoutForwarded(t *testing.T) {
+	// Even without an explicit --timeout, the default (10s) is forwarded
+	// to reload-me-mod so the flag is always present in the reload call.
+	hooks := newFakeDevReloadHooks()
+	var reloadArgs []string
+	hooks.reloadMeModFn = func(a []string, _, _ io.Writer) int {
+		reloadArgs = append([]string(nil), a...)
+		return 0
+	}
+
+	var stdout, stderr bytes.Buffer
+	code := devReloadCmdWith(nil, &stdout, &stderr, hooks)
+	if code != 0 {
+		t.Fatalf("exit %d, stderr: %s", code, stderr.String())
+	}
+	// Expect exactly: --timeout 10s, with no --wait, no --saved-games.
+	want := []string{"--timeout", "10s"}
+	if !stringSliceEqual(reloadArgs, want) {
+		t.Errorf("reload args = %v, want %v", reloadArgs, want)
+	}
+}
+
+func TestDevReload_BadFlagExits2(t *testing.T) {
+	hooks := newFakeDevReloadHooks()
+	buildCalled := false
+	hooks.runBuildFn = func(_ string, _, _ io.Writer) int { buildCalled = true; return 0 }
+
+	var stdout, stderr bytes.Buffer
+	code := devReloadCmdWith([]string{"--no-such-flag"}, &stdout, &stderr, hooks)
+	if code != 2 {
+		t.Errorf("exit %d, want 2", code)
+	}
+	if buildCalled {
+		t.Error("runBuild was called despite bad flag")
+	}
+}
