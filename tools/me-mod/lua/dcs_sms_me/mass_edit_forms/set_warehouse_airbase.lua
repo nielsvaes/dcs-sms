@@ -170,10 +170,8 @@ end)
 -- Mount.
 -- ---------------------------------------------------------------------------
 
-function M.mount(parent_raw, opts)
-    opts = opts or {}
-    local get_checked    = opts.get_checked    or function() return {} end
-    local on_after_apply = opts.on_after_apply
+function M.new(parent_raw, get_checked, on_after_apply, _get_categories)
+    get_checked = get_checked or function() return {} end
 
     local owned = {}
     local function add(w) owned[#owned + 1] = w; pcall(parent_raw.insertWidget, parent_raw, w); return w end
