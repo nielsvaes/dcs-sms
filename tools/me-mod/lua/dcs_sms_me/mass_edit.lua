@@ -192,15 +192,6 @@ local function rebuild_pool()
     end
 end
 
-local function scope_pool_counts()
-    local counts = {}
-    for _, s in ipairs(SCOPES) do
-        local snap = selection.snapshot_mission(s)
-        counts[s] = snap.ok and #snap.pool or 0
-    end
-    return counts
-end
-
 -- Get the entities checked in the active scope. Closure handed to each
 -- form so its apply handler can read the current selection.
 local function get_checked_for_active_scope()
@@ -1147,7 +1138,6 @@ end
 
 -- Expose internals for tests.
 M._W                  = W
-M._scope_pool_counts  = scope_pool_counts
 M._rebuild_pool       = rebuild_pool
 M._on_scope_changed   = on_scope_changed
 M._on_refresh_clicked = on_refresh_clicked
