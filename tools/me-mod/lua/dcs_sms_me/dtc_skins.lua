@@ -290,10 +290,12 @@ function M.tab_off()
     if not (s and s.skinData and s.skinData.states) then return nil end
     local states = s.skinData.states
     -- Inactive: zero alpha on the bkg tint in every state hides the chunky
-    -- button entirely; only the dim grey text remains.
+    -- button entirely on hover/press too, so the only affordance on hover
+    -- is a gold text-color shift (the chunky button image multiplied by a
+    -- low-alpha tint reads as a muddy gray rather than a clean highlight).
     set_tab_bkg_tint  (states.released, '0xffffff00')
     set_tab_text_color(states.released, '0x9faab2ff')
-    set_tab_bkg_tint  (states.hover,    '0xf7b94040')
+    set_tab_bkg_tint  (states.hover,    '0xffffff00')
     set_tab_text_color(states.hover,    '0xf7b940ff')
     set_tab_bkg_tint  (states.pressed,  '0xffffff00')
     set_tab_text_color(states.pressed,  '0x9faab2ff')
