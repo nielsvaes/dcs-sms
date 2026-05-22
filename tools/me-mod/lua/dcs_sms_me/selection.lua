@@ -162,7 +162,13 @@ end
 -- }
 -- ---------------------------------------------------------------------------
 
-local VALID_SCOPES = { group = true, unit = true, waypoint = true, zone = true, drawing = true }
+local VALID_SCOPES = { group = true, unit = true, waypoint = true, zone = true, drawing = true, airbase = true }
+
+-- Module-local cache so airbase entries returned by snapshot_mission('airbase')
+-- are STABLE table references across calls — required because W.checked in
+-- mass_edit.lua is keyed by entry table ref, not by id, and a marquee can
+-- check airbases between rebuilds. Keyed by airdrome_number (integer).
+local _airbase_entry_cache = {}
 
 local function walk_mission_groups(callback)
     local Mission = require('me_mission')
@@ -310,6 +316,61 @@ function M.snapshot_drilled(scope)
     return out  -- unreachable
 end
 
+-- Build (or refresh) the airbase pool. Each entry is a stable table keyed
+-- in _airbase_entry_cache by airdrome_number — same airbase always returns
+-- the same Lua table so W.checked[entry] = true survives subsequent
+-- rebuilds. Coalition is re-read from mission.AirportsEquipment on every
+-- call (it's the live source of truth and can change between rebuilds).
+local function build_airbase_pool()
+    local pool = {}
+
+    local ok_ac, AC = pcall(require, 'Mission.AirdromeController')
+    if not ok_ac or not AC or type(AC.getAirdromes) ~= 'function' then
+        return pool
+    end
+    local got_ok, airdromes = pcall(AC.getAirdromes)
+    if not got_ok or type(airdromes) ~= 'table' then return pool end
+
+    local Mission = require('me_mission')
+    local mission = Mission and Mission.mission
+    local airports = mission and mission.AirportsEquipment
+                              and mission.AirportsEquipment.airports
+                              or {}
+
+    for _, ad in ipairs(airdromes) do
+        local id   = type(ad.getAirdromeNumber) == 'function' and ad:getAirdromeNumber() or nil
+        local name = type(ad.getName)           == 'function' and ad:getName()           or nil
+        if type(id) == 'number' and type(name) == 'string' then
+            local entry = _airbase_entry_cache[id]
+            if not entry then
+                entry = { id = id, name = name }
+                _airbase_entry_cache[id] = entry
+            end
+            -- Refresh mutable fields on the cached entry every call.
+            entry.name      = name
+            entry.coalition = (airports[id] and type(airports[id].coalition) == 'string')
+                              and airports[id].coalition
+                              or 'neutrals'
+            entry.north     = type(ad.x) == 'number' and ad.x or 0
+            entry.east      = type(ad.y) == 'number' and ad.y or 0
+            pool[#pool + 1] = entry
+        end
+    end
+    return pool
+end
+
+-- Exposed for the marquee callback in mass_edit.lua: returns the cached
+-- entry table for the given airdrome_number, OR nil if not yet snapshotted.
+-- Does NOT trigger a snapshot itself.
+function M.airbase_entry_by_id(airdrome_number)
+    return _airbase_entry_cache[airdrome_number]
+end
+
+-- Exposed for test cleanup and for the marquee callback's lazy-snapshot path.
+function M._snapshot_airbases_now()
+    return build_airbase_pool()
+end
+
 -- ---------------------------------------------------------------------------
 -- snapshot_mission — like snapshot_drilled but always walks the full mission
 -- tree (no marquee dependency, no fallback path). Used by Mass Edit, which
@@ -397,6 +458,15 @@ function M.snapshot_mission(scope)
                     end
                 end
             end
+        end
+        return out
+    end
+
+    if scope == 'airbase' then
+        local pool = build_airbase_pool()
+        for _, e in ipairs(pool) do
+            out.pool[#out.pool + 1] = e
+            out.parent_map[e] = e
         end
         return out
     end
