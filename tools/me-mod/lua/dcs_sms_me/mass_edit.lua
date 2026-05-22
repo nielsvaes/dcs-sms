@@ -270,6 +270,19 @@ local function update_map_buttons_visibility()
     show(W.widgets.to_map_btn,   visible)
 end
 
+-- Module-level recursion guard. When on_scope_changed programmatically
+-- updates a tab's state via setState, the change-callback fires for each
+-- updated tab; checking this flag at the top of the callback short-circuits
+-- those echo-fires so the handler doesn't reenter.
+local _set_state_internal = false
+
+local function set_tab_state(tab, state)
+    if not (tab and tab.setState) then return end
+    _set_state_internal = true
+    pcall(tab.setState, tab, state and true or false)
+    _set_state_internal = false
+end
+
 local function on_scope_changed(new_scope)
     if new_scope == W.scope then return end
     W.scope = new_scope
@@ -832,19 +845,6 @@ M._relayout = relayout
 -- ---------------------------------------------------------------------------
 -- Window construction
 -- ---------------------------------------------------------------------------
-
--- Module-level recursion guard. When on_scope_changed programmatically
--- updates a tab's state via setState, the change-callback fires for each
--- updated tab; checking this flag at the top of the callback short-circuits
--- those echo-fires so the handler doesn't reenter.
-local _set_state_internal = false
-
-local function set_tab_state(tab, state)
-    if not (tab and tab.setState) then return end
-    _set_state_internal = true
-    pcall(tab.setState, tab, state and true or false)
-    _set_state_internal = false
-end
 
 local function make_scope_tab(scope_name, label, on_click)
     if not (ToggleButton and ToggleButton.new) then return nil end
