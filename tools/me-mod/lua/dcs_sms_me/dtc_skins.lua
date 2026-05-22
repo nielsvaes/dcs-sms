@@ -227,6 +227,64 @@ function M.splitter()
     }
 end
 
+-- ToggleButton skin for the Mass Edit window's scope tab strip
+-- (Group/Unit/Waypoint/Zone/Drawing). Inactive tabs render as text only
+-- against the panel background (no chrome). Active tabs fill with the same
+-- teal as the grid's row selection color (0x2da1beff) so the tab strip
+-- visually rhymes with selection elsewhere in the window. Hover state is
+-- low-alpha teal so mouse-over offers a subtle preview without competing
+-- with the active state.
+function M.tab()
+    local TEXT_FONT  = 'DejaVuLGCSansCondensed-Bold.ttf'
+    local TEXT_SIZE  = 12
+    local INSETS     = { bottom = 0, left = 0, right = 0, top = 0 }
+    local function text_layer(color)
+        return {
+            blur          = 0,
+            color         = color,
+            font          = TEXT_FONT,
+            fontSize      = TEXT_SIZE,
+            horzAlign     = { type = 'middle' },
+            vertAlign     = { type = 'middle' },
+            shadowOffset  = { horz = 0, vert = 0 },
+        }
+    end
+    return {
+        skinData = {
+            type   = 'ToggleButton',
+            states = {
+                released = {
+                    [1] = {
+                        bkg  = {},
+                        text = text_layer('0x9faab2ff'),
+                    },
+                },
+                hover = {
+                    [1] = {
+                        bkg = {
+                            center_center = '0x2da1be40',
+                            file          = '',
+                            insets        = INSETS,
+                        },
+                        text = text_layer('0xeeeeeeff'),
+                    },
+                },
+                pressed = {
+                    [1] = {
+                        bkg = {
+                            center_center = '0x2da1beff',
+                            file          = '',
+                            insets        = INSETS,
+                        },
+                        text = text_layer('0xffffffff'),
+                    },
+                },
+            },
+        },
+        version = 1,
+    }
+end
+
 -- ME's static-panel dial visual: clone dialSkin_ME and swap the picture
 -- file in both released + disabled states to the m1/elements version, with
 -- middle-alignment (not stretch). me_static_panel.dlg's d_heading does this
