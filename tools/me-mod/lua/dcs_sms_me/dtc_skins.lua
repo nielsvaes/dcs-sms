@@ -14,7 +14,7 @@
 -- All builders return a freshly cloned skin table so callers can mutate
 -- without affecting the cached Skin module copy.
 
-local Skin = require('Skin')
+local Skin;  do local ok, m = pcall(require, 'Skin'); if ok then Skin = m end end
 
 local M = {}
 
