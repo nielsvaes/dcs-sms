@@ -685,7 +685,6 @@ local LAYOUT = {
     EDGE            = 8,
     TOP_Y           = 4,
     TAB_H           = 28,
-    TAB_W           = 100,
     ROW_H           = 24,
     GAP             = 4,
     BTN_H           = 26,
@@ -721,18 +720,24 @@ local function relayout(w, h)
         if widget and widget.setBounds then pcall(widget.setBounds, widget, x, y, ww, hh) end
     end
 
-    -- Row 0: scope tabs only. Refresh moved to the bottom-left of the
-    -- tree pane (positioned with the bulk-button strip below).
-    local tab_x = L.EDGE
-    for _, scope in ipairs(SCOPES) do
-        set(W.widgets.scope_tabs[scope], tab_x, L.TOP_Y, L.TAB_W, L.TAB_H)
-        tab_x = tab_x + L.TAB_W + L.GAP
-    end
-
     local right_w = L.FORM_PANE_W
     local left_w  = math.max(60, w - 2 * L.EDGE - L.SPLIT_GUTTER - right_w)
     local right_x = L.EDGE + left_w + L.SPLIT_GUTTER
     local split_x = L.EDGE + left_w   -- splitter occupies the SPLIT_GUTTER strip
+
+    -- Row 0: scope tabs. Share left_w equally across the five tabs so the
+    -- strip stays anchored within the left (tree) pane and resizes with
+    -- the name-filter + tree when the splitter is dragged. Refresh moved
+    -- to the bottom-left of the tree pane (positioned with the bulk-
+    -- button strip below).
+    local n_tabs    = #SCOPES
+    local tab_gaps  = L.GAP * math.max(0, n_tabs - 1)
+    local tab_w     = math.max(1, math.floor((left_w - tab_gaps) / n_tabs))
+    local tab_x     = L.EDGE
+    for _, scope in ipairs(SCOPES) do
+        set(W.widgets.scope_tabs[scope], tab_x, L.TOP_Y, tab_w, L.TAB_H)
+        tab_x = tab_x + tab_w + L.GAP
+    end
 
     -- Row 1: name filter (left half).
     local row1_y = L.TOP_Y + L.TAB_H + L.GAP
