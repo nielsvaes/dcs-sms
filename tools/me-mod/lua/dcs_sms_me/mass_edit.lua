@@ -85,26 +85,27 @@ local W = {
     scope       = 'group',
     pool        = {},
     parent_map  = {},
-    checked     = { group = {}, unit = {}, waypoint = {}, zone = {}, drawing = {} },
+    checked     = { group = {}, unit = {}, waypoint = {}, zone = {}, drawing = {}, airbase = {} },
     -- Anchor entity (table reference) per scope -- the row a shift-click
     -- extends FROM. Set on every non-shift click; left untouched by
     -- shift-clicks so repeated extensions all originate from the same
     -- anchor (Explorer / GTK style).
-    anchor      = { group = nil, unit = nil, waypoint = nil, zone = nil, drawing = nil },
-    filters     = { group = {}, unit = {}, waypoint = {}, zone = {}, drawing = {} },
+    anchor      = { group = nil, unit = nil, waypoint = nil, zone = nil, drawing = nil, airbase = nil },
+    filters     = { group = {}, unit = {}, waypoint = {}, zone = {}, drawing = {}, airbase = {} },
     sort_state  = {
         group    = { key = 'name',  dir = 'asc' },
         unit     = { key = 'name',  dir = 'asc' },
         waypoint = { key = 'group', dir = 'asc' },
         zone     = { key = 'name',  dir = 'asc' },
         drawing  = { key = 'name',  dir = 'asc' },
+        airbase  = { key = 'name',  dir = 'asc' },
     },
-    form_panels = { group = {}, unit = {}, waypoint = {}, zone = {}, drawing = {} },
+    form_panels = { group = {}, unit = {}, waypoint = {}, zone = {}, drawing = {}, airbase = {} },
     -- Per-scope thin horizontal separator widgets (Static + dtc_separator
     -- skin) drawn between consecutive form panels. Length is always
     -- #form_panels[scope] - 1 (zero when the scope has 0 or 1 forms);
     -- shown/hidden along with the active scope's form stack.
-    form_separators = { group = {}, unit = {}, waypoint = {}, zone = {}, drawing = {} },
+    form_separators = { group = {}, unit = {}, waypoint = {}, zone = {}, drawing = {}, airbase = {} },
     -- entity → 'plane' | 'helicopter' | 'vehicle' | 'ship' | 'static' | 'unknown'
     -- Populated from selection.snapshot_mission(). Reads the Type column for
     -- the group treeview (the category lives at container-key level in the
@@ -132,7 +133,7 @@ local W = {
     _built = false,
 }
 
-local SCOPES = { 'group', 'unit', 'waypoint', 'zone', 'drawing' }
+local SCOPES = { 'group', 'unit', 'waypoint', 'zone', 'drawing', 'airbase' }
 
 -- Map a coalition side → dtc-coalition-skin name for the Coalition and
 -- Country cells in group scope. Unknown sides fall back to staticSkin_ME
@@ -352,6 +353,13 @@ local SCOPE_COLUMNS = {
         { key = 'check', label = '',      width = 28,  type = 'check'  },
         { key = 'name',  label = 'Name',  width = 280, type = 'string' },
         { key = 'layer', label = 'Layer', width = 120, type = 'string' },
+    },
+    airbase = {
+        { key = 'check',     label = '',          width = 28,  type = 'check'  },
+        { key = 'name',      label = 'Name',      width = 180, type = 'string' },
+        { key = 'coalition', label = 'Coalition', width = 80,  type = 'string' },
+        { key = 'north',     label = 'North',     width = 90,  type = 'number' },
+        { key = 'east',      label = 'East',      width = 90,  type = 'number' },
     },
 }
 
@@ -644,7 +652,23 @@ function M.rebuild_treeview()
                     -- echoes the colored marker the country ComboList already
                     -- shows on its ListBoxItem entries. Skin override has to
                     -- happen after make_cell's default staticSkin_ME apply.
-                    if cell and W.scope == 'group' and (c.key == 'country' or c.key == 'coalition') then
+                    if cell and c.key == 'coalition' then
+                        local side
+                        if W.scope == 'group' then
+                            side = W.country_to_side[r.entity.boss]
+                        elseif W.scope == 'airbase' then
+                            -- entry.coalition is 'red'/'blue'/'neutrals' from
+                            -- mission.AirportsEquipment. Normalise 'neutrals'
+                            -- to 'neutral' so it matches COALITION_CELL_SKIN's
+                            -- key set.
+                            local c_str = r.entity.coalition
+                            if     c_str == 'red'  then side = 'red'
+                            elseif c_str == 'blue' then side = 'blue'
+                            else                       side = 'neutral' end
+                        end
+                        local skin = side and COALITION_CELL_SKIN[side]
+                        if skin then skin_helper.apply(cell, skin) end
+                    elseif cell and W.scope == 'group' and c.key == 'country' then
                         local side = W.country_to_side[r.entity.boss]
                         local skin = COALITION_CELL_SKIN[side]
                         if skin then skin_helper.apply(cell, skin) end
@@ -672,6 +696,7 @@ end
 local SCOPE_LABEL = {
     group = 'Group', unit = 'Unit', waypoint = 'Waypoint',
     zone = 'Zone', drawing = 'Drawing',
+    airbase = 'Airbase',
 }
 
 -- ---------------------------------------------------------------------------
