@@ -268,10 +268,19 @@ end
 local _set_state_internal = false
 
 local function set_tab_state(tab, state)
-    if not (tab and tab.setState) then return end
-    _set_state_internal = true
-    pcall(tab.setState, tab, state and true or false)
-    _set_state_internal = false
+    if not tab then return end
+    local on = state and true or false
+    -- Skin-swap drives the visual: dxgui's ToggleButton renderer doesn't
+    -- pick a distinct visual for sticky-on, so a single skin can't
+    -- distinguish active/inactive when the mouse is off the tab. Active
+    -- tabs get dtc_tab (gold-on-cream every state); inactive get dtc_tab_off
+    -- (text-only every state).
+    skin_helper.apply(tab, on and 'dtc_tab' or 'dtc_tab_off')
+    if tab.setState then
+        _set_state_internal = true
+        pcall(tab.setState, tab, on)
+        _set_state_internal = false
+    end
 end
 
 local function on_scope_changed(new_scope)
@@ -841,7 +850,9 @@ local function make_scope_tab(scope_name, label, on_click)
     if not (ToggleButton and ToggleButton.new) then return nil end
     local ok, tab = pcall(ToggleButton.new)
     if not (ok and tab) then return nil end
-    skin_helper.apply(tab, 'dtc_tab')
+    -- Skin is applied by set_tab_state (called by the build_window seed
+    -- loop and on_scope_changed) based on the active/inactive state, so
+    -- we don't apply one here.
     if tab.setText then pcall(tab.setText, tab, label) end
     if tab.addChangeCallback then
         pcall(tab.addChangeCallback, tab, function(self)

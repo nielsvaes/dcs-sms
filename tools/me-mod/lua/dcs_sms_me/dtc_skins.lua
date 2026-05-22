@@ -228,61 +228,76 @@ function M.splitter()
 end
 
 -- ToggleButton skin for the Mass Edit window's scope tab strip
--- (Group/Unit/Waypoint/Zone/Drawing). Inactive tabs render as text only
--- against the panel background (no chrome). Active tabs fill with the same
--- teal as the grid's row selection color (0x2da1beff) so the tab strip
--- visually rhymes with selection elsewhere in the window. Hover state is
--- low-alpha teal so mouse-over offers a subtle preview without competing
--- with the active state.
-function M.tab()
-    local TEXT_FONT  = 'DejaVuLGCSansCondensed-Bold.ttf'
-    local TEXT_SIZE  = 12
-    local INSETS     = { bottom = 0, left = 0, right = 0, top = 0 }
-    local function text_layer(color)
-        return {
-            blur          = 0,
-            color         = color,
-            font          = TEXT_FONT,
-            fontSize      = TEXT_SIZE,
-            horzAlign     = { type = 'middle' },
-            vertAlign     = { type = 'middle' },
-            shadowOffset  = { horz = 0, vert = 0 },
-        }
+-- (Group/Unit/Waypoint/Zone/Drawing). Clones toggleButtonSkin_ME for the
+-- working 9-slice + chunky button image structure (a hand-rolled bkg with
+-- only center_center renders blank under the ToggleButton renderer — the
+-- 9 corner colors are tint multipliers ON the image, not solid fills).
+-- Then per-state recoloring: released tabs scale every bkg slice to
+-- transparent so the chrome disappears and only text remains; pressed
+-- (used by ToggleButton as the sticky-active visual) tints every slice
+-- to the grid's row-selection teal, giving the active tab a teal chunky-
+-- beveled fill that rhymes with selection elsewhere in the window.
+local TAB_BKG_SLICES = {
+    'left_top',    'center_top',    'right_top',
+    'left_center', 'center_center', 'right_center',
+    'left_bottom', 'center_bottom', 'right_bottom',
+}
+
+local function set_tab_bkg_tint(state, tint_hex)
+    if type(state) ~= 'table' then return end
+    for _, layer in pairs(state) do
+        if type(layer) == 'table' and type(layer.bkg) == 'table' then
+            for _, slice in ipairs(TAB_BKG_SLICES) do
+                layer.bkg[slice] = tint_hex
+            end
+        end
     end
-    return {
-        skinData = {
-            type   = 'ToggleButton',
-            states = {
-                released = {
-                    [1] = {
-                        bkg  = {},
-                        text = text_layer('0x9faab2ff'),
-                    },
-                },
-                hover = {
-                    [1] = {
-                        bkg = {
-                            center_center = '0x2da1be40',
-                            file          = '',
-                            insets        = INSETS,
-                        },
-                        text = text_layer('0xeeeeeeff'),
-                    },
-                },
-                pressed = {
-                    [1] = {
-                        bkg = {
-                            center_center = '0x2da1beff',
-                            file          = '',
-                            insets        = INSETS,
-                        },
-                        text = text_layer('0xffffffff'),
-                    },
-                },
-            },
-        },
-        version = 1,
-    }
+end
+
+local function set_tab_text_color(state, color_hex)
+    if type(state) ~= 'table' then return end
+    for _, layer in pairs(state) do
+        if type(layer) == 'table' and type(layer.text) == 'table' then
+            layer.text.color = color_hex
+        end
+    end
+end
+
+-- M.tab and M.tab_off are a skin-swap pair driven by set_tab_state in
+-- mass_edit.lua. dxgui's ToggleButton renderer doesn't pick a distinct
+-- visual for the sticky-on state — it always draws `released` unless the
+-- mouse is over (`hover`) or held down (`pressed`). So a single skin can't
+-- distinguish active-vs-inactive when the mouse isn't on the tab. We swap
+-- the skin instead: tab_off renders text-only on all states (inactive), tab
+-- renders chunky cream-button + gold text on all states (active), matching
+-- the gold-on-cream affordance Keep Num shows when sticky-ON.
+function M.tab()
+    local s = M.button()
+    if not (s and s.skinData and s.skinData.states) then return nil end
+    local states = s.skinData.states
+    -- Active: cream chunky bkg + gold text in every state. Leave the bkg
+    -- tint at the default 0xffffffff multiplier so the btnmean2 image
+    -- renders at full intensity; only repaint the text in the gold
+    -- (0xf7b940ff) that the base skin uses on pressed-layer-2.
+    set_tab_text_color(states.released, '0xf7b940ff')
+    set_tab_text_color(states.hover,    '0xf7b940ff')
+    set_tab_text_color(states.pressed,  '0xf7b940ff')
+    return s
+end
+
+function M.tab_off()
+    local s = M.button()
+    if not (s and s.skinData and s.skinData.states) then return nil end
+    local states = s.skinData.states
+    -- Inactive: zero alpha on the bkg tint in every state hides the chunky
+    -- button entirely; only the dim grey text remains.
+    set_tab_bkg_tint  (states.released, '0xffffff00')
+    set_tab_text_color(states.released, '0x9faab2ff')
+    set_tab_bkg_tint  (states.hover,    '0xf7b94040')
+    set_tab_text_color(states.hover,    '0xf7b940ff')
+    set_tab_bkg_tint  (states.pressed,  '0xffffff00')
+    set_tab_text_color(states.pressed,  '0x9faab2ff')
+    return s
 end
 
 -- ME's static-panel dial visual: clone dialSkin_ME and swap the picture
