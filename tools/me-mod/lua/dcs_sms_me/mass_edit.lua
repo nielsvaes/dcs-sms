@@ -274,6 +274,13 @@ end
 local function on_scope_changed(new_scope)
     if new_scope == W.scope then return end
     W.scope = new_scope
+    -- Walk every scope tab and update its toggle state so exactly one tab
+    -- is visually active (pressed/teal) at a time. set_tab_state is guarded
+    -- so these programmatic setState calls don't re-enter the change
+    -- callback we set up in make_scope_tab.
+    for scope, tab in pairs(W.widgets.scope_tabs) do
+        set_tab_state(tab, scope == new_scope)
+    end
     rebuild_pool()
     M._build_tree_widget()
     M.rebuild_treeview()
@@ -907,6 +914,9 @@ local function build_window()
             if tab.setBounds then pcall(tab.setBounds, tab, 8, 4, 140, 28) end
             pcall(raw.insertWidget, raw, tab)
             W.widgets.scope_tabs[scope] = tab
+            -- Seed the active state so the default scope (W.scope, set to
+            -- 'group' at module load) renders pressed/teal on first paint.
+            set_tab_state(tab, scope == W.scope)
         end
     end
 
