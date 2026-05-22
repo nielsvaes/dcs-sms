@@ -868,7 +868,7 @@ local function build_window()
 
     W.sms_window = sms_window.new({
         title    = 'Mass Edit  [loaded ' .. os.date('%H:%M:%S') .. ']',
-        size     = { w = 900, h = 600 },
+        size     = { w = 900, h = 621 },
         min_size = { w = 720, h = 500 },
         -- Compose default_on_undo with a list refresh so the user sees the
         -- restored values immediately after Ctrl+Z (instead of stale ones
