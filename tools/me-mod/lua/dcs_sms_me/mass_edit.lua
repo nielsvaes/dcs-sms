@@ -220,13 +220,12 @@ local function get_categories_for_active_scope()
     return W.categories or {}
 end
 
--- Called by forms after a successful apply. Refreshes the entity list,
--- updates scope counts, and plays whatever toast/severity the form
--- supplied. The host treats result.toast/result.sev as opaque strings —
--- each form decides its own wording so the host stays form-agnostic.
+-- Called by forms after a successful apply. Refreshes the entity list and
+-- plays whatever toast/severity the form supplied. The host treats
+-- result.toast/result.sev as opaque strings — each form decides its own
+-- wording so the host stays form-agnostic.
 local function on_after_apply(result)
     rebuild_pool()
-    M.update_scope_counts()
     M.rebuild_treeview()
     if result and result.toast and W.sms_window and W.sms_window.set_status then
         pcall(W.sms_window.set_status, W.sms_window, result.toast, result.sev or 'info')
@@ -300,7 +299,6 @@ end
 
 local function on_refresh_clicked()
     rebuild_pool()
-    M.update_scope_counts()
     M.rebuild_treeview()
 end
 
@@ -655,27 +653,13 @@ function M.rebuild_treeview()
 end
 
 -- ---------------------------------------------------------------------------
--- Scope counts label
+-- Scope labels (set once at tab construction; tabs no longer carry counts)
 -- ---------------------------------------------------------------------------
 
 local SCOPE_LABEL = {
     group = 'Group', unit = 'Unit', waypoint = 'Waypoint',
     zone = 'Zone', drawing = 'Drawing',
 }
-
-function M.update_scope_counts()
-    if not W.widgets.scope_tabs then return end
-    -- The count is interpolated into the tab's own text (no separate
-    -- label widget). Walk the scope_tabs map and rewrite each tab's
-    -- caption with the fresh count.
-    local counts = scope_pool_counts()
-    for scope, tab in pairs(W.widgets.scope_tabs) do
-        if tab and tab.setText then
-            local text = (SCOPE_LABEL[scope] or scope) .. ' · ' .. tostring(counts[scope] or 0)
-            pcall(tab.setText, tab, text)
-        end
-    end
-end
 
 -- ---------------------------------------------------------------------------
 -- Layout
@@ -900,7 +884,6 @@ local function build_window()
             sms_window.default_on_undo(swin)
             pcall(function()
                 rebuild_pool()
-                M.update_scope_counts()
                 M.rebuild_treeview()
             end)
         end,
@@ -1143,7 +1126,6 @@ function M.show()
     if not W.sms_window then return end
     if not W.widgets.tree then M._build_tree_widget() end
     rebuild_pool()
-    M.update_scope_counts()
     M.rebuild_treeview()
     show_forms_for_active_scope()
     update_map_buttons_visibility()
