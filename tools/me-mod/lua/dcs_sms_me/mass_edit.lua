@@ -435,6 +435,11 @@ local function row_values(scope, entity, group)
     elseif scope == 'drawing' then
         return { name = tostring(entity.name or ''),
                  layer = tostring((entity.layer and entity.layer.name) or '') }
+    elseif scope == 'airbase' then
+        return { name      = tostring(entity.name or ''),
+                 coalition = tostring(entity.coalition or ''),
+                 north     = tonumber(entity.north) or 0,
+                 east      = tonumber(entity.east) or 0 }
     end
     return {}
 end
