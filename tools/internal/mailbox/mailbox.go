@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/nielsvaes/dcs-sms/tools/internal/fileutil"
 	"github.com/nielsvaes/dcs-sms/tools/internal/proto"
 )
 
@@ -57,7 +58,10 @@ func (m *Mailbox) WriteRequest(req proto.ExecRequest) error {
 // discarding valid data.
 func (m *Mailbox) ReadResponse(id string) (proto.ExecResponse, bool, error) {
 	path := filepath.Join(m.Outbox(), id+".res.json")
-	data, err := os.ReadFile(path)
+	// Use ReadFileRetry so a transient Windows ERROR_SHARING_VIOLATION
+	// caused by the hook's WriteAtomic landing exactly when we open the
+	// file doesn't fail the poll. Retry budget is ~14 ms.
+	data, err := fileutil.ReadFileRetry(path)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
 			return proto.ExecResponse{}, false, nil
