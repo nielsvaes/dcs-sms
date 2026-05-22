@@ -26,6 +26,8 @@ local me_camera        = require('dcs_sms_me.me_camera')
 local me_group_focus   = require('dcs_sms_me.me_group_focus')
 local splitter_mod     = require('dcs_sms_me.splitter')
 local clearable_edit   = require('dcs_sms_me.clearable_edit')
+local marquee_hook     = require('dcs_sms_me.marquee_hook')
+local airbase_detect   = require('dcs_sms_me.airbase_detect')
 
 -- dxgui modules. pcall-required so the file still loads in test VMs.
 local Static;          do local ok, m = pcall(require, 'Static');         if ok then Static         = m end end
@@ -131,6 +133,7 @@ local W = {
         form_scroll  = nil,
     },
     _built = false,
+    marquee_subscribed = false,  -- reload-safe one-shot guard
 }
 
 local SCOPES = { 'group', 'unit', 'waypoint', 'zone', 'drawing', 'airbase' }
@@ -314,6 +317,41 @@ end
 local function on_refresh_clicked()
     rebuild_pool()
     M.rebuild_treeview()
+end
+
+local function install_airbase_marquee()
+    if W.marquee_subscribed then return end
+    -- marquee_hook.install is idempotent; calling here is safe even when
+    -- a previous Mass Edit window or the prefab_manager already installed.
+    pcall(marquee_hook.install)
+    marquee_hook.subscribe(function(start_xy, end_xy)
+        local hits = airbase_detect.airbases_in_rect(start_xy, end_xy)
+        if type(hits) ~= 'table' or #hits == 0 then return end
+        -- Ensure the airbase entry cache is populated so the by-id lookup
+        -- below finds rows. snapshot_airbases_now is a no-op if already
+        -- populated by a recent snapshot_mission('airbase') call; either
+        -- way it returns a pool we can fall back to for name-only matches.
+        local pool = selection._snapshot_airbases_now and selection._snapshot_airbases_now() or {}
+        local by_name = {}
+        for _, e in ipairs(pool) do by_name[e.name] = e end
+
+        local changed = false
+        for _, hit in ipairs(hits) do
+            local entry = nil
+            if hit.airdrome_number_at_save and selection.airbase_entry_by_id then
+                entry = selection.airbase_entry_by_id(hit.airdrome_number_at_save)
+            end
+            if not entry then entry = by_name[hit.name] end
+            if entry then
+                W.checked.airbase[entry] = true
+                changed = true
+            end
+        end
+        if changed and W.scope == 'airbase' and M.rebuild_treeview then
+            pcall(M.rebuild_treeview)
+        end
+    end)
+    W.marquee_subscribed = true
 end
 
 -- ---------------------------------------------------------------------------
@@ -1151,6 +1189,7 @@ end
 function M.show()
     build_window()
     if not W.sms_window then return end
+    pcall(install_airbase_marquee)
     if not W.widgets.tree then M._build_tree_widget() end
     rebuild_pool()
     M.rebuild_treeview()
@@ -1177,5 +1216,11 @@ M._W                  = W
 M._rebuild_pool       = rebuild_pool
 M._on_scope_changed   = on_scope_changed
 M._on_refresh_clicked = on_refresh_clicked
+
+-- Test seams: invoked only by test_mass_edit_airbase_marquee.lua. These
+-- have no consumer in production code.
+M._reset_checked_airbase = function() W.checked.airbase = {} end
+M._install_airbase_marquee_for_test = install_airbase_marquee
+M._get_checked_airbase = function() return W.checked.airbase end
 
 return M
