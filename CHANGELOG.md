@@ -105,10 +105,13 @@ This is the first tag after a long quiet period — `sms.version` had been froze
 
 ## ME-mod
 
-### [0.11.0] — 2026-05-21
+### [0.11.0] — 2026-05-22
 
 **Added**
 - New `dcs-sms dev-reload` subcommand (CLI only, not in the interactive menu): contributor convenience verb that chains `go build ./cmd/dcs-sms` + `install-me-mod` + `reload-me-mod` into one command. Run from anywhere inside the dcs-sms checkout. Replaces the three-command manual iteration recipe in `tools/me-mod/AGENTS.md` §2.3. Closes [#63](https://github.com/nielsvaes/dcs-sms/issues/63).
+
+**Fixed**
+- Flaky exec tests on Windows that intermittently failed with `ERROR_SHARING_VIOLATION` when a reader opened a file that a writer was atomically renaming. New `tools/internal/fileutil.ReadFileRetry` retries reads up to 4 times (2/4/8 ms backoff) on the sharing-violation errno; plumbed into `hookstatus.readOne` (state/hook.json + state/me.json) and `mailbox.ReadResponse` (outbox/*.res.json). Failure rate measured: ~40% → ~0% across 115 test runs.
 
 ### [0.10.0] — 2026-05-18
 
