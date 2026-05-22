@@ -34,6 +34,7 @@ local GridHeaderCell;  do local ok, m = pcall(require, 'GridHeaderCell'); if ok 
 local CheckBox;        do local ok, m = pcall(require, 'CheckBox');       if ok then CheckBox       = m end end
 local EditBox;         do local ok, m = pcall(require, 'EditBox');        if ok then EditBox        = m end end
 local Button;          do local ok, m = pcall(require, 'Button');         if ok then Button         = m end end
+local ToggleButton;    do local ok, m = pcall(require, 'ToggleButton');   if ok then ToggleButton   = m end end
 local ScrollPane;      do local ok, m = pcall(require, 'ScrollPane');     if ok then ScrollPane     = m end end
 
 -- dxgui module: lets us query live keyboard state during a click handler so
@@ -836,29 +837,39 @@ M._relayout = relayout
 -- Window construction
 -- ---------------------------------------------------------------------------
 
-local function make_scope_tab(scope_name, label, count_str, on_click)
-    local ok_dl, DialogLoader = pcall(require, 'DialogLoader')
-    local tab = nil
-    if ok_dl and DialogLoader and DialogLoader.spawnDialogFromString then
-        local raw_xml = [[
-<Static name="tab" type="Static">
-  <skin>staticSkin_ME</skin>
-  <bounds x="0" y="0" w="120" h="32"/>
-</Static>
-]]
-        local ok2, dialog = pcall(DialogLoader.spawnDialogFromString, raw_xml)
-        if ok2 and dialog then tab = dialog.tab end
-    end
-    if not tab and Static and Static.new then
-        local ok3, s = pcall(Static.new)
-        if ok3 then tab = s end
-    end
-    if not tab then return nil end
-    if tab.setText then pcall(tab.setText, tab, label .. ' · ' .. count_str) end
-    if tab.addMouseDownCallback then
-        pcall(tab.addMouseDownCallback, tab, function() on_click(scope_name) end)
-    elseif tab.addMouseUpCallback then
-        pcall(tab.addMouseUpCallback, tab, function() on_click(scope_name) end)
+-- Module-level recursion guard. When on_scope_changed programmatically
+-- updates a tab's state via setState, the change-callback fires for each
+-- updated tab; checking this flag at the top of the callback short-circuits
+-- those echo-fires so the handler doesn't reenter.
+local _set_state_internal = false
+
+local function set_tab_state(tab, state)
+    if not (tab and tab.setState) then return end
+    _set_state_internal = true
+    pcall(tab.setState, tab, state and true or false)
+    _set_state_internal = false
+end
+
+local function make_scope_tab(scope_name, label, on_click)
+    if not (ToggleButton and ToggleButton.new) then return nil end
+    local ok, tab = pcall(ToggleButton.new)
+    if not (ok and tab) then return nil end
+    skin_helper.apply(tab, 'dtc_tab')
+    if tab.setText then pcall(tab.setText, tab, label) end
+    if tab.addChangeCallback then
+        pcall(tab.addChangeCallback, tab, function(self)
+            if _set_state_internal then return end
+            local on = self.getState and self:getState() == true
+            if on then
+                on_click(scope_name)
+            else
+                -- User clicked the already-active tab: ToggleButton's
+                -- default would toggle off, leaving no scope selected.
+                -- Re-assert active state so there's always exactly one
+                -- selected scope.
+                set_tab_state(self, true)
+            end
+        end)
     end
     return tab
 end
@@ -891,7 +902,7 @@ local function build_window()
 
     -- Scope tabs.
     for _, scope in ipairs(SCOPES) do
-        local tab = make_scope_tab(scope, SCOPE_LABEL[scope], '0', on_scope_changed)
+        local tab = make_scope_tab(scope, SCOPE_LABEL[scope], on_scope_changed)
         if tab then
             if tab.setBounds then pcall(tab.setBounds, tab, 8, 4, 140, 28) end
             pcall(raw.insertWidget, raw, tab)
