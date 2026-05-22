@@ -975,6 +975,13 @@ local function build_window()
             -- Seed the active state so the default scope (W.scope, set to
             -- 'group' at module load) renders pressed/teal on first paint.
             set_tab_state(tab, scope == W.scope)
+            -- Airbase scope is the only scope where marquee-drag-on-F10
+            -- bulk-checks rows; advertise the trick via a tooltip since
+            -- it's otherwise invisible from this UI.
+            if scope == 'airbase' and tab.setTooltipText then
+                pcall(tab.setTooltipText, tab,
+                    'Tip: drag on the F10 map to bulk-check airbases.')
+            end
         end
     end
 

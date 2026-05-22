@@ -153,6 +153,15 @@ reachable regardless of window height.
 
 - [ ] **Scope tab strip:** Opening the Mass Edit window shows the five scope tabs (Group / Unit / Waypoint / Zone / Drawing) anchored to the left pane and equally sharing its width. The currently-mounted scope has a filled teal background and white text; the other four read as dim grey text on the panel background with no chrome. Clicking an inactive tab switches scope and the teal moves to the clicked tab; clicking the already-active tab does nothing visible.
 
+### Airbase scope (v0.10.0+)
+
+- [ ] **Airbase tab lists all airbases.** Clicking the Airbase scope tab populates the treeview with every map airfield in the mission, with columns Name / Coalition (tinted red/blue/yellow) / North / East. Sorting by clicking any column header works as on other scopes.
+- [ ] **Marquee drag on F10 map bulk-checks.** With the Mass Edit window open (any scope), drag a rectangle on the F10 map covering several airbases. Switch to the Airbase scope — the airbases inside the rectangle are checked. Drawing a second rectangle UNIONS more airbases into the checked set rather than replacing.
+- [ ] **Set Coalition form.** Pick a coalition in the combo, click Set — every checked airbase flips coalition; the F10 map color updates immediately. Undo (Ctrl+Z) restores prior per-airbase coalitions.
+- [ ] **Set Warehouse form (tri-state).** Leave all three tri-states at LEAVE and click Apply — a "no categories selected" warning appears. Set Aircraft=ON (unlimited) and click Apply — every checked airbase's `unlimitedAircrafts` flag flips true. Set Equipment=OFF (empty) and click Apply — the airbases' weapon pool counts zero out. Undo restores prior warehouse state.
+- [ ] **Export/Import warehouse.** Check exactly one airbase, type a name like "Cold War Loadout", click Save — file appears in `<Saved Games>\DCS\dcs-sms\airbase-warehouses\<name>.lua`. Check several other airbases, pick the saved entry in the Saved combo, click Apply — the loaded warehouse splats onto every checked airbase. Click Delete — the file is removed and the combo refreshes.
+- [ ] **Resource Manager refresh gotcha.** If DCS's Resource Manager dialog is open while Apply runs in the Set Warehouse form, the dialog's spinboxes / counts won't auto-refresh; closing + reopening the dialog shows the new values. This is a known DCS limitation, not a Mass Edit bug.
+
 ### Rename groups
 
 - [ ] The Rename groups form is the topmost form in the Group scope's right pane.

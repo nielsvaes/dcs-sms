@@ -17,6 +17,9 @@ local add_suffix_group_name   = require('dcs_sms_me.mass_edit_forms.add_suffix_g
 local auto_name_units_group   = require('dcs_sms_me.mass_edit_forms.auto_name_units_group')
 local set_country             = require('dcs_sms_me.mass_edit_forms.set_country')
 local toggle_group_flags      = require('dcs_sms_me.mass_edit_forms.toggle_group_flags')
+local set_coalition_airbase             = require('dcs_sms_me.mass_edit_forms.set_coalition_airbase')
+local set_warehouse_airbase             = require('dcs_sms_me.mass_edit_forms.set_warehouse_airbase')
+local export_import_warehouse_airbase   = require('dcs_sms_me.mass_edit_forms.export_import_warehouse_airbase')
 
 M.by_scope = {
     -- Name-mutating forms first. rename_group + auto_name_units sit next
@@ -38,6 +41,11 @@ M.by_scope = {
     waypoint = {},
     zone     = {},
     drawing  = {},
+    airbase  = {
+        set_coalition_airbase,
+        set_warehouse_airbase,
+        export_import_warehouse_airbase,
+    },
 }
 
 function M.forms_for(scope)
