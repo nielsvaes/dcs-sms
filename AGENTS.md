@@ -22,7 +22,7 @@ This file carries only the cross-cutting rules that apply to all three. Per-sub-
 
 - **`framework/`** — in-DCS Lua scripting framework. Runs inside the mission environment. One file per `sms.*` module. See `framework/AGENTS.md`.
 - **`tools/cmd/dcs-sms/`** — Go source for `dcs-sms.exe`. Installs the hook + ME-mod, drives running missions and the Mission Editor via the filesystem mailbox. See `tools/cmd/dcs-sms/AGENTS.md`.
-- **`tools/me-mod/`** — Lua source for the Mission Editor extension. Hosts the Prefab Manager UI and `verbs.lua` (the ME-side dispatch for `dcs-sms me <noun> <verb>`). Embedded into `dcs-sms.exe` via `go:embed`. See `tools/me-mod/AGENTS.md`.
+- **`tools/me-mod/`** — Lua source for the Mission Editor extension. Hosts the Prefab Manager UI and the `verbs/` tree (the ME-side dispatch for `dcs-sms me <noun> <verb>`, aggregated through `verbs.lua`). Embedded into `dcs-sms.exe` via `go:embed`. See `tools/me-mod/AGENTS.md`.
 - **`tools/lua/dcs-sms-hook.lua`** — the `Scripts/Hooks` Lua. Runs in DCS's unsandboxed hook environment. Polls the mailbox; executes `target=mission` requests during a running sim.
 - **`tools/internal/`** — Go internal packages (`mailbox`, `hookstatus`, `proto`, `aiskill`, `dcspath`).
 - **`docs/api/`** — per-module framework reference. Hand-authored. Load-bearing for users.

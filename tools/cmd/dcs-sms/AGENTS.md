@@ -13,7 +13,7 @@ Contributor doc for the Go source under `tools/cmd/dcs-sms/`. The build produces
 You're adding, modifying, or fixing one of:
 
 - A **top-level subcommand** (`dcs-sms exec`, `dcs-sms status`, `dcs-sms install-hook`, `dcs-sms install-me-mod`, `dcs-sms update`, `dcs-sms screenshot`, `dcs-sms doc`, `dcs-sms gen-units`, `dcs-sms install-ai-skill` / `uninstall-ai-skill`, `dcs-sms tail-log`).
-- A **`me <noun> <verb>`** verb (the Go half). The Lua half lives in `tools/me-mod/lua/dcs_sms_me/verbs.lua` and is documented in [`../me-mod/AGENTS.md`](../me-mod/AGENTS.md).
+- A **`me <noun> <verb>`** verb (the Go half). The Lua half lives in `tools/me-mod/lua/dcs_sms_me/verbs/<noun>_verbs.lua` (aggregated through `verbs.lua`) and is documented in [`../me-mod/AGENTS.md`](../me-mod/AGENTS.md).
 - The **mailbox / bridge protocol** (`tools/internal/mailbox`, `tools/internal/proto`, `tools/internal/hookstatus`).
 - The **installer logic** (`install_me_mod.go`, `installhook.go`, `install_ai_skill.go`, `update.go`).
 - The **interactive menu** that runs when the .exe is double-clicked (`menu.go`).
@@ -194,7 +194,7 @@ log/                   — bridge-side logs
 
 ## 6. Authoring a `me <noun> <verb>` — Go half
 
-Every `me <noun> <verb>` command is a two-file pair: a Go file here (the CLI surface, flag parsing, doc autogen entry) and a Lua function in `tools/me-mod/lua/dcs_sms_me/verbs.lua` (the actual ME-side work).
+Every `me <noun> <verb>` command is a two-file pair: a Go file here (the CLI surface, flag parsing, doc autogen entry) and a Lua function in `tools/me-mod/lua/dcs_sms_me/verbs/<noun>_verbs.lua` (the actual ME-side work; the `verbs.lua` aggregator surfaces every noun file's exports under a single `verbs.<name>` table).
 
 ### Template (Go side)
 
@@ -281,7 +281,7 @@ Each verb pair gets a `_test.go` file that exercises flag parsing and the args-t
 
 ### Don't forget the Lua half
 
-Adding a Go file alone won't work. The Lua function must exist in `tools/me-mod/lua/dcs_sms_me/verbs.lua` with the matching snake_case name (`widget_set_foo`). See [`../me-mod/AGENTS.md`](../me-mod/AGENTS.md) for the Lua-side authoring guide.
+Adding a Go file alone won't work. The Lua function must exist in `tools/me-mod/lua/dcs_sms_me/verbs/<noun>_verbs.lua` with the matching snake_case name (`widget_set_foo`); the aggregator merges it into the `verbs.<name>` namespace the bridge dispatches against. See [`../me-mod/AGENTS.md`](../me-mod/AGENTS.md) for the Lua-side authoring guide.
 
 ### Regenerate docs
 
