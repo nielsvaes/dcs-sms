@@ -8,10 +8,11 @@
 local lfs = require('lfs')
 local M = {}
 
-M.ROOT        = lfs.writedir() .. 'dcs-sms\\'
-M.OUTBOX_DIR  = M.ROOT .. 'me\\'
-M.PREFABS_DIR = M.ROOT .. 'prefabs\\'
-M.LOG_TAG     = 'sms.me'
+M.ROOT           = lfs.writedir() .. 'dcs-sms\\'
+M.OUTBOX_DIR     = M.ROOT .. 'me\\'
+M.PREFABS_DIR    = M.ROOT .. 'prefabs\\'
+M.WAREHOUSES_DIR = M.ROOT .. 'airbase-warehouses\\'
+M.LOG_TAG        = 'sms.me'
 
 -- Translate an in-memory folder string ('', 'CAP', 'CAP/Tomcats') into
 -- an absolute filesystem path ending in '\'. '/' is the canonical
@@ -34,6 +35,11 @@ end
 function M.ensure_prefabs()
     lfs.mkdir(M.ROOT)
     lfs.mkdir(M.PREFABS_DIR)
+end
+
+function M.ensure_warehouses()
+    lfs.mkdir(M.ROOT)
+    lfs.mkdir(M.WAREHOUSES_DIR)
 end
 
 -- mkdir every segment of an in-memory folder path top-down, starting from
