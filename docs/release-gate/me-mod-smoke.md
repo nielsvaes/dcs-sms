@@ -149,6 +149,10 @@ reachable regardless of window height.
       (If gaps appear, hidden forms still contribute to the pane's
       content height — file as a follow-up.)
 
+### Scope tab strip (v0.10.0+)
+
+- [ ] **Scope tab strip:** Opening the Mass Edit window shows the five scope tabs (Group / Unit / Waypoint / Zone / Drawing) anchored to the left pane and equally sharing its width. The currently-mounted scope has a filled teal background and white text; the other four read as dim grey text on the panel background with no chrome. Clicking an inactive tab switches scope and the teal moves to the clicked tab; clicking the already-active tab does nothing visible.
+
 ### Rename groups
 
 - [ ] The Rename groups form is the topmost form in the Group scope's right pane.
