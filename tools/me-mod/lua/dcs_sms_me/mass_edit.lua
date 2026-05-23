@@ -28,6 +28,7 @@ local splitter_mod     = require('dcs_sms_me.splitter')
 local clearable_edit   = require('dcs_sms_me.clearable_edit')
 local marquee_hook     = require('dcs_sms_me.marquee_hook')
 local airbase_detect   = require('dcs_sms_me.airbase_detect')
+local applicability    = require('dcs_sms_me.applicability')
 
 -- dxgui modules. pcall-required so the file still loads in test VMs.
 local Static;          do local ok, m = pcall(require, 'Static');         if ok then Static         = m end end
@@ -214,6 +215,23 @@ local function get_categories_for_active_scope()
     return W.categories or {}
 end
 
+-- Recompute per-form gating based on the active scope's checked set.
+-- Calls panel:set_enabled(applicable > 0) on every panel in the active
+-- scope. Panels without set_enabled (the airbase / group forms) are
+-- left untouched — only unit-scope panels implement gating today.
+local function recompute_form_gating()
+    local panels = W.form_panels[W.scope] or {}
+    if #panels == 0 then return end
+    local checked = get_checked_for_active_scope()
+    local cats    = get_categories_for_active_scope()
+    for _, panel in ipairs(panels) do
+        if panel.set_enabled then
+            local applicable = applicability.compute(panel._applies_to, checked, cats)
+            pcall(panel.set_enabled, panel, applicable > 0)
+        end
+    end
+end
+
 -- Called by forms after a successful apply. Refreshes the entity list and
 -- plays whatever toast/severity the form supplied. The host treats
 -- result.toast/result.sev as opaque strings — each form decides its own
@@ -224,6 +242,7 @@ local function on_after_apply(result)
     if result and result.toast and W.sms_window and W.sms_window.set_status then
         pcall(W.sms_window.set_status, W.sms_window, result.toast, result.sev or 'info')
     end
+    recompute_form_gating()
 end
 
 local function show_forms_for_active_scope()
@@ -253,6 +272,7 @@ local function show_forms_for_active_scope()
             if sep.setVisible then pcall(sep.setVisible, sep, true) end
         end
     end
+    recompute_form_gating()
 end
 
 local function update_map_buttons_visibility()
@@ -353,6 +373,7 @@ local function install_airbase_marquee()
         end
         if changed and W.scope == 'airbase' and M.rebuild_treeview then
             pcall(M.rebuild_treeview)
+            recompute_form_gating()
         end
     end)
 end
@@ -575,6 +596,7 @@ local function build_tree_widget()
                     if e then scope_checked[e] = target_state or nil end
                 end
                 M.rebuild_treeview()
+                recompute_form_gating()
             else
                 -- Plain click on a row body: mirror the vanilla ME Unit
                 -- List behavior — single-select the entity's group on
@@ -685,6 +707,7 @@ function M.rebuild_treeview()
                                         if e then W.checked[W.scope][e] = target_state or nil end
                                     end
                                     M.rebuild_treeview()
+                                    recompute_form_gating()
                                     return
                                 end
                             end
@@ -694,6 +717,7 @@ function M.rebuild_treeview()
                             -- click extends from here.
                             W.checked[W.scope][entity] = state or nil
                             W.anchor[W.scope] = entity
+                            recompute_form_gating()
                         end)
                     end
                     pcall(grid.setCell, grid, col_idx - 1, row_idx, cb)
@@ -1037,6 +1061,7 @@ local function build_window()
         pcall(function()
             for_each_visible(function(e) W.checked[W.scope][e] = true end)
             M.rebuild_treeview()
+            recompute_form_gating()
         end)
     end
 
@@ -1046,6 +1071,7 @@ local function build_window()
                 W.checked[W.scope][e] = (W.checked[W.scope][e] ~= true) or nil
             end)
             M.rebuild_treeview()
+            recompute_form_gating()
         end)
     end
 
@@ -1054,6 +1080,7 @@ local function build_window()
             W.checked[W.scope] = {}
             W.anchor[W.scope] = nil
             M.rebuild_treeview()
+            recompute_form_gating()
         end)
     end
 
@@ -1172,6 +1199,7 @@ local function build_window()
         for _, form_module in ipairs(mass_forms.forms_for(scope)) do
             local panel = form_module.new(form_parent, get_checked_for_active_scope, on_after_apply, get_categories_for_active_scope)
             if panel then
+                panel._applies_to = form_module.applies_to   -- nil for universal forms
                 panels[#panels + 1] = panel
                 if panel.hide then panel:hide() end
             end
