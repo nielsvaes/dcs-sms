@@ -94,6 +94,18 @@ me_parking_stub.stands = {
               params = { FOR_AIRPLANES = 1, FOR_HELICOPTERS = 0,
                          WIDTH = 5, LENGTH = 5 } },
 }
+function me_parking_stub.setAirGroupOnAirport(g, x, y)
+    me_parking_stub.setAirGroupOnAirport_calls = (me_parking_stub.setAirGroupOnAirport_calls or 0) + 1
+    -- Move every unit to (x, y) to mimic the real ME's parking placement.
+    for _, u in ipairs(g.units or {}) do u.x = x; u.y = y end
+    return true
+end
+function me_parking_stub.setAirGroupOnAirportRunway(g, x, y)
+    me_parking_stub.setAirGroupOnAirportRunway_calls =
+        (me_parking_stub.setAirGroupOnAirportRunway_calls or 0) + 1
+    for _, u in ipairs(g.units or {}) do u.x = x; u.y = y end
+    return true
+end
 function me_parking_stub.getStandList(_roadnet) return me_parking_stub.stands end
 function me_parking_stub.getRightParkingAirport(stands, _g)
     -- Simulate ME's size filter: drop 'tiny'.
@@ -808,6 +820,103 @@ local function test_parking_arg_validation()
 end
 
 -- ============================================================
+-- waypoint_link_airbase (lives in route_verbs.lua, tested here
+-- because the airbase + parking stubs are already wired up)
+-- ============================================================
+
+local function _setup_plane_with_route(name, wp_type)
+    mock.new_mission()
+    local g = mock.add_plane({ name = name, unit_type = 'F-16C_50' })
+    g.units[1].type = 'F-16C_50'
+    g.route.points[1].type = wp_type or 'Turning Point'
+    return g
+end
+
+local function test_link_airbase_happy_turning_point()
+    local g = _setup_plane_with_route('LA1', 'Turning Point')
+    local r = verbs.waypoint_link_airbase({
+        name = g.name, index = 0, airbase = 'Anapa' })
+    assert_true(r.ok, 'link_airbase TP: ok')
+    assert_eq(r.airbase, 'Anapa-Vityazevo', 'link_airbase: full airbase name')
+    assert_eq(r.airdromeId, 12, 'link_airbase: airdromeId set')
+    assert_eq(g.route.points[1].airdromeId, 12, 'link_airbase: stored on WP')
+    assert_eq(g.route.points[1].x, 12345, 'link_airbase: WP x = airdrome.x')
+    assert_eq(g.route.points[1].y, 67890, 'link_airbase: WP y = airdrome.y')
+    -- Turning Point: no parking-positioning call
+    assert_eq(r.units_positioned, false, 'link_airbase TP: units NOT positioned')
+end
+
+local function test_link_airbase_takeoff_parking()
+    me_parking_stub.setAirGroupOnAirport_calls = 0
+    local g = _setup_plane_with_route('LA2', 'TakeOffParking')
+    local r = verbs.waypoint_link_airbase({
+        name = g.name, index = 0, airbase = 'Anapa' })
+    assert_true(r.ok, 'link_airbase TakeOffParking: ok')
+    assert_eq(r.units_positioned, true, 'link_airbase TakeOffParking: positioned')
+    assert_eq(me_parking_stub.setAirGroupOnAirport_calls, 1,
+              'link_airbase: setAirGroupOnAirport called')
+end
+
+local function test_link_airbase_takeoff_runway()
+    me_parking_stub.setAirGroupOnAirportRunway_calls = 0
+    local g = _setup_plane_with_route('LA3', 'TakeOff')
+    local r = verbs.waypoint_link_airbase({
+        name = g.name, index = 0, airbase = 'Anapa' })
+    assert_true(r.ok, 'link_airbase TakeOff: ok')
+    assert_eq(me_parking_stub.setAirGroupOnAirportRunway_calls, 1,
+              'link_airbase TakeOff: runway-positioning called')
+end
+
+local function test_link_airbase_clears_conflicting_linkage()
+    local g = _setup_plane_with_route('LA4', 'TakeOff')
+    g.route.points[1].helipadId = 99
+    g.route.points[1].grassAirfieldId = 88
+    local r = verbs.waypoint_link_airbase({
+        name = g.name, index = 0, airbase = 'Anapa' })
+    assert_true(r.ok, 'link_airbase clears: ok')
+    assert_eq(g.route.points[1].helipadId, nil,
+              'link_airbase: helipadId cleared')
+    assert_eq(g.route.points[1].grassAirfieldId, nil,
+              'link_airbase: grassAirfieldId cleared')
+end
+
+local function test_link_airbase_unknown_airbase()
+    local g = _setup_plane_with_route('LA5')
+    local r = verbs.waypoint_link_airbase({
+        name = g.name, index = 0, airbase = 'Nowhere' })
+    assert_false(r.ok, 'link_airbase unknown airbase: refused')
+    assert_contains(r.error, 'no airbase', 'link_airbase: error msg')
+end
+
+local function test_link_airbase_unknown_group()
+    mock.new_mission()
+    local r = verbs.waypoint_link_airbase({
+        name = 'ghost', index = 0, airbase = 'Anapa' })
+    assert_false(r.ok, 'link_airbase unknown group: refused')
+end
+
+local function test_link_airbase_oob_index()
+    local g = _setup_plane_with_route('LA6')
+    local r = verbs.waypoint_link_airbase({
+        name = g.name, index = 99, airbase = 'Anapa' })
+    assert_false(r.ok, 'link_airbase oob index: refused')
+end
+
+local function test_link_airbase_arg_validation()
+    mock.new_mission()
+    assert_false(verbs.waypoint_link_airbase(nil).ok, 'link_airbase: nil')
+    assert_false(verbs.waypoint_link_airbase({}).ok, 'link_airbase: empty')
+    assert_false(verbs.waypoint_link_airbase({ name = 'x', id = 1, index = 0, airbase = 'A' }).ok,
+                 'link_airbase: both selectors')
+    assert_false(verbs.waypoint_link_airbase({ name = 'x', airbase = 'A' }).ok,
+                 'link_airbase: missing index')
+    assert_false(verbs.waypoint_link_airbase({ name = 'x', index = 0 }).ok,
+                 'link_airbase: missing airbase')
+    assert_false(verbs.waypoint_link_airbase({ name = 'x', index = 0, airbase = '' }).ok,
+                 'link_airbase: empty airbase')
+end
+
+-- ============================================================
 -- Test runner
 -- ============================================================
 
@@ -878,6 +987,14 @@ local tests = {
     test_parking_wrong_category_helo_on_plane_stand,
     test_parking_too_small,
     test_parking_arg_validation,
+    test_link_airbase_happy_turning_point,
+    test_link_airbase_takeoff_parking,
+    test_link_airbase_takeoff_runway,
+    test_link_airbase_clears_conflicting_linkage,
+    test_link_airbase_unknown_airbase,
+    test_link_airbase_unknown_group,
+    test_link_airbase_oob_index,
+    test_link_airbase_arg_validation,
 }
 
 for _, t in ipairs(tests) do t() end

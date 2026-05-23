@@ -585,6 +585,28 @@ local function test_remove_action_happy()
     assert_eq(r.remaining, 0, 'remove_action: 0 remaining')
 end
 
+local function test_remove_action_oob()
+    reset()
+    verbs.trigger_create({ type = 'once', name = 'RA2' })
+    local r = verbs.trigger_remove_action({ trigger = 'RA2', index = 1 })
+    assert_false(r.ok, 'remove_action oob: refused')
+    assert_contains(r.error, 'only 0', 'remove_action: error msg')
+end
+
+local function test_remove_action_arg_validation()
+    reset()
+    assert_false(verbs.trigger_remove_action({}).ok, 'remove_action: empty')
+    assert_false(verbs.trigger_remove_action({ trigger = 'X' }).ok,
+                 'remove_action: missing index')
+    assert_false(verbs.trigger_remove_action({ trigger = 'X', index = 0 }).ok,
+                 'remove_action: zero index')
+    assert_false(verbs.trigger_remove_action({ index = 1 }).ok,
+                 'remove_action: missing trigger')
+    -- Unknown trigger
+    local r = verbs.trigger_remove_action({ trigger = 'ghost', index = 1 })
+    assert_false(r.ok, 'remove_action: unknown trigger')
+end
+
 -- ============================================================
 -- trigger_reorder
 -- ============================================================
@@ -697,6 +719,34 @@ local function test_reorder_action_happy()
     assert_true(r.moved, 'reorder_action: moved')
 end
 
+local function test_reorder_action_oob_source()
+    reset()
+    verbs.trigger_create({ type = 'once', name = 'RA2' })
+    verbs.trigger_add_action({ trigger = 'RA2', predicate = 'set-flag', fields = { flag = 1, value = 1 } })
+    local r = verbs.trigger_reorder_action({ trigger = 'RA2', index = 5, to_index = 1 })
+    assert_false(r.ok, 'reorder_action source oob: refused')
+end
+
+local function test_reorder_action_arg_validation()
+    reset()
+    verbs.trigger_create({ type = 'once', name = 'RA3' })
+    verbs.trigger_add_action({ trigger = 'RA3', predicate = 'set-flag', fields = { flag = 1, value = 1 } })
+    verbs.trigger_add_action({ trigger = 'RA3', predicate = 'set-flag', fields = { flag = 2, value = 1 } })
+    -- Missing trigger
+    assert_false(verbs.trigger_reorder_action({ index = 1, to_start = true }).ok,
+                 'reorder_action: missing trigger')
+    -- Missing index
+    assert_false(verbs.trigger_reorder_action({ trigger = 'RA3', to_start = true }).ok,
+                 'reorder_action: missing index')
+    -- No position flag
+    assert_false(verbs.trigger_reorder_action({ trigger = 'RA3', index = 1 }).ok,
+                 'reorder_action: missing position flag')
+    -- Multiple position flags
+    assert_false(verbs.trigger_reorder_action({
+        trigger = 'RA3', index = 1, to_index = 2, to_start = true }).ok,
+        'reorder_action: multiple position flags')
+end
+
 -- ============================================================
 -- Test runner
 -- ============================================================
@@ -736,6 +786,8 @@ local tests = {
     test_add_action_do_script_skips_dict,
     test_add_action_group_ref,
     test_remove_action_happy,
+    test_remove_action_oob,
+    test_remove_action_arg_validation,
     test_reorder_to_index,
     test_reorder_before_anchor,
     test_reorder_after_anchor,
@@ -745,6 +797,8 @@ local tests = {
     test_reorder_condition_happy,
     test_reorder_condition_oob,
     test_reorder_action_happy,
+    test_reorder_action_oob_source,
+    test_reorder_action_arg_validation,
 }
 
 for _, t in ipairs(tests) do t() end

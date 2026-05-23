@@ -150,7 +150,12 @@ local function add_group(category, side, country_name, opts)
         groupId = opts.groupId or next_group_id(),
         x = opts.x or 0, y = opts.y or 0,
         units = opts.units or {
-            { unitId = next_group_id(), name = (opts.name or category) .. '-1',
+            -- Use the unit-ID counter (separate from group-ID per real ME).
+            -- Mixing them was a latent mock fidelity gap caught in review.
+            { unitId = (M._next_unit_id and (function()
+                  local id = M._next_unit_id; M._next_unit_id = id + 1; return id
+              end)()) or next_group_id(),
+              name = (opts.name or category) .. '-1',
               type = opts.unit_type or category, x = opts.x or 0, y = opts.y or 0 },
         },
         route = opts.route or {
