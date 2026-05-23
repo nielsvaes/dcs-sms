@@ -371,11 +371,13 @@ local SCOPE_COLUMNS = {
         { key = 'units',     label = '# Units',   width = 50,  type = 'number' },
     },
     unit = {
-        { key = 'check', label = '',      width = 28,  type = 'check'  },
-        { key = 'name',  label = 'Name',  width = 160, type = 'string' },
-        { key = 'type',  label = 'Type',  width = 110, type = 'string' },
-        { key = 'skill', label = 'Skill', width = 75,  type = 'string' },
-        { key = 'group', label = 'Group', width = 55,  type = 'string' },
+        { key = 'check',     label = '',          width = 28,  type = 'check'  },
+        { key = 'name',      label = 'Name',      width = 140, type = 'string' },
+        { key = 'type',      label = 'Type',      width = 100, type = 'string' },
+        { key = 'category',  label = 'Category',  width = 70,  type = 'string' },
+        { key = 'skill',     label = 'Skill',     width = 75,  type = 'string' },
+        { key = 'coalition', label = 'Coalition', width = 60,  type = 'string' },
+        { key = 'group',     label = 'Group',     width = 55,  type = 'string' },
     },
     waypoint = {
         { key = 'check', label = '',      width = 28,  type = 'check'  },
@@ -419,10 +421,14 @@ local function row_values(scope, entity, group)
                  type      = tostring(category),
                  units     = #(entity.units or {}) }
     elseif scope == 'unit' then
-        return { name  = tostring(entity.name or ''),
-                 type  = tostring(entity.type or ''),
-                 skill = tostring(entity.skill or ''),
-                 group = tostring((group or {}).name or '') }
+        local cat = W.categories[entity] or ''
+        local side = (group and group.boss) and W.country_to_side[group.boss] or ''
+        return { name      = tostring(entity.name or ''),
+                 type      = tostring(entity.type or ''),
+                 category  = tostring(cat),
+                 skill     = tostring(entity.skill or ''),
+                 coalition = tostring(side),
+                 group     = tostring((group or {}).name or '') }
     elseif scope == 'waypoint' then
         local idx = 0
         if group and group.route and group.route.points then
@@ -713,6 +719,9 @@ function M.rebuild_treeview()
                             if     c_str == 'red'  then side = 'red'
                             elseif c_str == 'blue' then side = 'blue'
                             else                       side = 'neutral' end
+                        elseif W.scope == 'unit' then
+                            local g = W.parent_map[r.entity]
+                            side = (g and g.boss) and W.country_to_side[g.boss] or nil
                         end
                         local skin = side and COALITION_CELL_SKIN[side]
                         if skin then skin_helper.apply(cell, skin) end
