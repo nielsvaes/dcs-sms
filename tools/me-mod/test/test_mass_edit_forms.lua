@@ -44,9 +44,46 @@ do
     end
 end
 
-for _, scope in ipairs({ 'unit', 'waypoint', 'zone', 'drawing' }) do
+for _, scope in ipairs({ 'waypoint', 'zone', 'drawing' }) do
     local list = forms.forms_for(scope)
     check(scope .. ': empty list', type(list) == 'table' and #list == 0)
+end
+
+do
+    local list = forms.forms_for('unit')
+    check('unit: 9 forms', #list == 9, 'got ' .. tostring(#list))
+    -- Order: find/replace → add_prefix → add_suffix → auto_name → set_skill
+    --        → set_onboard_num → set_livery → set_heading → set_fuel_pct.
+    local expected_titles = {
+        'Find & replace in unit names',
+        'Add prefix to unit names',
+        'Add suffix to unit names',
+        'Auto-name units',
+        'Set skill',
+        'Set onboard #',
+        'Set livery',
+        'Set heading',
+        'Set fuel %',
+    }
+    for i, expected in ipairs(expected_titles) do
+        check('unit: form[' .. i .. '].title = ' .. expected,
+              list[i] and list[i].title == expected,
+              'got ' .. tostring(list[i] and list[i].title))
+    end
+    for i = 1, 9 do
+        check('unit: form[' .. i .. '].scope = unit',
+              list[i] and list[i].scope == 'unit')
+    end
+end
+
+do
+    local list = forms.forms_for('airbase')
+    check('airbase: 3 forms', #list == 3, 'got ' .. tostring(#list))
+    local expected = { 'Set coalition', 'Set warehouse', 'Export / Import warehouse' }
+    for i, _ in ipairs(expected) do
+        check('airbase: form[' .. i .. '].scope = airbase',
+              list[i] and list[i].scope == 'airbase')
+    end
 end
 
 do
