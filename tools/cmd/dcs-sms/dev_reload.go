@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 )
@@ -48,10 +49,16 @@ type devReloadHooks interface {
 	// stdout/stderr to the writers. Returns the exit code (0 on success).
 	runBuild(toolsDir string, stdout, stderr io.Writer) int
 
-	// installMeMod calls installMeModCmd in-process.
-	installMeMod(args []string, stdout, stderr io.Writer) int
+	// runInstallExternal execs `<binaryPath> install-me-mod <args>` as a
+	// child process and forwards stdout/stderr. Must run out-of-process so
+	// the install step reads the freshly-built binary's embed.FS — the
+	// dev-reload process itself was started from a pre-build binary with
+	// a stale embed.
+	runInstallExternal(binaryPath string, args []string, stdout, stderr io.Writer) int
 
-	// reloadMeMod calls reloadMeModCmd in-process.
+	// reloadMeMod calls reloadMeModCmd in-process. Safe in-process because
+	// reload-me-mod doesn't touch the embedded Lua tree — it just sends a
+	// hot-reload Lua snippet to the live ME via the bridge mailbox.
 	reloadMeMod(args []string, stdout, stderr io.Writer) int
 }
 
@@ -76,12 +83,33 @@ func (realDevReloadHooks) runBuild(toolsDir string, stdout, stderr io.Writer) in
 	return 0
 }
 
-func (realDevReloadHooks) installMeMod(args []string, stdout, stderr io.Writer) int {
-	return installMeModCmd(args, stdout, stderr)
+func (realDevReloadHooks) runInstallExternal(binaryPath string, args []string, stdout, stderr io.Writer) int {
+	cmd := exec.Command(binaryPath, append([]string{"install-me-mod"}, args...)...)
+	cmd.Stdout = stdout
+	cmd.Stderr = stderr
+	if err := cmd.Run(); err != nil {
+		if ee, ok := err.(*exec.ExitError); ok {
+			return ee.ExitCode()
+		}
+		fmt.Fprintf(stderr, "dcs-sms dev-reload: install-me-mod: %v\n", err)
+		return 1
+	}
+	return 0
 }
 
 func (realDevReloadHooks) reloadMeMod(args []string, stdout, stderr io.Writer) int {
 	return reloadMeModCmd(args, stdout, stderr)
+}
+
+// builtBinaryPath returns the path go build wrote to in toolsDir, accounting
+// for Windows's .exe suffix. Used by dev-reload to exec the just-built
+// binary for the install step.
+func builtBinaryPath(toolsDir string) string {
+	name := "dcs-sms"
+	if runtime.GOOS == "windows" {
+		name += ".exe"
+	}
+	return filepath.Join(toolsDir, name)
 }
 
 // findToolsDirImpl walks up from start looking for a go.mod whose first
@@ -143,13 +171,24 @@ func devReloadCmdWith(args []string, stdout, stderr io.Writer, hooks devReloadHo
 		return 1
 	}
 
-	// Step 3: install-me-mod (forwards --dcs-path if supplied).
+	// Step 3: install-me-mod. Must shell out to the freshly-built binary,
+	// NOT call installMeModCmd in-process: this process was started from
+	// the previous build's binary and still holds that build's embed.FS in
+	// memory, so an in-process install would copy the OLD embedded Lua tree
+	// to disk and silently mask every Lua change between builds. The fix
+	// (and its symptom history) is documented in dev_reload.go's
+	// runInstallExternal docstring.
 	var installArgs []string
 	if opts.DCSPath != "" {
 		installArgs = append(installArgs, "--dcs-path", opts.DCSPath)
 	}
 	fmt.Fprintln(stdout, "==> install-me-mod")
-	if code := hooks.installMeMod(installArgs, stdout, stderr); code != 0 {
+	binaryPath := builtBinaryPath(toolsDir)
+	if _, err := os.Stat(binaryPath); err != nil {
+		fmt.Fprintf(stderr, "dcs-sms dev-reload: built binary not found at %s: %v\n", binaryPath, err)
+		return 1
+	}
+	if code := hooks.runInstallExternal(binaryPath, installArgs, stdout, stderr); code != 0 {
 		return code
 	}
 

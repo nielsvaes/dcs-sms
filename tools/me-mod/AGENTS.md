@@ -189,8 +189,8 @@ dcs-sms dev-reload
 Run it from anywhere inside the dcs-sms checkout. It chains three steps:
 
 1. **Rebuild the binary.** `go build ./cmd/dcs-sms` from `tools/`. Produces an updated `dcs-sms.exe` with the new embedded Lua tree.
-2. **Reinstall.** Calls `install-me-mod` to copy the embedded Lua to `<DCS install>/MissionEditor/modules/dcs_sms_me/`. If DCS lives under Program Files, this step returns exit code 5 (needs elevation) and prints the admin-re-launch hint; re-run from an admin terminal in that case.
-3. **Hot-reload.** Calls `reload-me-mod` to clear `package.loaded.dcs_sms_me.*` in the running ME and `dofile` the new `init.lua`. No DCS restart needed — your Lua changes are live in the open Mission Editor.
+2. **Reinstall.** Execs the **just-built** binary's `install-me-mod` subcommand as a child process — not the same in-process call, because the dev-reload process itself was started from the *previous* build's binary and still holds that build's `embed.FS` in memory. Calling install in-process would silently copy the old embedded Lua to disk. The child process gets the fresh embed; the child writes `<DCS install>/MissionEditor/modules/dcs_sms_me/`. If DCS lives under Program Files, this step returns exit code 5 (needs elevation) and prints the admin-re-launch hint; re-run from an admin terminal in that case.
+3. **Hot-reload.** Calls `reload-me-mod` to clear `package.loaded.dcs_sms_me.*` in the running ME and `dofile` the new `init.lua`. No DCS restart needed — your Lua changes are live in the open Mission Editor. The reloaded `bridge.lua` bumps `_G.DCS_SMS_BRIDGE_GEN` and silences the previous bridge instance's tick callback (which UpdateManager keeps calling) so heartbeat + inbox processing have a single source of truth across any number of reloads.
 
 The hot-reload step needs the gui bridge active. Open the Mission Editor and click **DCS-SMS → External execution: OFF → ON** at least once per DCS session. `dev-reload` returns exit code 4 with a clear message if the toggle is off.
 
