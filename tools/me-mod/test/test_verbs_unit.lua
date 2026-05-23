@@ -711,6 +711,25 @@ local function test_get_strips_userobject_cycle()
     assert_eq(r.unit.zones[1].radius, 1200, 'get: surrounding zone fields kept')
 end
 
+local function test_get_visited_set_breaks_arbitrary_cycle()
+    -- Defense-in-depth: strip_back_refs must also break cycles via keys NOT
+    -- on the drop list (boss / mapObjects / userObject), in case a future
+    -- DCS build introduces another back-pointer. We construct a self-cycle
+    -- on `zones[1].self_ref` and assert the helper terminates and elides
+    -- the cyclic key without losing surrounding fields. The visited-set is
+    -- what catches this; the drop list won't.
+    mock.new_mission()
+    local g = mock.add_vehicle({ name = 'CycleG' })
+    local u = g.units[1]
+    local zone = { id = 9, radius = 800 }
+    zone.self_ref = zone
+    u.zones = { zone }
+    local r = verbs.unit_get({ name = u.name })
+    assert_true(r.ok, 'get with non-dropped cycle: ok')
+    assert_eq(r.unit.zones[1].self_ref, nil, 'get: visited-set elided self_ref cycle')
+    assert_eq(r.unit.zones[1].radius, 800, 'get: surrounding zone fields kept')
+end
+
 local function test_get_by_id()
     mock.new_mission()
     local g = mock.add_plane({ name = 'G3' })
@@ -1088,6 +1107,7 @@ local tests = {
     test_get_happy,
     test_get_strips_boss,
     test_get_strips_userobject_cycle,
+    test_get_visited_set_breaks_arbitrary_cycle,
     test_get_by_id,
     test_get_by_group_name,
     test_get_by_group_id,
