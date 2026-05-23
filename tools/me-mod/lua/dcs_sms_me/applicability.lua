@@ -32,10 +32,13 @@ function M.compute(applies_to, checked, categories)
 end
 
 -- True iff a single entity is applicable under the given applies_to map.
+-- Uses truthy semantics (matches compute() above) so any non-nil/false value
+-- in applies_to counts as applicable. Forms in this codebase always use
+-- `= true`, but the consistency matters for any future callers.
 function M.is_applicable(applies_to, entity, categories)
     if not applies_to or next(applies_to) == nil then return true end
     local cat = (categories or {})[entity] or 'unknown'
-    return applies_to[cat] == true
+    return applies_to[cat] and true or false
 end
 
 return M
