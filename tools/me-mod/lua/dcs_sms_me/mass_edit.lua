@@ -133,7 +133,6 @@ local W = {
         form_scroll  = nil,
     },
     _built = false,
-    marquee_subscribed = false,  -- reload-safe one-shot guard
 }
 
 local SCOPES = { 'group', 'unit', 'waypoint', 'zone', 'drawing', 'airbase' }
@@ -320,11 +319,16 @@ local function on_refresh_clicked()
 end
 
 local function install_airbase_marquee()
-    if W.marquee_subscribed then return end
-    -- marquee_hook.install is idempotent; calling here is safe even when
-    -- a previous Mass Edit window or the prefab_manager already installed.
+    -- No one-shot guard: prefab_manager calls marquee_hook.reset_subscribers()
+    -- on its first show to clear stale subscribers from Ctrl+Shift+R reloads,
+    -- which would wipe our callback if we'd subscribed before it. Re-subscribing
+    -- on every M.show() is harmless because the callback bails on `getVisible`
+    -- when our window isn't shown — a duplicate subscriber that early-returns is
+    -- benign, the active-window callback wins.
     pcall(marquee_hook.install)
     marquee_hook.subscribe(function(start_xy, end_xy)
+        if not (W.sms_window and W.sms_window:raw() and W.sms_window:raw().getVisible
+                and W.sms_window:raw():getVisible()) then return end
         local hits = airbase_detect.airbases_in_rect(start_xy, end_xy)
         if type(hits) ~= 'table' or #hits == 0 then return end
         -- Ensure the airbase entry cache is populated so the by-id lookup
@@ -351,7 +355,6 @@ local function install_airbase_marquee()
             pcall(M.rebuild_treeview)
         end
     end)
-    W.marquee_subscribed = true
 end
 
 -- ---------------------------------------------------------------------------

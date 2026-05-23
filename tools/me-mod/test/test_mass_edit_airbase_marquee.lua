@@ -53,8 +53,16 @@ local function check(name, ok, msg)
     else print('FAIL ' .. name .. ': ' .. tostring(msg)); failures = failures + 1 end
 end
 
--- Reset checked + install the subscription via the test seam.
+-- Reset checked + install a fake "visible" Mass Edit window (the callback
+-- bails on getVisible() so dup subscribers from PM-collision can no-op
+-- harmlessly).
 mass_edit._reset_checked_airbase()
+local fake_visible = true
+mass_edit._W.sms_window = {
+    raw = function() return {
+        getVisible = function() return fake_visible end,
+    } end,
+}
 mass_edit._install_airbase_marquee_for_test()
 
 -- Simulate a marquee that hits two airbases.
@@ -78,9 +86,23 @@ checked = mass_edit._get_checked_airbase()
 local n = 0; for _ in pairs(checked) do n = n + 1 end
 check('union semantics keep both entries after second marquee', n == 2)
 
--- Subscribing twice (reload-safe guard) must not double up.
+-- Re-installing always adds a subscriber (no one-shot guard — that was
+-- broken because prefab_manager wipes the subscriber list on its first
+-- show). The freshest callback wins because all callbacks gate on the
+-- same window-visibility check.
 mass_edit._install_airbase_marquee_for_test()
-check('reload-safe guard: still 1 subscriber after double install', #marquee_subscribers == 1)
+check('re-install adds a fresh subscriber', #marquee_subscribers == 2)
+
+-- When the window isn't visible, callbacks must be a no-op.
+mass_edit._reset_checked_airbase()
+fake_visible = false
+detect_hits = {
+    { name = 'Anapa-Vityazevo',  airdrome_number_at_save = 12, x = 100, y = 200 },
+}
+for _, cb in ipairs(marquee_subscribers) do cb({ x = 0, y = 0 }, { x = 9999, y = 9999 }) end
+checked = mass_edit._get_checked_airbase()
+local n2 = 0; for _ in pairs(checked) do n2 = n2 + 1 end
+check('invisible-window callback is a no-op', n2 == 0)
 
 if failures > 0 then
     print('FAILED: ' .. failures .. ' failures')

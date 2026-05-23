@@ -142,7 +142,7 @@ function M.new(parent_raw, get_checked, on_after_apply, _get_categories)
                     if item and item._coalition_value then picked = item._coalition_value end
                 end
                 local entities = (type(get_checked) == 'function') and get_checked() or {}
-                local result = M._apply(entities, picked or 'neutrals')
+                local result = M._apply(entities, picked)
                 if type(on_after_apply) == 'function' then on_after_apply(result) end
             end)
         end)
