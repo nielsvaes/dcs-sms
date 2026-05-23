@@ -846,6 +846,21 @@ local function test_get_strips_back_refs()
     assert_eq(r.group.mapObjects, nil, 'get: mapObjects stripped')
 end
 
+local function test_get_strips_userobject_cycle()
+    -- Beacon-style units own a zone whose .userObject points back at the
+    -- unit. Before GH#66 strip_back_refs's depth fallback returned the live
+    -- cyclic table and hung jval. Reproduce with the cycle in place and
+    -- assert group_get returns cleanly.
+    mock.new_mission()
+    local g = mock.add_vehicle({ name = 'BeaconG' })
+    local u = g.units[1]
+    u.zones = { { id = 7, radius = 1200, userObject = u } }
+    local r = verbs.group_get({ name = 'BeaconG' })
+    assert_true(r.ok, 'group_get with userObject cycle: ok')
+    assert_eq(r.group.units[1].zones[1].userObject, nil, 'group_get: nested userObject stripped')
+    assert_eq(r.group.units[1].zones[1].radius, 1200, 'group_get: surrounding zone fields kept')
+end
+
 local function test_get_not_found()
     mock.new_mission()
     local r = verbs.group_get({ name = 'ghost' })
@@ -931,6 +946,7 @@ local tests = {
     test_list_summary_fields,
     test_get_happy,
     test_get_strips_back_refs,
+    test_get_strips_userobject_cycle,
     test_get_not_found,
     test_get_arg_validation,
 }

@@ -696,6 +696,21 @@ local function test_get_strips_boss()
     assert_eq(r.unit.boss, nil, 'get: boss stripped')
 end
 
+local function test_get_strips_userobject_cycle()
+    -- Beacon-style units own a zone whose .userObject points back at the
+    -- unit (and zone.userObject.zones[1] == zone again). Before GH#66 the
+    -- depth-32 fallback returned the live cyclic table into the clone and
+    -- jval hung. Now strip_back_refs tracks ancestors and breaks the cycle.
+    mock.new_mission()
+    local g = mock.add_vehicle({ name = 'BeaconG' })
+    local u = g.units[1]
+    u.zones = { { id = 7, radius = 1200, userObject = u } }
+    local r = verbs.unit_get({ name = u.name })
+    assert_true(r.ok, 'get with userObject cycle: ok')
+    assert_eq(r.unit.zones[1].userObject, nil, 'get: userObject stripped')
+    assert_eq(r.unit.zones[1].radius, 1200, 'get: surrounding zone fields kept')
+end
+
 local function test_get_by_id()
     mock.new_mission()
     local g = mock.add_plane({ name = 'G3' })
@@ -975,6 +990,7 @@ local tests = {
     test_list_summary_fields,
     test_get_happy,
     test_get_strips_boss,
+    test_get_strips_userobject_cycle,
     test_get_by_id,
     test_get_not_found,
     test_get_arg_validation,

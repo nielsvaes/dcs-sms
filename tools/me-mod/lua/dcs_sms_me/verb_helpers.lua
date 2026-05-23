@@ -69,17 +69,29 @@ function H.walk_groups(callback)
     end
 end
 
--- strip_back_refs — deep clone, dropping keys that create cycles when
--- serialized (boss = group/country, mapObjects = render-side cache).
-function H.strip_back_refs(v, depth)
-    depth = depth or 0
-    if depth > 32 or type(v) ~= 'table' then return v end
+-- strip_back_refs — deep clone of a mission-table fragment, safe to JSON-encode.
+-- Drops keys that are pure back-pointers (boss = group/country,
+-- mapObjects = render-side cache, userObject = ME widget back-ref) and
+-- breaks cycles by tracking the current ancestor chain in `visited`. When
+-- we hit a table that is already an ancestor we return nil rather than the
+-- live ref, so the returned tree is guaranteed acyclic.
+--
+-- The cycle path that motivated the visited-set: beacon-style units own a
+-- zone with `zone.userObject == unit` (and `zone.userObject.zones[1] == zone`).
+-- The previous depth-32 fallback returned the live `v`, leaving the cycle in
+-- the clone and hanging the bridge's JSON encoder. See GH#66.
+function H.strip_back_refs(v, visited)
+    if type(v) ~= 'table' then return v end
+    visited = visited or {}
+    if visited[v] then return nil end
+    visited[v] = true
     local out = {}
     for k, vv in pairs(v) do
-        if k ~= 'boss' and k ~= 'mapObjects' then
-            out[k] = H.strip_back_refs(vv, depth + 1)
+        if k ~= 'boss' and k ~= 'mapObjects' and k ~= 'userObject' then
+            out[k] = H.strip_back_refs(vv, visited)
         end
     end
+    visited[v] = nil
     return out
 end
 

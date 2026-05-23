@@ -105,6 +105,11 @@ This is the first tag after a long quiet period — `sms.version` had been froze
 
 ## ME-mod
 
+### [0.11.2] — 2026-05-23
+
+**Fixed**
+- `me group get` / `me unit get` no longer time out on units that own a beacon-style zone. ME-side beacon units carry a `unit.zones[1].userObject` back-reference that points at the unit (and `userObject.zones[1]` back at the zone), forming a direct cycle. The previous `H.strip_back_refs` only excluded `boss` and `mapObjects`; its depth-32 fallback returned the live cyclic table into the clone, so the bridge's JSON encoder walked into the cycle and the request hit the CLI's 30 s timeout. `strip_back_refs` now also drops `userObject` and tracks the current ancestor chain via a visited-set, so cycles are broken regardless of which key creates them. Regression tests in `test_verbs_group.lua` / `test_verbs_unit.lua` reconstruct the cycle and assert `_get` returns cleanly. Closes [#66](https://github.com/nielsvaes/dcs-sms/issues/66) (bug #1).
+
 ### [0.11.1] — 2026-05-23
 
 Internal-only release. No user-facing behavior changes; the bump exists so the in-source `version.lua` reflects the test + refactor groundwork that's landed since `0.11.0`.
