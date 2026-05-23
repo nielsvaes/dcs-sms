@@ -875,6 +875,55 @@ local function test_get_arg_validation()
 end
 
 -- ============================================================
+-- lat/lon enrichment (GH#66 request 4)
+-- ============================================================
+
+-- Stub Terrain only for the duration of one test so other tests stay on the
+-- "no Terrain → no lat/lon" path.
+local function with_terrain_stub(fn)
+    local saved = _G.Terrain
+    _G.Terrain = {
+        convertMetersToLatLon = function(x, y) return x / 111000, y / 85000 end,
+    }
+    local ok, err = pcall(fn)
+    _G.Terrain = saved
+    if not ok then error(err, 0) end
+end
+
+local function test_list_includes_lat_lon_when_terrain_available()
+    mock.new_mission()
+    local g = mock.add_plane({ name = 'LL1' })
+    g.x, g.y = 111000, 85000
+    with_terrain_stub(function()
+        local r = verbs.group_list({ name = 'LL1' })
+        assert_true(r.ok, 'group_list w/ Terrain: ok')
+        assert_eq(r.groups[1].lat, 1, 'group_list: lat from Terrain stub')
+        assert_eq(r.groups[1].lon, 1, 'group_list: lon from Terrain stub')
+    end)
+end
+
+local function test_list_omits_lat_lon_when_no_terrain()
+    mock.new_mission()
+    mock.add_plane({ name = 'LL2' })
+    local r = verbs.group_list({ name = 'LL2' })
+    assert_true(r.ok, 'group_list no Terrain: ok')
+    assert_eq(r.groups[1].lat, nil, 'group_list: lat absent without Terrain')
+    assert_eq(r.groups[1].lon, nil, 'group_list: lon absent without Terrain')
+end
+
+local function test_get_includes_lat_lon_when_terrain_available()
+    mock.new_mission()
+    local g = mock.add_plane({ name = 'LL3' })
+    g.x, g.y = 222000, 170000
+    with_terrain_stub(function()
+        local r = verbs.group_get({ name = 'LL3' })
+        assert_true(r.ok, 'group_get w/ Terrain: ok')
+        assert_eq(r.group.lat, 2, 'group_get: lat from Terrain stub')
+        assert_eq(r.group.lon, 2, 'group_get: lon from Terrain stub')
+    end)
+end
+
+-- ============================================================
 -- Test runner
 -- ============================================================
 
@@ -949,6 +998,9 @@ local tests = {
     test_get_strips_userobject_cycle,
     test_get_not_found,
     test_get_arg_validation,
+    test_list_includes_lat_lon_when_terrain_available,
+    test_list_omits_lat_lon_when_no_terrain,
+    test_get_includes_lat_lon_when_terrain_available,
 }
 
 for _, t in ipairs(tests) do t() end

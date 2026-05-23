@@ -8,6 +8,7 @@ local M = {}
 
 local H = require('dcs_sms_me.verb_helpers')
 local find_unit_in_mission = H.find_unit_in_mission
+local compute_lat_lon      = H.compute_lat_lon
 
 -- ============================================================
 -- Trigger zone lifecycle verbs
@@ -550,6 +551,7 @@ function M.zone_list(args)
             local x, y = TZD.getTriggerZonePosition(zid)
             local r, g, b, a = TZD.getTriggerZoneColor(zid)
             local pts = TZD.getTriggerZonePoints(zid) or {}
+            local lat, lon = compute_lat_lon(x, y)
             table.insert(out, {
                 id = zid,
                 name = nm,
@@ -557,6 +559,8 @@ function M.zone_list(args)
                 type = tnum,
                 north = x,
                 east = y,
+                lat = lat,
+                lon = lon,
                 radius = TZD.getTriggerZoneRadius(zid),
                 color = { r, g, b, a },
                 hidden = TZD.getTriggerZoneHidden(zid),
@@ -592,12 +596,18 @@ function M.zone_get(args)
     local pts_rel = TZD.getTriggerZonePoints(zid) or {}
 
     -- Convert relative points back to absolute for user clarity (matches the
-    -- shape of --vertices on input). Keep raw relative points too.
+    -- shape of --vertices on input). Each absolute vertex also gets its own
+    -- lat/lon (GH#66 request 4) so callers iterating a quad's corners don't
+    -- have to per-vertex round-trip through `me coords to-geo`. Keep raw
+    -- relative points too.
     local pts_abs = {}
     for _, p in ipairs(pts_rel) do
-        table.insert(pts_abs, { north = p.x + x, east = p.y + y })
+        local vn, ve = p.x + x, p.y + y
+        local vlat, vlon = compute_lat_lon(vn, ve)
+        table.insert(pts_abs, { north = vn, east = ve, lat = vlat, lon = vlon })
     end
 
+    local zlat, zlon = compute_lat_lon(x, y)
     return {
         ok = true,
         zone = {
@@ -607,6 +617,8 @@ function M.zone_get(args)
             type = tnum,
             north = x,
             east = y,
+            lat = zlat,
+            lon = zlon,
             radius = TZD.getTriggerZoneRadius(zid),
             color = { r, g, b, a },
             hidden = TZD.getTriggerZoneHidden(zid),

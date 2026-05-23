@@ -105,6 +105,13 @@ This is the first tag after a long quiet period — `sms.version` had been froze
 
 ## ME-mod
 
+### [0.14.0] — 2026-05-23
+
+**Added**
+- `lat` and `lon` are now included alongside `north` / `east` in the responses from `me unit list`, `me unit get`, `me group list`, `me group get`, `me zone list`, and `me zone get`. The fields are populated best-effort via the same `Terrain.convertMetersToLatLon` call that `me coords to-geo` uses; if the helper can't reach Terrain (no theatre loaded, called from a non-mission ME state) the fields are omitted instead of failing the whole response. Quad-zone vertices each get their own `lat`/`lon` too, so iterating a zone's corners no longer needs a per-vertex `me coords to-geo` round-trip. Closes [#66](https://github.com/nielsvaes/dcs-sms/issues/66) (request 4).
+
+  Pure additive change to existing JSON responses — callers that don't read `lat`/`lon` are unaffected.
+
 ### [0.13.0] — 2026-05-23
 
 **Added**

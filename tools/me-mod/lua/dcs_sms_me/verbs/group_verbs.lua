@@ -15,6 +15,7 @@ local find_unit_in_mission  = H.find_unit_in_mission
 local find_group_in_mission = H.find_group_in_mission
 local find_country_by_name  = H.find_country_by_name
 local inject_group          = H.inject_group
+local compute_lat_lon       = H.compute_lat_lon
 
 -- ============================================================
 -- Group lifecycle verbs
@@ -1339,6 +1340,7 @@ function M.group_list(args)
         if f_country and string.lower(country.name or '') ~= f_country then return end
         if f_category and cat ~= f_category then return end
         if f_name and not string.find(string.lower(g.name or ''), f_name, 1, true) then return end
+        local lat, lon = compute_lat_lon(g.x, g.y)
         table.insert(out, {
             id = g.groupId,
             name = g.name,
@@ -1347,6 +1349,8 @@ function M.group_list(args)
             side = side_name,
             north = g.x,
             east = g.y,
+            lat = lat,
+            lon = lon,
             unit_count = g.units and #g.units or 0,
             hidden = g.hidden or false,
             task = g.task,
@@ -1375,6 +1379,14 @@ function M.group_get(args)
     snapshot._side = side_name
     snapshot._country = country and country.name
     snapshot._category = cat
+    -- Group position is mission-table x/y (x=north, y=east). Inject lat/lon
+    -- alongside so callers don't need a follow-up `me coords to-geo` call.
+    -- See GH#66 (request 4).
+    local lat, lon = compute_lat_lon(g.x, g.y)
+    if lat and lon then
+        snapshot.lat = lat
+        snapshot.lon = lon
+    end
     return { ok = true, group = snapshot }
 end
 

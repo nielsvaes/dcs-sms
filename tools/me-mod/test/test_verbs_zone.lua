@@ -652,6 +652,88 @@ local function test_get_arg_validation()
 end
 
 -- ============================================================
+-- lat/lon enrichment (GH#66 request 4)
+-- ============================================================
+
+-- Stub Terrain only for the duration of one test so other tests stay on the
+-- "no Terrain → no lat/lon" path.
+local function with_terrain_stub(fn)
+    local saved = _G.Terrain
+    _G.Terrain = {
+        convertMetersToLatLon = function(x, y) return x / 111000, y / 85000 end,
+    }
+    local ok, err = pcall(fn)
+    _G.Terrain = saved
+    if not ok then error(err, 0) end
+end
+
+local function test_list_includes_lat_lon()
+    reset()
+    verbs.zone_create_circle({ name = 'LL1', north = 111000, east = 85000, radius = 500 })
+    with_terrain_stub(function()
+        local r = verbs.zone_list({})
+        assert_true(r.ok, 'zone_list w/ Terrain: ok')
+        local found
+        for _, z in ipairs(r.zones) do if z.name == 'LL1' then found = z end end
+        assert_true(found ~= nil, 'zone_list: row found')
+        assert_eq(found.lat, 1, 'zone_list: lat from Terrain stub')
+        assert_eq(found.lon, 1, 'zone_list: lon from Terrain stub')
+    end)
+end
+
+local function test_get_circle_includes_lat_lon()
+    reset()
+    verbs.zone_create_circle({ name = 'LL2', north = 222000, east = 170000, radius = 500 })
+    with_terrain_stub(function()
+        local r = verbs.zone_get({ name = 'LL2' })
+        assert_true(r.ok, 'zone_get circle w/ Terrain: ok')
+        assert_eq(r.zone.lat, 2, 'zone_get circle: lat')
+        assert_eq(r.zone.lon, 2, 'zone_get circle: lon')
+    end)
+end
+
+local function test_get_quad_each_vertex_has_lat_lon()
+    reset()
+    verbs.zone_create_quad({
+        name = 'LL3',
+        vertices = {
+            { north = 0,      east = 0 },
+            { north = 111000, east = 0 },
+            { north = 111000, east = 85000 },
+            { north = 0,      east = 85000 },
+        } })
+    with_terrain_stub(function()
+        local r = verbs.zone_get({ name = 'LL3' })
+        assert_true(r.ok, 'zone_get quad w/ Terrain: ok')
+        assert_eq(#r.zone.vertices_absolute, 4, 'zone_get quad: 4 vertices')
+        -- Each vertex should now carry its own lat/lon.
+        for i, v in ipairs(r.zone.vertices_absolute) do
+            assert_true(type(v.lat) == 'number',
+                'zone_get quad: vertex ' .. i .. ' has numeric lat')
+            assert_true(type(v.lon) == 'number',
+                'zone_get quad: vertex ' .. i .. ' has numeric lon')
+        end
+        -- And the linear stub gives clean integers for the (111000, 85000)
+        -- aligned corner — catches arg-swap and per-vertex offset bugs.
+        local v3 = r.zone.vertices_absolute[3]
+        assert_eq(v3.lat, 1, 'zone_get quad: vertex 3 lat from stub')
+        assert_eq(v3.lon, 1, 'zone_get quad: vertex 3 lon from stub')
+    end)
+end
+
+local function test_list_omits_lat_lon_when_no_terrain()
+    reset()
+    verbs.zone_create_circle({ name = 'LL4', north = 111000, east = 85000, radius = 500 })
+    local r = verbs.zone_list({})
+    assert_true(r.ok, 'zone_list no Terrain: ok')
+    local found
+    for _, z in ipairs(r.zones) do if z.name == 'LL4' then found = z end end
+    assert_true(found ~= nil, 'zone_list: row found')
+    assert_eq(found.lat, nil, 'zone_list: lat absent without Terrain')
+    assert_eq(found.lon, nil, 'zone_list: lon absent without Terrain')
+end
+
+-- ============================================================
 -- Test runner
 -- ============================================================
 
@@ -698,6 +780,10 @@ local tests = {
     test_get_quad_returns_absolute_vertices,
     test_get_not_found,
     test_get_arg_validation,
+    test_list_includes_lat_lon,
+    test_get_circle_includes_lat_lon,
+    test_get_quad_each_vertex_has_lat_lon,
+    test_list_omits_lat_lon_when_no_terrain,
 }
 
 for _, t in ipairs(tests) do t() end

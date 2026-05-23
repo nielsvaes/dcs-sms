@@ -95,6 +95,24 @@ function H.strip_back_refs(v, visited)
     return out
 end
 
+-- compute_lat_lon — convert a theatre-local (north, east) pair to (lat, lon)
+-- in degrees, using ED's Terrain.convertMetersToLatLon. Returns nil, nil
+-- when Terrain isn't available (no theatre loaded, called from the menu /
+-- MP browser, etc.) so list/get verbs can include lat/lon best-effort
+-- without crashing. Callers should drop the fields from the response when
+-- both come back nil. See GH#66 (request 4).
+function H.compute_lat_lon(north, east)
+    if type(north) ~= 'number' or type(east) ~= 'number' then return nil, nil end
+    if not _G.Terrain or type(_G.Terrain.convertMetersToLatLon) ~= 'function' then
+        return nil, nil
+    end
+    local ok, lat, lon = pcall(_G.Terrain.convertMetersToLatLon, north, east)
+    if not ok or type(lat) ~= 'number' or type(lon) ~= 'number' then
+        return nil, nil
+    end
+    return lat, lon
+end
+
 -- refresh_group_view — defensive map-objects refresh after a unit-level
 -- mutation. Disk-loaded groups have mapObjects=nil until selected; the
 -- create_group_map_objects + update_group_map_objects pair handles both

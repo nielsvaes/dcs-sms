@@ -776,6 +776,58 @@ local function test_get_arg_validation()
 end
 
 -- ============================================================
+-- lat/lon enrichment (GH#66 request 4)
+-- ============================================================
+
+-- Stub Terrain only for the duration of one test so other tests stay on the
+-- "no Terrain → no lat/lon" path. The verb is supposed to add lat/lon when
+-- Terrain is present and omit them when it isn't.
+local function with_terrain_stub(fn)
+    local saved = _G.Terrain
+    _G.Terrain = {
+        convertMetersToLatLon = function(x, y) return x / 111000, y / 85000 end,
+    }
+    local ok, err = pcall(fn)
+    _G.Terrain = saved
+    if not ok then error(err, 0) end
+end
+
+local function test_list_includes_lat_lon_when_terrain_available()
+    mock.new_mission()
+    local g = mock.add_plane({ name = 'LL1' })
+    g.units[1].x, g.units[1].y = 111000, 85000
+    with_terrain_stub(function()
+        local r = verbs.unit_list({ group = 'LL1' })
+        assert_true(r.ok, 'list w/ Terrain: ok')
+        assert_eq(r.units[1].lat, 1, 'list: lat from Terrain stub')
+        assert_eq(r.units[1].lon, 1, 'list: lon from Terrain stub')
+    end)
+end
+
+local function test_list_omits_lat_lon_when_no_terrain()
+    -- Without _G.Terrain, the helper returns nil/nil and the row still
+    -- has the key but with a nil value (which JSON-encodes as missing).
+    mock.new_mission()
+    mock.add_plane({ name = 'LL2' })
+    local r = verbs.unit_list({ group = 'LL2' })
+    assert_true(r.ok, 'list no Terrain: ok')
+    assert_eq(r.units[1].lat, nil, 'list: lat absent without Terrain')
+    assert_eq(r.units[1].lon, nil, 'list: lon absent without Terrain')
+end
+
+local function test_get_includes_lat_lon_when_terrain_available()
+    mock.new_mission()
+    local g = mock.add_plane({ name = 'LL3' })
+    g.units[1].x, g.units[1].y = 222000, 170000
+    with_terrain_stub(function()
+        local r = verbs.unit_get({ name = g.units[1].name })
+        assert_true(r.ok, 'get w/ Terrain: ok')
+        assert_eq(r.unit.lat, 2, 'get: lat from Terrain stub')
+        assert_eq(r.unit.lon, 2, 'get: lon from Terrain stub')
+    end)
+end
+
+-- ============================================================
 -- unit_set_parking (lives in route_verbs.lua)
 -- ============================================================
 
@@ -1043,6 +1095,9 @@ local tests = {
     test_get_group_not_found,
     test_get_not_found,
     test_get_arg_validation,
+    test_list_includes_lat_lon_when_terrain_available,
+    test_list_omits_lat_lon_when_no_terrain,
+    test_get_includes_lat_lon_when_terrain_available,
     test_parking_happy,
     test_parking_no_wp_sync_when_not_takeoff,
     test_parking_substring_match,

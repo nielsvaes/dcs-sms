@@ -15,6 +15,7 @@ local walk_groups          = H.walk_groups
 local strip_back_refs      = H.strip_back_refs
 local refresh_group_view   = H.refresh_group_view
 local find_unit_in_mission = H.find_unit_in_mission
+local compute_lat_lon      = H.compute_lat_lon
 
 -- ============================================================
 -- Unit setters (per-field)
@@ -502,6 +503,7 @@ function M.unit_list(args)
         for _, u in ipairs(g.units or {}) do
             if not (f_name and not string.find(string.lower(u.name or ''), f_name, 1, true)) then
                 if not (f_type_set and not f_type_set[u.type]) then
+                    local lat, lon = compute_lat_lon(u.x, u.y)
                     table.insert(out, {
                         id = u.unitId,
                         name = u.name,
@@ -513,6 +515,8 @@ function M.unit_list(args)
                         side = side_name,
                         north = u.x,
                         east = u.y,
+                        lat = lat,
+                        lon = lon,
                         alt = u.alt,
                         heading = u.heading,
                         skill = u.skill,
@@ -580,6 +584,14 @@ function M.unit_get(args)
     snapshot._country = found_country.name
     snapshot._side = found_side
     snapshot._category = found_cat
+    -- Mission-table position is in x/y (x=north, y=east) per ME convention.
+    -- Inject computed lat/lon alongside so callers don't need a follow-up
+    -- `me coords to-geo` round-trip. See GH#66 (request 4).
+    local lat, lon = compute_lat_lon(found_unit.x, found_unit.y)
+    if lat and lon then
+        snapshot.lat = lat
+        snapshot.lon = lon
+    end
     return { ok = true, unit = snapshot }
 end
 
