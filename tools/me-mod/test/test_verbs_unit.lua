@@ -718,6 +718,47 @@ local function test_get_by_id()
     assert_true(r.ok, 'get by id: ok')
 end
 
+local function test_get_by_group_name()
+    -- group_name selector returns the first unit of the named group.
+    mock.new_mission()
+    local g = mock.add_plane({ name = 'GByName' })
+    local r = verbs.unit_get({ group_name = 'GByName' })
+    assert_true(r.ok, 'get by group_name: ok')
+    assert_eq(r.unit.name, g.units[1].name, 'get by group_name: first unit returned')
+    assert_eq(r.unit._group_name, 'GByName', 'get by group_name: _group_name set')
+end
+
+local function test_get_by_group_id()
+    mock.new_mission()
+    local g = mock.add_plane({ name = 'GByID' })
+    local r = verbs.unit_get({ group_id = g.groupId })
+    assert_true(r.ok, 'get by group_id: ok')
+    assert_eq(r.unit.unitId, g.units[1].unitId, 'get by group_id: first unit returned')
+    assert_eq(r.unit._group_id, g.groupId, 'get by group_id: _group_id matches')
+end
+
+local function test_get_by_group_returns_first_unit()
+    -- For multi-unit groups, group_name/group_id pin to units[1] (the
+    -- mission-table order), not an arbitrary one.
+    mock.new_mission()
+    local g = mock.add_vehicle({ name = 'GMulti' })
+    -- mock.add_vehicle creates a 1-unit group; bolt on extras directly.
+    table.insert(g.units, { unitId = 9001, name = 'GMulti-2', type = g.units[1].type,
+                            x = 0, y = 0, heading = 0, skill = 'Average', index = 2 })
+    table.insert(g.units, { unitId = 9002, name = 'GMulti-3', type = g.units[1].type,
+                            x = 0, y = 0, heading = 0, skill = 'Average', index = 3 })
+    local r = verbs.unit_get({ group_name = 'GMulti' })
+    assert_true(r.ok, 'get multi by group_name: ok')
+    assert_eq(r.unit.name, g.units[1].name, 'get multi by group_name: first unit')
+end
+
+local function test_get_group_not_found()
+    mock.new_mission()
+    local r = verbs.unit_get({ group_name = 'nope' })
+    assert_false(r.ok, 'get group not found: error')
+    assert_contains(r.error, 'group not found', 'get: error message')
+end
+
 local function test_get_not_found()
     mock.new_mission()
     local r = verbs.unit_get({ name = 'ghost' })
@@ -727,7 +768,11 @@ end
 local function test_get_arg_validation()
     mock.new_mission()
     assert_false(verbs.unit_get({}).ok, 'get: empty')
-    assert_false(verbs.unit_get({ name = 'x', id = 1 }).ok, 'get: both')
+    assert_false(verbs.unit_get({ name = 'x', id = 1 }).ok, 'get: name + id')
+    assert_false(verbs.unit_get({ name = 'x', group_name = 'y' }).ok, 'get: name + group_name')
+    assert_false(verbs.unit_get({ id = 1, group_id = 2 }).ok, 'get: id + group_id')
+    assert_false(verbs.unit_get({ group_name = 'x', group_id = 1 }).ok, 'get: group_name + group_id')
+    assert_false(verbs.unit_get({ group_name = '' }).ok, 'get: empty group_name')
 end
 
 -- ============================================================
@@ -992,6 +1037,10 @@ local tests = {
     test_get_strips_boss,
     test_get_strips_userobject_cycle,
     test_get_by_id,
+    test_get_by_group_name,
+    test_get_by_group_id,
+    test_get_by_group_returns_first_unit,
+    test_get_group_not_found,
     test_get_not_found,
     test_get_arg_validation,
     test_parking_happy,

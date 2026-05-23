@@ -105,6 +105,11 @@ This is the first tag after a long quiet period — `sms.version` had been froze
 
 ## ME-mod
 
+### [0.12.0] — 2026-05-23
+
+**Added**
+- `dcs-sms me unit get` accepts two new selectors: `--group-name <name>` and `--group-id <n>`, each returning the first unit (`units[1]`) of the matched group. Callers that hold a group reference (e.g. from `me group list`) no longer need a round-trip through `me unit list --group <n>` to discover a unit id before they can call `unit get`. The four selectors (`--name`, `--id`, `--group-name`, `--group-id`) are mutually exclusive; passing zero or more than one exits 2 with a usage message. Closes [#66](https://github.com/nielsvaes/dcs-sms/issues/66) (request 5).
+
 ### [0.11.2] — 2026-05-23
 
 **Fixed**

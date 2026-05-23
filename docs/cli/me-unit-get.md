@@ -2,7 +2,7 @@
 
 [← CLI reference index](README.md)
 
-return full data for a unit by name or id
+return full data for a unit (by --name/--id, or first unit of a group via --group-name/--group-id)
 
 ## Usage
 
@@ -14,6 +14,8 @@ dcs-sms me unit get [flags]
 
 | Name | Type | Default | Description |
 |---|---|---|---|
+| `--group-id` | int | `0` | parent groupId (returns the first unit of that group) |
+| `--group-name` | string | `""` | parent group name (returns the first unit of that group) |
 | `--id` | int | `0` | unitId (numeric) |
 | `--name` | string | `""` | unit name (exact match) |
 | `--pretty` | bool | `false` | indent JSON output |

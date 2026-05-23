@@ -524,19 +524,37 @@ function M.unit_list(args)
     return { ok = true, units = out, count = #out }
 end
 
--- unit_get — full raw unit table (back-refs stripped), by name or id.
+-- unit_get — full raw unit table (back-refs stripped). Selectable by unit
+-- (name|id) or by parent group (group_name|group_id), in which case the
+-- first unit of the group is returned. The group selectors exist so callers
+-- working from `group list` (group id known, unit ids not yet) can skip the
+-- `unit list --group` round trip. See GH#66 (request 5).
 function M.unit_get(args)
     if type(args) ~= 'table' then
         return { ok = false, error = 'unit_get requires args (table)' }
     end
-    local has_name = type(args.name) == 'string' and args.name ~= ''
-    local has_id = type(args.id) == 'number'
-    if has_name == has_id then
-        return { ok = false, error = 'unit_get requires exactly one of args.name or args.id' }
+    local has_name       = type(args.name) == 'string'       and args.name ~= ''
+    local has_id         = type(args.id) == 'number'
+    local has_group_name = type(args.group_name) == 'string' and args.group_name ~= ''
+    local has_group_id   = type(args.group_id) == 'number'
+
+    local selector_count = (has_name and 1 or 0)
+                         + (has_id and 1 or 0)
+                         + (has_group_name and 1 or 0)
+                         + (has_group_id and 1 or 0)
+    if selector_count ~= 1 then
+        return { ok = false, error = 'unit_get requires exactly one of args.name, args.id, args.group_name, or args.group_id' }
     end
 
     local found_unit, found_group, found_country, found_side, found_cat
     walk_groups(function(g, country, side_name, cat)
+        if (has_group_name and g.name == args.group_name)
+                or (has_group_id and g.groupId == args.group_id) then
+            found_group, found_country = g, country
+            found_side, found_cat = side_name, cat
+            found_unit = g.units and g.units[1]
+            return false
+        end
         for _, u in ipairs(g.units or {}) do
             if (has_name and u.name == args.name)
                     or (has_id and u.unitId == args.id) then
@@ -547,6 +565,12 @@ function M.unit_get(args)
         end
     end)
 
+    if (has_group_name or has_group_id) and not found_group then
+        return { ok = false, error = 'group not found' }
+    end
+    if (has_group_name or has_group_id) and not found_unit then
+        return { ok = false, error = 'group has no units' }
+    end
     if not found_unit then
         return { ok = false, error = 'unit not found' }
     end
