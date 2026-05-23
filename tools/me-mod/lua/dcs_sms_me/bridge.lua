@@ -352,9 +352,32 @@ local function write_heartbeat()
 end
 
 -- ----------------------------------------------------------------------------
+-- dev-reload safety: generation counter
+--
+-- dev-reload clears `package.loaded.dcs_sms_me.bridge` and re-dofiles
+-- init.lua. That loads this file again with a fresh local STATE (so
+-- STATE.installed is back to false) and a freshly-defined `tick` upvalue.
+-- The previous bridge's tick is still in UpdateManager's queue — there's
+-- no public unregister API across DCS builds we can rely on — so without
+-- a guard you get N+1 tick callbacks racing on the same inbox / state
+-- files after N reloads. Symptom: `dcs-sms status` reports a stale
+-- `hook_version` (the older bridge's heartbeat wins the write race) and
+-- occasional spurious "gui bridge is disabled" errors on requests that
+-- a stale tick happened to pick up mid-reload.
+--
+-- The fix: every install() bumps a `_G`-scoped generation counter and
+-- stamps it into the local `MY_GEN`. Each tick checks against the
+-- current `_G.DCS_SMS_BRIDGE_GEN` and no-ops itself when it isn't the
+-- active generation — the old instances stay registered but do nothing.
+local MY_GEN = nil
+
+-- ----------------------------------------------------------------------------
 -- tick
 
 local function tick()
+    if _G.DCS_SMS_BRIDGE_GEN ~= MY_GEN then
+        return false  -- a newer install() took over; stay quiet
+    end
     STATE.tick = STATE.tick + 1
     pcall(process_inbox)
     if STATE.tick - STATE.last_heartbeat_tick >= HEARTBEAT_EVERY_TICKS then
@@ -376,6 +399,9 @@ function M.install()
         return false
     end
 
+    _G.DCS_SMS_BRIDGE_GEN = (_G.DCS_SMS_BRIDGE_GEN or 0) + 1
+    MY_GEN = _G.DCS_SMS_BRIDGE_GEN
+
     pcall(ensure_dirs)
     pcall(sweep_stale, INBOX, ".req.json")
     pcall(sweep_stale, OUTBOX, ".res.json")
@@ -384,7 +410,8 @@ function M.install()
     UpdateManager.add(tick)
     STATE.installed = true
     log.write("sms.bridge", log.INFO,
-        "ME-side bridge installed (version " .. tostring(VERSION) .. ")")
+        "ME-side bridge installed (version " .. tostring(VERSION)
+        .. ", gen " .. tostring(MY_GEN) .. ")")
     return true
 end
 

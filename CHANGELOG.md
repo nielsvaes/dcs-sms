@@ -105,6 +105,11 @@ This is the first tag after a long quiet period — `sms.version` had been froze
 
 ## ME-mod
 
+### [0.14.1] — 2026-05-23
+
+**Fixed**
+- `dcs-sms dev-reload` no longer stacks ghost bridge instances. The hot-reload step clears `package.loaded.dcs_sms_me.bridge` and re-dofiles `init.lua`, but the previous bridge's tick callback stays registered with `UpdateManager` (no public unregister API across DCS builds). Without a guard, you ended up with N+1 ticks racing on the same inbox / heartbeat files after N reloads — symptom was `dcs-sms status` reporting a stale `hook_version` (older bridge's heartbeat wins the write race) plus occasional spurious "gui bridge is disabled" errors on requests a stale tick happened to pick up. `bridge.install()` now bumps a `_G.DCS_SMS_BRIDGE_GEN` counter and stamps it into the new tick's closure; older ticks check the global on every call and silently return early when they're no longer the active generation, so there's a single source of truth for heartbeat + inbox processing across any number of dev-reloads. The install log line now includes `gen <N>` so it's visible in `dcs.log` how many reloads have stacked since DCS startup.
+
 ### [0.14.0] — 2026-05-23
 
 **Added**
