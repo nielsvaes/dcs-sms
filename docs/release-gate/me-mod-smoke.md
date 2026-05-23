@@ -339,3 +339,40 @@ prepending. Same write path, same undo behaviour.
       behavior.
 - [ ] Toggle `Keep Num` OFF and rerun the same input on `Viper-1` →
       becomes `Viper-1Sfx` (plain append).
+
+## Unit scope (v0.10.0+)
+
+Open Mass Edit, switch to the **Unit** tab. Confirm the treeview shows
+Name · Type · Category · Skill · Coalition · Group with Coalition column
+tinted red/blue/neutral per the unit's group country.
+
+### Form gating
+
+- [ ] With zero units checked: all 9 forms in the right pane are grayed out
+      (Apply buttons + inputs disabled).
+- [ ] Check 1 tank: planes-only forms (Set onboard #, Set fuel %) and
+      planes/helos forms (Set livery) gray out. Skill, rename forms,
+      heading remain interactive.
+- [ ] Check 1 plane: every form is interactive.
+- [ ] Check 1 plane + 1 tank: planes-only / planes-helos forms stay
+      interactive (the plane is applicable); on Apply, the tank is
+      silently skipped and the toast shows "· 1 not applicable". Set
+      livery additionally grays out whenever the checked planes/helos
+      span more than one airframe type.
+
+### Per-form happy path (one tap each)
+
+- [ ] **Find & replace in unit names:** check 2+ units, Find="-1" Replace="-A" → names update; toast "2 renamed".
+- [ ] **Add prefix:** check 2 units, Prefix="[P] " → names update; toast "2 renamed".
+- [ ] **Add suffix:** check 2 units, Suffix="-Lead", Keep# OFF → names get suffix appended.
+- [ ] **Auto-name:** check 3 units, Base="Falcon" Start="5" → units become Falcon-5, Falcon-6, Falcon-7.
+- [ ] **Set skill:** check 2 units, pick "Excellent" → skill changes; toast "2 skill set".
+- [ ] **Set onboard #:** check 3 planes (only), Start="010" → 010 / 011 / 012; click Random → all change to distinct 3-digit numbers.
+- [ ] **Set livery:** check 2 planes of same airframe, pick a livery → both planes update.
+- [ ] **Set heading (absolute):** check 2 units, type 90 → both units face east; close + reopen ME unit panel to confirm.
+- [ ] **Set heading (delta):** with the same selection, type 45 in Delta → both units now face 135°.
+- [ ] **Set fuel %:** check a plane, type 50 → toast "1 fuel set". If "used current-fuel fallback" appears, max_fuel resolver didn't recognize the airframe (file a follow-up).
+
+### Undo
+
+For each form above: run the apply, hit Ctrl+Z (or whatever the ME's undo key is), verify the unit reverts. Single-slot undo: only the last apply is undoable (matches existing form behavior).
