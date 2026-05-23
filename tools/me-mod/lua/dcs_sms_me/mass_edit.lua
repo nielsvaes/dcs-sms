@@ -436,10 +436,12 @@ local function row_values(scope, entity, group)
         return { name = tostring(entity.name or ''),
                  layer = tostring((entity.layer and entity.layer.name) or '') }
     elseif scope == 'airbase' then
+        local n = tonumber(entity.north) or 0
+        local e = tonumber(entity.east)  or 0
         return { name      = tostring(entity.name or ''),
                  coalition = tostring(entity.coalition or ''),
-                 north     = tonumber(entity.north) or 0,
-                 east      = tonumber(entity.east) or 0 }
+                 north     = math.floor(n + (n >= 0 and 0.5 or -0.5)),
+                 east      = math.floor(e + (e >= 0 and 0.5 or -0.5)) }
     end
     return {}
 end
@@ -461,7 +463,7 @@ local function update_sort_indicators()
         if hc and hc.setText then
             local label = c.label
             if ss.key == c.key and c.key ~= 'check' then
-                label = label .. (ss.dir == 'desc' and ' v' or ' ^')
+                label = label .. (ss.dir == 'desc' and ' ▼' or ' ▲')
             end
             pcall(hc.setText, hc, label)
         end
