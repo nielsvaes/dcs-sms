@@ -105,6 +105,14 @@ This is the first tag after a long quiet period — `sms.version` had been froze
 
 ## ME-mod
 
+### [0.11.1] — 2026-05-23
+
+Internal-only release. No user-facing behavior changes; the bump exists so the in-source `version.lua` reflects the test + refactor groundwork that's landed since `0.11.0`.
+
+**Internal**
+- `tools/me-mod/lua/dcs_sms_me/verbs.lua` (~6950 lines, ~80 verbs) split into one file per noun group under `dcs_sms_me/verbs/<noun>_verbs.lua`, with shared cross-noun helpers in `dcs_sms_me/verb_helpers.lua`. `verbs.lua` itself collapsed to a 49-line aggregator with a duplicate-key guard. `unit_set_parking` lives in `route_verbs.lua` (depends on route-block locals) but is still surfaced as a unit verb by the aggregator. Closes [#54](https://github.com/nielsvaes/dcs-sms/issues/54).
+- 1015 new Lua unit-test assertions across 9 noun-group test files (group, unit, zone, drawing, trigger, airbase, resources, camera, file). `mock_me_mission.lua` extended with the in-process `me_mission` API surface used by inject-group, payload, zone TZD, drawing-panel, trigger-rules, and airbase-warehouse plumbing. Closes [#55](https://github.com/nielsvaes/dcs-sms/issues/55).
+
 ### [0.11.0] — 2026-05-22
 
 **Added**
