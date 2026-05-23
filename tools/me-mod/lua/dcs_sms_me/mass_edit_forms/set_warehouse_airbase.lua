@@ -177,9 +177,16 @@ function M.new(parent_raw, get_checked, on_after_apply, _get_categories)
     local function add(w) owned[#owned + 1] = w; pcall(parent_raw.insertWidget, parent_raw, w); return w end
 
     local function make_tri(label)
-        local widget = tri_state_button.new(parent_raw, label)
-        if widget then owned[#owned + 1] = widget end
-        return widget
+        local tsb = tri_state_button.new(parent_raw, label)
+        -- Track the UNDERLYING Button in `owned` so the panel's show/hide
+        -- pass — which calls setVisible on each owned widget — can hide
+        -- the button on scope-switch. The tri_state_button wrapper itself
+        -- only exposes set_visible (underscore) and would be skipped.
+        if tsb then
+            local btn = tsb:widget()
+            if btn then owned[#owned + 1] = btn end
+        end
+        return tsb
     end
 
     -- The tri-state buttons carry their own label text inline (e.g.
