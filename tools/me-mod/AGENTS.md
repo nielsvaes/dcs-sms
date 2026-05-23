@@ -59,6 +59,7 @@ The full set of nouns and verbs (see [`../../docs/cli/`](../../docs/cli/) for fl
 | **`airbase`** | `list`, `get`, `set-coalition` |
 | **`resources`** | `get`, `set` |
 | **`camera`** | `get`, `focus` |
+| **`coords`** | `to-geo`, `to-local` |
 
 > **Doc-sync rule:** when you add, remove, or rename a verb, **update this table in the same commit**. The repo-level rule is in [`../../AGENTS.md`](../../AGENTS.md#3-documentation-sync-rule).
 

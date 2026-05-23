@@ -38,6 +38,13 @@ Every command on the dcs-sms CLI, grouped by namespace.
 | [`me camera focus`](me-camera-focus.md) | focus the ME camera on a coordinate / lat-lon / airdrome name |
 | [`me camera get`](me-camera-get.md) | return the ME camera's current map center (x, y, lat, lon, scale) |
 
+## me coords
+
+| Command | Description |
+|---|---|
+| [`me coords to-geo`](me-coords-to-geo.md) | convert DCS local meters (north/east) to geographic lat/lon for the current theatre |
+| [`me coords to-local`](me-coords-to-local.md) | convert geographic lat/lon to DCS local meters (north/east) for the current theatre |
+
 ## me drawing
 
 | Command | Description |

@@ -105,6 +105,15 @@ This is the first tag after a long quiet period — `sms.version` had been froze
 
 ## ME-mod
 
+### [0.13.0] — 2026-05-23
+
+**Added**
+- New `coords` noun with two verbs that convert between DCS theatre-local meters and geographic lat/lon for the open mission's theatre:
+  - `dcs-sms me coords to-geo --north N --east E [--alt A]` — returns `{ lat, lon, north, east[, alt] }`.
+  - `dcs-sms me coords to-local --lat L --lon Lo [--alt A]` — returns `{ north, east, lat, lon[, alt] }`.
+
+  Both wrap the ME-side `Terrain.convertMetersToLatLon` / `Terrain.convertLatLonToMeters` calls already used internally by `camera_focus`, `airbase_list`, `airbase_get`. The mission-env `coord.LOtoLL` (which is what most documentation references) isn't available in the GUI exec context — these verbs surface the right ME-side API so callers don't have to discover that. `--alt` is conversion-free and passed through unchanged in either direction, so a single call can produce a complete coord record. Closes [#66](https://github.com/nielsvaes/dcs-sms/issues/66) (request 3).
+
 ### [0.12.0] — 2026-05-23
 
 **Added**

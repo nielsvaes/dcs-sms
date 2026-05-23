@@ -35,10 +35,11 @@ local function assert_fn(verb_name, expected_noun)
     end
 end
 
--- One canonical verb from each of the 10 noun modules. Order matches the
+-- One canonical verb from each of the 11 noun modules. Order matches the
 -- noun_modules list in verbs.lua for grep-ability.
 assert_fn('airbase_list',       'airbase')
 assert_fn('camera_get',         'camera')
+assert_fn('coords_to_geo',      'coords')
 assert_fn('drawing_list',       'drawing')
 assert_fn('file_open',          'file')
 assert_fn('group_list',         'group')

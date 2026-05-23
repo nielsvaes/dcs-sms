@@ -22,6 +22,7 @@ local M = {}
 local noun_modules = {
     'airbase_verbs',
     'camera_verbs',
+    'coords_verbs',
     'drawing_verbs',
     'file_verbs',
     'group_verbs',
