@@ -44,6 +44,12 @@ function M.new_mission()
                       vehicle = { group = {} },
                       ship = { group = {} },
                       static = { group = {} } },
+                    { id = 1, name = 'Germany',
+                      plane = { group = {} },
+                      helicopter = { group = {} },
+                      vehicle = { group = {} },
+                      ship = { group = {} },
+                      static = { group = {} } },
                 },
             },
             red = {
@@ -54,11 +60,53 @@ function M.new_mission()
                       vehicle = { group = {} },
                       ship = { group = {} },
                       static = { group = {} } },
+                    { id = 4, name = 'Iran',
+                      plane = { group = {} },
+                      helicopter = { group = {} },
+                      vehicle = { group = {} },
+                      ship = { group = {} },
+                      static = { group = {} } },
+                },
+            },
+            neutrals = {
+                country = {
+                    { id = 70, name = 'Switzerland',
+                      plane = { group = {} },
+                      helicopter = { group = {} },
+                      vehicle = { group = {} },
+                      ship = { group = {} },
+                      static = { group = {} } },
                 },
             },
         },
+        triggers = { zones = {} },
+        drawings = { layers = {} },
+        trig = { actions = {}, conditions = {}, events = {}, custom = {},
+                 flag = {}, func = {} },
+        trigrules = {},
+        groundControl = { passwords = {}, roles = {} },
+        weather = {},
+        date = { Day = 1, Month = 1, Year = 2025 },
+        forcedOptions = {},
     }
     M._next_group_id = 1
+    M._next_unit_id = 1000
+    M.group_by_name = {}
+    M.group_by_id = {}
+    M.unit_by_name = {}
+    M.unit_by_id = {}
+    M.countryCoalition = {
+        USA         = { color = { 0, 0, 1, 1 } },
+        Germany     = { color = { 0, 0, 1, 1 } },
+        Russia      = { color = { 1, 0, 0, 1 } },
+        Iran        = { color = { 1, 0, 0, 1 } },
+        Switzerland = { color = { 0.5, 0.5, 0.5, 1 } },
+    }
+    M.create_group_objects_calls = 0
+    M.fixWaypointForGroup_calls = 0
+    M.fixAddPropAircraft_calls = 0
+    M.remove_group_calls = 0
+    M.remove_unit_calls = 0
     return M.mission
 end
 
@@ -111,7 +159,18 @@ local function add_group(category, side, country_name, opts)
         },
         mapObjects = nil,
     }
+    g.boss = country
+    if not country.boss then country.boss = M.mission.coalition[side] end
     table.insert(country[category].group, g)
+    -- Register in lookup tables so collision checks and rename/remove work.
+    if M.group_by_name then M.group_by_name[g.name] = g end
+    if M.group_by_id then M.group_by_id[g.groupId] = g end
+    for i, u in ipairs(g.units) do
+        u.boss = g
+        u.index = i
+        if M.unit_by_name then M.unit_by_name[u.name] = u end
+        if M.unit_by_id then M.unit_by_id[u.unitId] = u end
+    end
     return g
 end
 
@@ -183,6 +242,182 @@ end
 -- Same module is registered as both 'me_mission' and 'me_map_window' via
 -- package.preload in test_verbs_route.lua, so require('me_map_window')
 -- inside verbs.lua resolves to this table.
+-- ============================================================
+-- inject_group / group-create plumbing
+-- ============================================================
+
+function M.getNewGroupId()
+    M._next_group_id = (M._next_group_id or 1) + 1
+    return M._next_group_id - 1
+end
+
+function M.getNewUnitId()
+    M._next_unit_id = (M._next_unit_id or 1000) + 1
+    return M._next_unit_id - 1
+end
+
+-- check_group_name — return the input name unless taken, in which case
+-- append " #2" / " #3" / ... until a free slot is found.
+function M.check_group_name(name)
+    if not M.group_by_name or not M.group_by_name[name] then return name end
+    local i = 2
+    while M.group_by_name[name .. ' #' .. i] do i = i + 1 end
+    return name .. ' #' .. i
+end
+
+-- getUnitName — return a free unit name derived from `seed`. The real ME
+-- returns `seed` itself when free, and uniquifies via the "<base>-<N>" suffix
+-- pattern only on collision. Mock mirrors that: free seed → returned as-is;
+-- taken seed with "-N" tail → increment N; otherwise append "-2/-3/...".
+function M.getUnitName(seed)
+    M.unit_by_name = M.unit_by_name or {}
+    if seed and not M.unit_by_name[seed] then return seed end
+    local base, n = string.match(seed or '', '^(.-)-(%d+)$')
+    if base then
+        local i = tonumber(n) + 1
+        while M.unit_by_name[base .. '-' .. i] do i = i + 1 end
+        return base .. '-' .. i
+    end
+    local i = 2
+    while M.unit_by_name[(seed or 'unit') .. '-' .. i] do i = i + 1 end
+    return (seed or 'unit') .. '-' .. i
+end
+
+function M.create_group_objects(g)
+    M.create_group_objects_calls = (M.create_group_objects_calls or 0) + 1
+    g.mapObjects = g.mapObjects or { units = {}, zones = {}, route = {} }
+end
+
+function M.fixAddPropAircraft()
+    M.fixAddPropAircraft_calls = (M.fixAddPropAircraft_calls or 0) + 1
+end
+
+function M.fixWaypointForGroup(g)
+    M.fixWaypointForGroup_calls = (M.fixWaypointForGroup_calls or 0) + 1
+end
+
+-- insert_unit(group, utype, skill, index, seed_name, x, y, heading, _, livery)
+-- Creates a fresh unit table, inserts it at g.units[index], returns the unit.
+-- Mirrors Mission.insert_unit's data-side behavior (the real impl also draws
+-- the symbol, allocates a callsign, etc. — the mock skips those).
+function M.insert_unit(group, utype, skill, index, seed_name, x, y, heading_rad, _arg9, livery)
+    local name = M.getUnitName(seed_name or group.name)
+    -- Default offset matches the real ME's 40m spread when x/y are nil.
+    local cum_x, cum_y = nil, nil
+    if x == nil or y == nil then
+        cum_x = group.x + ((index - 1) * 40)
+        cum_y = group.y + ((index - 1) * 40)
+    end
+    local u = {
+        unitId = M.getNewUnitId(),
+        name = name,
+        type = utype,
+        skill = skill or 'Average',
+        livery_id = livery or '',
+        x = x or cum_x,
+        y = y or cum_y,
+        heading = heading_rad or 0,
+        psi = 0,
+        index = index,
+        boss = group,
+    }
+    table.insert(group.units, u)
+    -- Re-index any subsequent units (insert_unit is always-append in the
+    -- ME so this is a no-op in practice, but kept defensive).
+    for i, gu in ipairs(group.units) do gu.index = i end
+    if M.unit_by_name then M.unit_by_name[u.name] = u end
+    if M.unit_by_id then M.unit_by_id[u.unitId] = u end
+    return u
+end
+
+-- Walk the coalition tree and run callback(g, country, side, cat) for every
+-- group. Internal helper for remove_*. Stops if callback returns true.
+local function _walk_all_groups(callback)
+    if not M.mission or not M.mission.coalition then return end
+    for side_name, side in pairs(M.mission.coalition) do
+        if type(side) == 'table' and type(side.country) == 'table' then
+            for _, country in ipairs(side.country) do
+                for _, cat in ipairs({'plane','helicopter','vehicle','ship','static'}) do
+                    if country[cat] and type(country[cat].group) == 'table' then
+                        for _, g in ipairs(country[cat].group) do
+                            if callback(g, country, side_name, cat) then return end
+                        end
+                    end
+                end
+            end
+        end
+    end
+end
+
+function M.remove_unit(u)
+    _walk_all_groups(function(g, country, side, cat)
+        for i, gu in ipairs(g.units or {}) do
+            if gu == u then
+                table.remove(g.units, i)
+                for j, gu2 in ipairs(g.units) do gu2.index = j end
+                if M.unit_by_name then M.unit_by_name[u.name] = nil end
+                if M.unit_by_id then M.unit_by_id[u.unitId] = nil end
+                M.remove_unit_calls = (M.remove_unit_calls or 0) + 1
+                return true
+            end
+        end
+    end)
+end
+
+function M.remove_group(g)
+    _walk_all_groups(function(gg, country, side, cat)
+        if gg == g then
+            for i, x in ipairs(country[cat].group) do
+                if x == g then table.remove(country[cat].group, i); break end
+            end
+            if M.group_by_name then M.group_by_name[g.name] = nil end
+            if M.group_by_id then M.group_by_id[g.groupId] = nil end
+            for _, u in ipairs(g.units or {}) do
+                if M.unit_by_name then M.unit_by_name[u.name] = nil end
+                if M.unit_by_id then M.unit_by_id[u.unitId] = nil end
+            end
+            M.remove_group_calls = (M.remove_group_calls or 0) + 1
+            return true
+        end
+    end)
+end
+
+-- renameGroup(g, new_name) → true on success, false if name taken.
+function M.renameGroup(g, new_name)
+    if M.group_by_name and M.group_by_name[new_name] and M.group_by_name[new_name] ~= g then
+        return false
+    end
+    if M.group_by_name then
+        M.group_by_name[g.name] = nil
+        M.group_by_name[new_name] = g
+    end
+    g.name = new_name
+    return true
+end
+
+-- renameUnit(u, new_name) → true on success, false if name taken.
+function M.renameUnit(u, new_name)
+    if M.unit_by_name and M.unit_by_name[new_name] and M.unit_by_name[new_name] ~= u then
+        return false
+    end
+    if M.unit_by_name then
+        M.unit_by_name[u.name] = nil
+        M.unit_by_name[new_name] = u
+    end
+    u.name = new_name
+    return true
+end
+
+-- move_unit(group, unit, x, y, doNotRedraw, noCheckSurface) — data-side only.
+function M.move_unit(group, unit, x, y, _doNotRedraw, _noCheckSurface)
+    unit.x = x
+    unit.y = y
+end
+
+-- ============================================================
+-- Waypoint plumbing (used by route_verbs.lua tests)
+-- ============================================================
+
 function M.move_waypoint(group, index, x, y, dontMoveLinked, doNotUpdateRoute, dontMoveChild, dontRelativePos, noCheckSurface)
     local wpt = group.route.points[index]
     if not wpt then return end
