@@ -5,10 +5,10 @@ package hookstatus
 import (
 	"encoding/json"
 	"fmt"
-	"os"
 	"path/filepath"
 	"time"
 
+	"github.com/nielsvaes/dcs-sms/tools/internal/fileutil"
 	"github.com/nielsvaes/dcs-sms/tools/internal/proto"
 )
 
@@ -18,8 +18,11 @@ func Read(stateDir string) (proto.HookState, error) {
 }
 
 // readOne is the workhorse: parses one heartbeat file or returns an error.
+// Uses fileutil.ReadFileRetry so a transient Windows sharing-violation
+// against the hook's in-progress atomic rename doesn't surface as a hard
+// failure.
 func readOne(path string) (proto.HookState, error) {
-	data, err := os.ReadFile(path)
+	data, err := fileutil.ReadFileRetry(path)
 	if err != nil {
 		return proto.HookState{}, fmt.Errorf("read %s: %w", path, err)
 	}

@@ -22,7 +22,7 @@ dcs-sms me unit list [flags]
 | `--saved-games` | string | `""` | override Saved Games path |
 | `--side` | string | `""` | filter by side: red \| blue \| neutrals |
 | `--timeout` | duration | `30s` | wall-clock timeout |
-| `--type` | string | `""` | filter by airframe / unit type (exact, e.g. F-16C_50) |
+| `--type` | string | `""` | filter by airframe / unit type (exact match; comma-separate for any-of, e.g. flak18,flak36,bofors40) |
 
 ---
 

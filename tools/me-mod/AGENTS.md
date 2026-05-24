@@ -52,13 +52,14 @@ The full set of nouns and verbs (see [`../../docs/cli/`](../../docs/cli/) for fl
 | **`group`** | `list`, `get`, `create-plane`, `create-helicopter`, `create-vehicle`, `create-ship`, `create-static`, `remove`, `add-unit`, `remove-unit`, `set-name`, `set-task`, `set-hidden`, `set-hidden-on-planner`, `set-hidden-on-mfd`, `set-frequency`, `set-pos`, `set-country`, `set-formation`, `set-late-activation`, `set-uncontrolled`, `set-uncontrollable` |
 | **`unit`** | `list`, `get`, `set-name`, `set-skill`, `set-livery`, `set-pos`, `set-heading`, `set-alt`, `set-onboard-num`, `set-callsign`, `set-loadout`, `set-fuel`, `set-chaff`, `set-flare`, `set-gun`, `set-parking`, `payload` |
 | **`zone`** | `list`, `get`, `create`, `remove`, `set-name`, `set-pos`, `set-radius`, `set-color`, `set-hidden`, `set-link`, `set-vertices` |
-| **`drawing`** | `list`, `get`, `remove`, `create-circle`, `create-oval`, `create-rect`, `create-arrow`, `create-line`, `create-polygon`, `create-textbox`, `create-icon`, `set-name`, `set-pos`, `set-angle`, `set-color`, `set-fill-color`, `set-thickness`, `set-text` |
+| **`drawing`** | `list`, `get`, `remove`, `create-circle`, `create-oval`, `create-rect`, `create-arrow`, `create-line`, `create-polygon`, `create-chevron`, `create-textbox`, `create-icon`, `set-name`, `set-pos`, `set-angle`, `set-color`, `set-fill-color`, `set-thickness`, `set-text` |
 | **`trigger`** | `list`, `get`, `list-predicates`, `describe-predicate`, `create`, `remove`, `set-name`, `set-eventlist`, `add-condition`, `remove-condition`, `add-action`, `remove-action`, `reorder`, `reorder-condition`, `reorder-action` |
 | **`route`** | `list`, `get`, `clear` |
 | **`waypoint`** | `add`, `insert`, `remove`, `get`, `set-pos`, `set-alt`, `set-speed`, `set-speed-locked`, `set-eta`, `set-eta-locked`, `set-type`, `set-action`, `set-mode`, `set-name`, `set-formation`, `link-airbase` |
 | **`airbase`** | `list`, `get`, `set-coalition` |
 | **`resources`** | `get`, `set` |
 | **`camera`** | `get`, `focus` |
+| **`coords`** | `to-geo`, `to-local` |
 
 > **Doc-sync rule:** when you add, remove, or rename a verb, **update this table in the same commit**. The repo-level rule is in [`../../AGENTS.md`](../../AGENTS.md#3-documentation-sync-rule).
 
@@ -124,7 +125,9 @@ For things no verb covers, drop to:
 dcs-sms exec --target gui --code '<lua>'
 ```
 
-This runs your Lua in the same ME state the verbs do — full I/O, full access to the editable `mission` table. **Flag the gap.** If you find yourself doing this for anything other than one-shot exploration, the right answer is usually a new verb. See [`Part 2.5`](#25-adding-a-new-verb-end-to-end) for the workflow, or ask the user to file an issue.
+This runs your Lua in the same ME state the verbs do — full I/O, full access to the editable `mission` table. **Flag the gap.** If you find yourself doing this for anything other than one-shot exploration, the right answer is usually a new verb. See [`Part 2.5`](#25-adding-a-new-verb-end-to-end) for the workflow, or offer to file a GitHub issue.
+
+When filing, use the **`dcs-sms-bridge`** label (the repo's dedicated category for CLI / Go / missing-verb work) plus `enhancement` or `bug`. The body must spell out: what the user was trying to do in plain English, what command(s) failed or were missing, the workaround Lua/Python/PowerShell you actually ran, and a concrete example of the verb/flag you wish existed. Issue #60 ("gaps found in AI-assisted mission scripting") is the reference template — match that shape.
 
 ---
 
@@ -156,7 +159,9 @@ You do **not** have:
 | `version.lua` | Single canonical version string. `me-mod-v<this>` is the release tag. |
 | `menu.lua` | Adds the "DCS-SMS" top-level menu to the editor menubar via `me_menubar.menuBar:insertItem`. Hosts the **Prefab Manager** entry, the **About** entry, and the **External execution: ON/OFF** toggle that gates `bridge.lua`. |
 | `bridge.lua` | The gui-bridge inbox poller. Registered to `UpdateManager.add(tick)`. Polls `<SavedGames>/DCS/dcs-sms/inbox/*.req.json` every tick, executes `target=gui` requests via `loadstring + xpcall`, writes responses to `outbox/`. Writes heartbeat to `state/me.json`. Gated by `_G.DCS_SMS_GUI_BRIDGE_ENABLED`. |
-| `verbs.lua` | All `me <noun> <verb>` Lua functions. One function per verb (snake_case: `verbs.unit_set_pos`, `verbs.group_create_plane`, etc.). Read [Part 2.5](#25-adding-a-new-verb-end-to-end) before adding to this file. |
+| `verbs.lua` | Aggregator. Merges each `verbs/<noun>_verbs.lua`'s `M.*` exports into one table so the bridge can keep dispatching `verbs.<name>(args)`. See [Part 2.6](#26-the-verbslua-structure). |
+| `verb_helpers.lua` | Cross-noun verb helpers (walk_groups, find_*_in_mission, refresh_group_view, inject_group, strip_back_refs) plus the coordinate-axis convention block. Required by most noun files. |
+| `verbs/<noun>_verbs.lua` | One file per noun group. Each holds the verbs for one noun + the helpers private to that noun. Read [Part 2.6](#26-the-verbslua-structure) before adding. |
 | `weapons_db.lua` | Lazy weapon-name index used by `unit_payload` and `unit_set_loadout`. |
 | `paths.lua` | Filesystem-path utilities. |
 | `selection.lua` | Marquee-selection capture used by Prefab Manager save. |
@@ -175,17 +180,27 @@ You do **not** have:
 
 ## 2.3 The embed workflow
 
-`tools/me-mod/lua/` is `go:embed`ed into `dcs-sms.exe`. When you edit any Lua file in this tree:
+`tools/me-mod/lua/` is `go:embed`ed into `dcs-sms.exe`. When you edit any Lua file in this tree, the iteration loop is one command:
 
-1. **Rebuild the binary.** `cd tools && go build ./cmd/dcs-sms` — produces `tools/dcs-sms.exe`. The Lua changes don't reach the user's DCS install yet.
-2. **Reinstall.** `dcs-sms install-me-mod` — copies the embedded Lua tree to `<DCS install>/MissionEditor/modules/dcs_sms_me/`, overwriting the previous copy. The `MissionEditor.lua` patch line stays put.
-3. **Restart DCS.** Lua under `MissionEditor.lua` loads once at DCS start; you cannot hot-reload without a full restart. (Dev-reload via `Ctrl+Shift+R` inside the ME *partially* reloads things but does not re-run `MissionEditor.lua` — don't rely on it.)
+```sh
+dcs-sms dev-reload
+```
 
-A common contributor mistake: editing Lua, rebuilding, and forgetting to reinstall. The installed copy under `<DCS>/MissionEditor/modules/` is what runs; the source tree is dead until reinstalled.
+Run it from anywhere inside the dcs-sms checkout. It chains three steps:
+
+1. **Rebuild the binary.** `go build ./cmd/dcs-sms` from `tools/`. Produces an updated `dcs-sms.exe` with the new embedded Lua tree.
+2. **Reinstall.** Execs the **just-built** binary's `install-me-mod` subcommand as a child process — not the same in-process call, because the dev-reload process itself was started from the *previous* build's binary and still holds that build's `embed.FS` in memory. Calling install in-process would silently copy the old embedded Lua to disk. The child process gets the fresh embed; the child writes `<DCS install>/MissionEditor/modules/dcs_sms_me/`. If DCS lives under Program Files, this step returns exit code 5 (needs elevation) and prints the admin-re-launch hint; re-run from an admin terminal in that case.
+3. **Hot-reload.** Calls `reload-me-mod` to clear `package.loaded.dcs_sms_me.*` in the running ME and `dofile` the new `init.lua`. No DCS restart needed — your Lua changes are live in the open Mission Editor. The reloaded `bridge.lua` bumps `_G.DCS_SMS_BRIDGE_GEN` and silences the previous bridge instance's tick callback (which UpdateManager keeps calling) so heartbeat + inbox processing have a single source of truth across any number of reloads.
+
+The hot-reload step needs the gui bridge active. Open the Mission Editor and click **DCS-SMS → External execution: OFF → ON** at least once per DCS session. `dev-reload` returns exit code 4 with a clear message if the toggle is off.
+
+If you've edited the ME-mod bootstrap (`init.lua`, `menu.lua`) in ways that change top-level menu registration or the `MissionEditor.lua` patch itself, a full DCS restart may still be needed. For the common case (iterating on individual modules like `prefab_manager.lua`, `verbs.lua`, etc.), the hot-reload is enough.
+
+A common contributor mistake pre-`dev-reload`: editing Lua, rebuilding, and forgetting to reinstall. The installed copy under `<DCS>/MissionEditor/modules/` is what runs; the source tree is dead until reinstalled. `dev-reload` makes this impossible to forget.
 
 ## 2.4 Failure model for verbs
 
-Every verb in `verbs.lua` returns a uniform table:
+Every verb in the `verbs/<noun>_verbs.lua` files returns a uniform table:
 
 ```lua
 function M.widget_set_foo(args)
@@ -204,15 +219,15 @@ end
 
 This contract is similar in spirit to the framework's "log + nil + never throw", but the shape is different because the verb's return value is the wire response. Don't use `nil` to signal failure — the bridge would JSON-encode it as `null` and the CLI would treat that as missing-payload.
 
-`verbs.lua` already has a uniform pcall pattern wrapping each verb body — read a few existing verbs (`verbs.unit_set_pos`, `verbs.trigger_create`) to see the conventional shape before writing a new one.
+The existing noun files already use a uniform pcall pattern wrapping each verb body — read a few existing verbs (`verbs/unit_verbs.lua`'s `unit_set_pos`, `verbs/trigger_verbs.lua`'s `trigger_create`) to see the conventional shape before writing a new one.
 
 ## 2.5 Adding a new verb end-to-end
 
-A verb is a pair: a function in `verbs.lua` (does the work) and a Go file in `tools/cmd/dcs-sms/` (the CLI surface + flag parsing). You must add both.
+A verb is a pair: a function in `verbs/<noun>_verbs.lua` (does the work) and a Go file in `tools/cmd/dcs-sms/` (the CLI surface + flag parsing). You must add both.
 
 ### Step 1 — write the Lua
 
-In `tools/me-mod/lua/dcs_sms_me/verbs.lua`, add a function whose name matches the noun-verb pair you intend to register (snake_case):
+In `tools/me-mod/lua/dcs_sms_me/verbs/<noun>_verbs.lua` (existing file for the noun, or a new file added to the aggregator's `noun_modules` list in `verbs.lua`), add a function whose name matches the noun-verb pair you intend to register (snake_case):
 
 ```lua
 -- ============================================================
@@ -250,7 +265,7 @@ end
 **Style notes:**
 
 - Validate inputs at the top; return early with `{ok=false, error=...}` for caller-error cases.
-- Reuse the helpers already at the top of `verbs.lua` (`walk_groups`, `find_unit_in_mission`, `refresh_group_view`, `strip_back_refs`). Don't reinvent them.
+- Reuse the helpers in `verb_helpers.lua` (`walk_groups`, `find_unit_in_mission`, `refresh_group_view`, `strip_back_refs`, etc.) via the per-file aliases at the top of each noun file. Don't reinvent them.
 - After any mutation that's visible in the ME UI, call the appropriate refresh helper (`refresh_group_view`, `panel_route.fixActions`, etc.) — otherwise the user sees stale state until they click something.
 - Use `log.write('sms.me.verbs', log.INFO|WARNING|ERROR, msg)` for diagnostic logs. They land in `dcs.log` prefixed with the tag.
 
@@ -305,22 +320,40 @@ If you don't have DCS running locally, the Go tests and the Lua mock tests are t
 
 ## 2.6 The `verbs.lua` structure
 
-`verbs.lua` is one file (currently ~7000 lines) because every verb shares the same set of small helpers and the same JSON-table return shape. Don't split it into one-file-per-noun "for cleanliness" — the helpers at the top are tightly coupled to multiple verbs and you'd end up with circular requires.
+Verbs are split across one file per noun under `dcs_sms_me/verbs/`, with `verbs.lua` itself acting as a thin aggregator and `verb_helpers.lua` holding the helpers that more than one noun needs.
 
-Layout inside `verbs.lua`:
+Layout:
 
-1. **Top comment block** — coordinate convention, error convention, conventions for new verbs.
-2. **Shared helpers** — `walk_groups`, `strip_back_refs`, `refresh_group_view`, `find_unit_in_mission`, etc. Declared with `local` so Lua's forward-reference rules let any verb below them call them.
-3. **Verbs by noun** — each noun has a `-- == noun verbs ==` banner comment, then all its verb functions. Order roughly mirrors the noun list in [§1.4](#14-verb-namespace).
-4. **`return M`** at the bottom.
+| File | Contents |
+|---|---|
+| `dcs_sms_me/verbs.lua` | Aggregator. Requires each noun module and merges its `M.<verb>` exports into one table. Errors on duplicate verb keys. |
+| `dcs_sms_me/verb_helpers.lua` | Cross-noun helpers + the coordinate-convention header comment. Exposes `walk_groups`, `strip_back_refs`, `refresh_group_view`, `find_unit_in_mission`, `find_group_in_mission`, `find_country_by_name`, `find_airbase_by_name`, `inject_group`. |
+| `dcs_sms_me/verbs/file_verbs.lua` | `file_open/new/save/save_as` + the `_save_mission_with_reopen_dance` / `refresh_menubar_title` helpers they share. |
+| `dcs_sms_me/verbs/group_verbs.lua` | `group_remove`, `group_create_<plane/helicopter/vehicle/ship/static>`, `group_add_unit`, `group_remove_unit`, all `group_set_*`, `group_list`, `group_get`. |
+| `dcs_sms_me/verbs/unit_verbs.lua` | All `unit_set_*` (except `unit_set_parking`), `unit_payload_set/clear`, `unit_list`, `unit_get`, plus the local `_resolve_weapon` / `_find_pylon_def` / `_check_air_unit` payload helpers. |
+| `dcs_sms_me/verbs/zone_verbs.lua` | `zone_create_<circle/quad>`, `zone_set_*`, `zone_remove`, `zone_list`, `zone_get` + the local `find_zone` helper. |
+| `dcs_sms_me/verbs/drawing_verbs.lua` | All `drawing_*` verbs + the local drawing-panel helpers (`mutate_drawing`, `inject_drawing`, `find_drawing_by_name`, `unique_drawing_name`, `compute_center_and_relative_points`). |
+| `dcs_sms_me/verbs/trigger_verbs.lua` | All `trigger_*` verbs plus the `_trigger_*` predicate-cache, descriptor-walking, and reorder helpers — fully self-contained. |
+| `dcs_sms_me/verbs/route_verbs.lua` | All `route_*`, `waypoint_*` verbs, plus the route-block locals (`CATEGORY_DEFAULTS`, `WAYPOINT_TYPES/ACTIONS/MODES`, `AIRFIELD_TYPES`, `ensure_map_objects`, `refresh_route_panel`, `find_route`, `find_waypoint`, `inherit_waypoint`). Also home to `unit_set_parking` — it depends on `AIRFIELD_TYPES`, `ensure_map_objects`, and `refresh_route_panel`, so it's co-located with those rather than threading them through `verb_helpers.lua`. |
+| `dcs_sms_me/verbs/camera_verbs.lua` | `camera_focus`, `camera_get` + the local airdrome-by-name resolver. |
+| `dcs_sms_me/verbs/airbase_verbs.lua` | `airbase_list`, `airbase_get`, `airbase_set_coalition` + the local airdrome lookup and `_airbase_freqs/stands/runways` helpers. |
+| `dcs_sms_me/verbs/resources_verbs.lua` | `resources_get`, `resources_set` + warehouse-ops glue (`_resources_resolve_target`, `_resources_zero_*`, `_resolve_unit_id`). |
 
-When adding a new verb, find the existing noun's section and add inside it (alphabetical by verb name is conventional but not strict). If the noun is brand new, add a new banner section and place it alphabetically among the others.
+Conventions inside each noun file:
+
+1. **Local helper aliases at the top** — `local find_group_in_mission = H.find_group_in_mission` etc. Verb bodies keep calling the helpers by their short names, so the verb code itself is unchanged from the pre-split layout.
+2. **Noun-local helpers stay local** — payload pylon resolution, trigger predicate caches, drawing-panel mutations, route-waypoint enumeration — each lives in `local function` form in its noun file. Adding cross-noun helpers belongs in `verb_helpers.lua` instead.
+3. **`return M` at the bottom**, exactly the `M.<verb_name>` keys that should be aggregated.
+
+When adding a new verb, find the noun's file under `verbs/` and append. Verb-name conflicts across files trip the aggregator's duplicate check at module load. If the noun is brand new, add a new file and a new entry to the `noun_modules` list in `verbs.lua`.
 
 ## 2.7 ME API quirks you'll hit
 
+> **dxgui / runtime quirks** (skinning, widget lifecycle, undo bus, marquee, context menus) live in a separate running log: [`GOTCHAS.md`](GOTCHAS.md). Skim it before touching `prefab_manager.lua`, `context_menu.lua`, `sms_window.lua`, or `menu.lua`. The bullets below cover ME mission-table API quirks.
+
 - **The mission table is the source of truth.** `require('me_mission').mission` returns the table the editor is currently editing. Most verbs walk it directly. The runtime DCS APIs (`Group.getByName`, `coalition.addGroup`) are **not** available here — those are mission-env only.
 - **Panel refresh is needed after mutation.** If a panel (route, payload, options) is open when you mutate the underlying data, the panel won't redraw automatically. Use the canonical refresh path for the panel (`require('panel_route').fixActions` and friends — read existing verbs for the right call).
-- **`mapObjects` lazy creation.** Disk-loaded groups don't have `mapObjects` until selected. After a position mutation, call `Mission.create_group_map_objects(g)` if `g.mapObjects == nil`, then `Mission.update_group_map_objects(g)`. `refresh_group_view(g)` in `verbs.lua` does this.
+- **`mapObjects` lazy creation.** Disk-loaded groups don't have `mapObjects` until selected. After a position mutation, call `Mission.create_group_map_objects(g)` if `g.mapObjects == nil`, then `Mission.update_group_map_objects(g)`. `refresh_group_view(g)` in `verb_helpers.lua` does this.
 - **`dictionary.fixDict`** — trigger action text, comments, radio-text need to go through this so the dictionary serializer can find them. Inline literal strings get dropped silently.
 - **Descriptor walking** — triggers and predicates are descriptor-driven. The descriptors live in `me_predicates.rulesDescr` / `actionsDescr`. Don't hardcode the param shapes; query the descriptor.
 - **`isVisible()` over monkey-patch** — to detect "is the trigger panel currently showing this trigger", call the widget's `isVisible()` rather than tracking it externally.
@@ -393,7 +426,7 @@ The **External execution** toggle flips `_G.DCS_SMS_GUI_BRIDGE_ENABLED`. Anythin
 - **Always wrap** any vanilla ME API call you're not 100% sure about in `pcall`. ED rewrites internal APIs between builds; defensive pcalls keep the mod usable on future builds.
 - **Log via `log.write('sms.me.<subsystem>', ...)`**. Useful tags: `sms.me`, `sms.me.bridge`, `sms.me.verbs`, `sms.me.prefab`. New subsystems should pick their own clear tag.
 - **Never throw out of a verb.** Return `{ok=false, error=...}` instead.
-- **Refresh after mutation.** If the panel/map UI shows what you changed, you need to refresh it. Use `refresh_group_view` and the panel-fixer helpers in `verbs.lua` rather than reinventing them.
+- **Refresh after mutation.** If the panel/map UI shows what you changed, you need to refresh it. Use `refresh_group_view` from `verb_helpers.lua` and the panel-fixer helpers in the noun files (e.g. `refresh_route_panel` in `route_verbs.lua`) rather than reinventing them.
 - **Update this file's verb index** ([§1.4](#14-verb-namespace)) on every verb add/remove/rename. Same commit.
 - **Update `docs/cli/`** by running `dcs-sms doc`. Same commit. CI fails the PR otherwise.
 - **Bump `version.lua` and `CHANGELOG.md`.** Same commit. Rules in [`../../AGENTS.md`](../../AGENTS.md#4-versioning-and-releases).

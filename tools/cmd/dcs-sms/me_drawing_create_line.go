@@ -10,6 +10,7 @@ import (
 
 type meDrawingCreateLineOpts struct {
 	Vertices        string
+	VerticesFile    string
 	Closed          bool
 	LineMode        string
 	Name            string
@@ -28,6 +29,8 @@ func meDrawingCreateLineFlags() (*flag.FlagSet, *meDrawingCreateLineOpts) {
 	fs := flag.NewFlagSet("me drawing create-line", flag.ContinueOnError)
 	fs.StringVar(&opts.Vertices, "vertices", "",
 		"vertices as \"n1,e1;n2,e2;...\" (>= 2 absolute world-meter pairs)")
+	fs.StringVar(&opts.VerticesFile, "vertices-file", "",
+		"path to a file with one \"north,east\" per line (use for long polylines that hit Windows arg-length limits); mutually exclusive with --vertices")
 	fs.BoolVar(&opts.Closed, "closed", false, "close the polyline back to the first vertex")
 	fs.StringVar(&opts.LineMode, "line-mode", "", "segments | segment | free (default segments)")
 	fs.StringVar(&opts.Name, "name", "", "drawing name (auto-allocated if empty)")
@@ -63,11 +66,21 @@ func meDrawingCreateLineCmd(args []string, stdout, stderr io.Writer) int {
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
-	if opts.Vertices == "" {
-		fmt.Fprintln(stderr, "dcs-sms me drawing create-line: --vertices is required")
+	if opts.Vertices == "" && opts.VerticesFile == "" {
+		fmt.Fprintln(stderr, "dcs-sms me drawing create-line: --vertices or --vertices-file is required")
 		return 2
 	}
-	verticesLua, err := parseVerticesToLua(opts.Vertices)
+	if opts.Vertices != "" && opts.VerticesFile != "" {
+		fmt.Fprintln(stderr, "dcs-sms me drawing create-line: --vertices and --vertices-file are mutually exclusive")
+		return 2
+	}
+	var verticesLua string
+	var err error
+	if opts.VerticesFile != "" {
+		verticesLua, err = parseVerticesFileToLua(opts.VerticesFile)
+	} else {
+		verticesLua, err = parseVerticesToLua(opts.Vertices)
+	}
 	if err != nil {
 		fmt.Fprintln(stderr, "dcs-sms me drawing create-line:", err)
 		return 2

@@ -60,11 +60,17 @@ func parseDrawingColorToHex(s string, defaultAlpha uint8) (string, error) {
 		a = defaultAlpha // override the zone-table's 0.15 alpha — drawings
 		// have their own opacity convention by primitive role.
 	} else {
-		hex := strings.TrimPrefix(s, "#")
+		hex := s
+		switch {
+		case strings.HasPrefix(hex, "#"):
+			hex = hex[1:]
+		case strings.HasPrefix(hex, "0x"), strings.HasPrefix(hex, "0X"):
+			hex = hex[2:]
+		}
 		switch len(hex) {
 		case 6, 8:
 		default:
-			return "", fmt.Errorf("--color %q: expected name or #rrggbb / #rrggbbaa", s)
+			return "", fmt.Errorf("--color %q: expected name, #rrggbb / #rrggbbaa, or 0xRRGGBBAA", s)
 		}
 		ru, err := strconv.ParseUint(hex[0:2], 16, 8)
 		if err != nil {
@@ -108,11 +114,17 @@ func parseColorToLua(s string) (string, error) {
 	if rgba, ok := namedZoneColors[strings.ToLower(s)]; ok {
 		return fmt.Sprintf("{ %g, %g, %g, %g }", rgba[0], rgba[1], rgba[2], rgba[3]), nil
 	}
-	hex := strings.TrimPrefix(s, "#")
+	hex := s
+	switch {
+	case strings.HasPrefix(hex, "#"):
+		hex = hex[1:]
+	case strings.HasPrefix(hex, "0x"), strings.HasPrefix(hex, "0X"):
+		hex = hex[2:]
+	}
 	switch len(hex) {
 	case 6, 8:
 	default:
-		return "", fmt.Errorf("--color %q: expected name or #rrggbb / #rrggbbaa", s)
+		return "", fmt.Errorf("--color %q: expected name, #rrggbb / #rrggbbaa, or 0xRRGGBBAA", s)
 	}
 	r, err := strconv.ParseUint(hex[0:2], 16, 8)
 	if err != nil {

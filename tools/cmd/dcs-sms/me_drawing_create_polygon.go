@@ -10,6 +10,7 @@ import (
 
 type meDrawingCreatePolygonOpts struct {
 	Vertices        string
+	VerticesFile    string
 	Name            string
 	Color           string
 	FillColor       string
@@ -27,6 +28,8 @@ func meDrawingCreatePolygonFlags() (*flag.FlagSet, *meDrawingCreatePolygonOpts) 
 	fs := flag.NewFlagSet("me drawing create-polygon", flag.ContinueOnError)
 	fs.StringVar(&opts.Vertices, "vertices", "",
 		"vertices as \"n1,e1;n2,e2;...\" (>= 3 absolute world-meter pairs)")
+	fs.StringVar(&opts.VerticesFile, "vertices-file", "",
+		"path to a file with one \"north,east\" per line (use for large polygons that hit Windows arg-length limits); mutually exclusive with --vertices")
 	fs.StringVar(&opts.Name, "name", "", "drawing name (auto-allocated if empty)")
 	fs.StringVar(&opts.Color, "color", "", "outline color (default red, opaque)")
 	fs.StringVar(&opts.FillColor, "fill-color", "", "fill color (default red, half alpha)")
@@ -60,11 +63,21 @@ func meDrawingCreatePolygonCmd(args []string, stdout, stderr io.Writer) int {
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
-	if opts.Vertices == "" {
-		fmt.Fprintln(stderr, "dcs-sms me drawing create-polygon: --vertices is required")
+	if opts.Vertices == "" && opts.VerticesFile == "" {
+		fmt.Fprintln(stderr, "dcs-sms me drawing create-polygon: --vertices or --vertices-file is required")
 		return 2
 	}
-	verticesLua, err := parseVerticesToLua(opts.Vertices)
+	if opts.Vertices != "" && opts.VerticesFile != "" {
+		fmt.Fprintln(stderr, "dcs-sms me drawing create-polygon: --vertices and --vertices-file are mutually exclusive")
+		return 2
+	}
+	var verticesLua string
+	var err error
+	if opts.VerticesFile != "" {
+		verticesLua, err = parseVerticesFileToLua(opts.VerticesFile)
+	} else {
+		verticesLua, err = parseVerticesToLua(opts.Vertices)
+	}
 	if err != nil {
 		fmt.Fprintln(stderr, "dcs-sms me drawing create-polygon:", err)
 		return 2

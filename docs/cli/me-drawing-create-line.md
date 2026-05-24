@@ -26,6 +26,7 @@ dcs-sms me drawing create-line [flags]
 | `--thickness` | float | `0` | line thickness in pixels (default 2) |
 | `--timeout` | duration | `30s` | wall-clock timeout |
 | `--vertices` | string | `""` | vertices as "n1,e1;n2,e2;..." (>= 2 absolute world-meter pairs) |
+| `--vertices-file` | string | `""` | path to a file with one "north,east" per line (use for long polylines that hit Windows arg-length limits); mutually exclusive with --vertices |
 
 ---
 

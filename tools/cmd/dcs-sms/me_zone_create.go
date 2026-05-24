@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -157,6 +158,56 @@ func parseVerticesToLua(s string) (string, error) {
 			b.WriteString(", ")
 		}
 		fmt.Fprintf(&b, "{ north = %g, east = %g }", north, east)
+	}
+	b.WriteString(" }")
+	return b.String(), nil
+}
+
+// parseVerticesFileToLua reads a file containing one "north,east" pair per
+// line and returns the same Lua-table expression parseVerticesToLua emits.
+// This exists so callers can sidestep the Windows CreateProcess 32 KB
+// argument-length limit for polygons with hundreds of vertices (Shapely
+// unions, free-form coastlines, etc.).
+//
+// Format:
+//   - one vertex per line: "<north>,<east>"
+//   - blank lines and lines starting with "#" are ignored
+//   - leading/trailing whitespace per line is trimmed
+func parseVerticesFileToLua(path string) (string, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "", fmt.Errorf("--vertices-file %q: %w", path, err)
+	}
+	var b strings.Builder
+	b.WriteString("{ ")
+	count := 0
+	// Normalize CRLF -> LF so Windows-authored files split cleanly.
+	for lineNo, raw := range strings.Split(strings.ReplaceAll(string(data), "\r\n", "\n"), "\n") {
+		line := strings.TrimSpace(raw)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		coords := strings.Split(line, ",")
+		if len(coords) != 2 {
+			return "", fmt.Errorf("--vertices-file %q line %d: expected \"north,east\", got %q",
+				path, lineNo+1, line)
+		}
+		north, err := strconv.ParseFloat(strings.TrimSpace(coords[0]), 64)
+		if err != nil {
+			return "", fmt.Errorf("--vertices-file %q line %d north: %w", path, lineNo+1, err)
+		}
+		east, err := strconv.ParseFloat(strings.TrimSpace(coords[1]), 64)
+		if err != nil {
+			return "", fmt.Errorf("--vertices-file %q line %d east: %w", path, lineNo+1, err)
+		}
+		if count > 0 {
+			b.WriteString(", ")
+		}
+		fmt.Fprintf(&b, "{ north = %g, east = %g }", north, east)
+		count++
+	}
+	if count == 0 {
+		return "", fmt.Errorf("--vertices-file %q: no vertices found (file is empty or all-comments)", path)
 	}
 	b.WriteString(" }")
 	return b.String(), nil

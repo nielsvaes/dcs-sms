@@ -105,6 +105,71 @@ This is the first tag after a long quiet period — `sms.version` had been froze
 
 ## ME-mod
 
+### [0.14.2] — 2026-05-23
+
+**Fixed**
+- `dcs-sms dev-reload`'s install step now execs the **freshly-built** binary as a child process instead of calling `install-me-mod` in-process. The dev-reload process was started from the *previous* build's binary and still holds that build's `embed.FS` in memory, so the in-process install was silently copying the old embedded Lua tree to disk — every Lua change required two consecutive `dev-reload` runs (or a manual rebuild + install) before it actually landed. The child process gets the fresh embed; one `dev-reload` is now enough. A defensive `os.Stat` guard fails fast with the missing path if `go build` somehow didn't produce the expected binary, rather than silently falling back to a different `dcs-sms` on `$PATH`.
+
+### [0.14.1] — 2026-05-23
+
+**Fixed**
+- `dcs-sms dev-reload` no longer stacks ghost bridge instances. The hot-reload step clears `package.loaded.dcs_sms_me.bridge` and re-dofiles `init.lua`, but the previous bridge's tick callback stays registered with `UpdateManager` (no public unregister API across DCS builds). Without a guard, you ended up with N+1 ticks racing on the same inbox / heartbeat files after N reloads — symptom was `dcs-sms status` reporting a stale `hook_version` (older bridge's heartbeat wins the write race) plus occasional spurious "gui bridge is disabled" errors on requests a stale tick happened to pick up. `bridge.install()` now bumps a `_G.DCS_SMS_BRIDGE_GEN` counter and stamps it into the new tick's closure; older ticks check the global on every call and silently return early when they're no longer the active generation, so there's a single source of truth for heartbeat + inbox processing across any number of dev-reloads. The install log line now includes `gen <N>` so it's visible in `dcs.log` how many reloads have stacked since DCS startup.
+
+### [0.14.0] — 2026-05-23
+
+**Added**
+- `lat` and `lon` are now included alongside `north` / `east` in the responses from `me unit list`, `me unit get`, `me group list`, `me group get`, `me zone list`, and `me zone get`. The fields are populated best-effort via the same `Terrain.convertMetersToLatLon` call that `me coords to-geo` uses; if the helper can't reach Terrain (no theatre loaded, called from a non-mission ME state) the fields are omitted instead of failing the whole response. Quad-zone vertices each get their own `lat`/`lon` too, so iterating a zone's corners no longer needs a per-vertex `me coords to-geo` round-trip. Closes [#66](https://github.com/nielsvaes/dcs-sms/issues/66) (request 4).
+
+  Pure additive change to existing JSON responses — callers that don't read `lat`/`lon` are unaffected.
+
+### [0.13.0] — 2026-05-23
+
+**Added**
+- New `coords` noun with two verbs that convert between DCS theatre-local meters and geographic lat/lon for the open mission's theatre:
+  - `dcs-sms me coords to-geo --north N --east E [--alt A]` — returns `{ lat, lon, north, east[, alt] }`.
+  - `dcs-sms me coords to-local --lat L --lon Lo [--alt A]` — returns `{ north, east, lat, lon[, alt] }`.
+
+  Both wrap the ME-side `Terrain.convertMetersToLatLon` / `Terrain.convertLatLonToMeters` calls already used internally by `camera_focus`, `airbase_list`, `airbase_get`. The mission-env `coord.LOtoLL` (which is what most documentation references) isn't available in the GUI exec context — these verbs surface the right ME-side API so callers don't have to discover that. `--alt` is conversion-free and passed through unchanged in either direction, so a single call can produce a complete coord record. Closes [#66](https://github.com/nielsvaes/dcs-sms/issues/66) (request 3).
+
+### [0.12.0] — 2026-05-23
+
+**Added**
+- `dcs-sms me unit get` accepts two new selectors: `--group-name <name>` and `--group-id <n>`, each returning the first unit (`units[1]`) of the matched group. Callers that hold a group reference (e.g. from `me group list`) no longer need a round-trip through `me unit list --group <n>` to discover a unit id before they can call `unit get`. The four selectors (`--name`, `--id`, `--group-name`, `--group-id`) are mutually exclusive; passing zero or more than one exits 2 with a usage message. Closes [#66](https://github.com/nielsvaes/dcs-sms/issues/66) (request 5).
+
+### [0.11.2] — 2026-05-23
+
+**Fixed**
+- `me group get` / `me unit get` no longer time out on units that own a beacon-style zone. ME-side beacon units carry a `unit.zones[1].userObject` back-reference that points at the unit (and `userObject.zones[1]` back at the zone), forming a direct cycle. The previous `H.strip_back_refs` only excluded `boss` and `mapObjects`; its depth-32 fallback returned the live cyclic table into the clone, so the bridge's JSON encoder walked into the cycle and the request hit the CLI's 30 s timeout. `strip_back_refs` now also drops `userObject` and tracks the current ancestor chain via a visited-set, so cycles are broken regardless of which key creates them. Regression tests in `test_verbs_group.lua` / `test_verbs_unit.lua` reconstruct the cycle and assert `_get` returns cleanly. Closes [#66](https://github.com/nielsvaes/dcs-sms/issues/66) (bug #1).
+
+### [0.11.1] — 2026-05-23
+
+Internal-only release. No user-facing behavior changes; the bump exists so the in-source `version.lua` reflects the test + refactor groundwork that's landed since `0.11.0`.
+
+**Internal**
+- `tools/me-mod/lua/dcs_sms_me/verbs.lua` (~6950 lines, ~80 verbs) split into one file per noun group under `dcs_sms_me/verbs/<noun>_verbs.lua`, with shared cross-noun helpers in `dcs_sms_me/verb_helpers.lua`. `verbs.lua` itself collapsed to a 49-line aggregator with a duplicate-key guard. `unit_set_parking` lives in `route_verbs.lua` (depends on route-block locals) but is still surfaced as a unit verb by the aggregator. Closes [#54](https://github.com/nielsvaes/dcs-sms/issues/54).
+- 1015 new Lua unit-test assertions across 9 noun-group test files (group, unit, zone, drawing, trigger, airbase, resources, camera, file). `mock_me_mission.lua` extended with the in-process `me_mission` API surface used by inject-group, payload, zone TZD, drawing-panel, trigger-rules, and airbase-warehouse plumbing. Closes [#55](https://github.com/nielsvaes/dcs-sms/issues/55).
+
+### [0.11.0] — 2026-05-22
+
+**Added**
+- New `dcs-sms dev-reload` subcommand (CLI only, not in the interactive menu): contributor convenience verb that chains `go build ./cmd/dcs-sms` + `install-me-mod` + `reload-me-mod` into one command. Run from anywhere inside the dcs-sms checkout. Replaces the three-command manual iteration recipe in `tools/me-mod/AGENTS.md` §2.3. Closes [#63](https://github.com/nielsvaes/dcs-sms/issues/63).
+
+**Fixed**
+- Flaky exec tests on Windows that intermittently failed with `ERROR_SHARING_VIOLATION` when a reader opened a file that a writer was atomically renaming. New `tools/internal/fileutil.ReadFileRetry` retries reads up to 4 times (2/4/8 ms backoff) on the sharing-violation errno; plumbed into `hookstatus.readOne` (state/hook.json + state/me.json) and `mailbox.ReadResponse` (outbox/*.res.json). Failure rate measured: ~40% → ~0% across 115 test runs.
+
+### [0.10.0] — 2026-05-18
+
+Closes part of [#60](https://github.com/nielsvaes/dcs-sms/issues/60) — gaps found in AI-assisted mission scripting. Six existing verbs get filters / batch / file-input ergonomics; one new verb lands. Gaps 1, 8, 10 (waypoint_get red-side bug, route-overlay composite, polygon-union) remain open for a follow-up session.
+
+**Added**
+- **`me drawing create-chevron`** — new verb. V-shape / directional tick mark at `--north/--east` pointing in `--bearing` direction, arms of length `--size`, opening configurable via `--arm-angle` (default 100° — matches Mav's flight-plan tick style; 150° gives a tight arrowhead). Replaces hand-rolled trig in calling scripts. Closes Mav's gap 9.
+- **`me drawing list --name-prefix <P>`** — anchored prefix match alongside the existing case-insensitive `--name` substring. One targeted call instead of list + filter in the caller. Mav's gap 2.
+- **`me drawing remove --name-prefix <P>` / `--layer <L>` / `--all`** — batch delete by name prefix, optional layer scope, or full-layer wipe (`--all` guard required). Returns `{removed=[...], count=N}`. Single `--name` form unchanged. Mav's gap 3.
+- **`me drawing create-polygon --vertices-file <path>`** and **`me drawing create-line --vertices-file <path>`** — read one `north,east` per line (blanks and `#` comments ignored, CRLF tolerant). Sidesteps the Windows `CreateProcess` ~32 KB arg-length limit for Shapely-sized polygons. Mutually exclusive with `--vertices`. Mav's gap 5.
+- **`me drawing get` returns `points_absolute`** — sibling to the existing anchor-relative `points[]`, summed with `mapX/mapY` so callers don't have to redo the math when round-tripping geometry. Emitted only when the drawing has a `points` array. Mav's gap 4.
+- **`me unit list --type` accepts a comma-separated any-of list** — e.g. `--type flak18,flak36,bofors40`. Single-value form unchanged. Mav's gap 7.
+- **Color flags accept `0x`-prefixed hex** on every drawing `--color` / `--fill-color` — `0x000000aa` round-trips cleanly from `drawing get` output. `#rrggbb` / `#rrggbbaa` / named colors still work. Mav's gap 6.
+
 ### [0.9.0] — 2026-05-18
 
 **Added**

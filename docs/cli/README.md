@@ -8,6 +8,7 @@ Every command on the dcs-sms CLI, grouped by namespace.
 
 | Command | Description |
 |---|---|
+| [`dev-reload`](dev-reload.md) | build the .exe, reinstall the ME mod, and hot-reload it in one shot (contributor workflow) |
 | [`doc`](doc.md) | regenerate docs/cli/ — per-command markdown reference + index |
 | [`exec`](exec.md) | execute a Lua snippet (use --target mission\|gui\|auto, default auto) |
 | [`gen-units`](gen-units.md) | regenerate framework/constants/{units,statics}.lua from dcs-lua-datamine |
@@ -37,11 +38,19 @@ Every command on the dcs-sms CLI, grouped by namespace.
 | [`me camera focus`](me-camera-focus.md) | focus the ME camera on a coordinate / lat-lon / airdrome name |
 | [`me camera get`](me-camera-get.md) | return the ME camera's current map center (x, y, lat, lon, scale) |
 
+## me coords
+
+| Command | Description |
+|---|---|
+| [`me coords to-geo`](me-coords-to-geo.md) | convert DCS local meters (north/east) to geographic lat/lon for the current theatre |
+| [`me coords to-local`](me-coords-to-local.md) | convert geographic lat/lon to DCS local meters (north/east) for the current theatre |
+
 ## me drawing
 
 | Command | Description |
 |---|---|
 | [`me drawing create-arrow`](me-drawing-create-arrow.md) | draw an arrow on the F10 map |
+| [`me drawing create-chevron`](me-drawing-create-chevron.md) | draw a V-shape chevron / directional tick mark on the F10 map |
 | [`me drawing create-circle`](me-drawing-create-circle.md) | draw a circle on the F10 map |
 | [`me drawing create-icon`](me-drawing-create-icon.md) | place an icon on the F10 map |
 | [`me drawing create-line`](me-drawing-create-line.md) | draw a polyline on the F10 map (segments / segment / free; --closed wraps it) |
@@ -51,7 +60,7 @@ Every command on the dcs-sms CLI, grouped by namespace.
 | [`me drawing create-textbox`](me-drawing-create-textbox.md) | place a text label on the F10 map |
 | [`me drawing get`](me-drawing-get.md) | return full data for a drawing by name |
 | [`me drawing list`](me-drawing-list.md) | list all drawings in the open mission |
-| [`me drawing remove`](me-drawing-remove.md) | delete a drawing from the open mission |
+| [`me drawing remove`](me-drawing-remove.md) | delete one or many drawings from the open mission |
 | [`me drawing set-angle`](me-drawing-set-angle.md) | set a drawing's rotation in degrees (CW positive) |
 | [`me drawing set-color`](me-drawing-set-color.md) | change a drawing's outline / line color |
 | [`me drawing set-fill-color`](me-drawing-set-fill-color.md) | change a drawing's fill color |
@@ -135,7 +144,7 @@ Every command on the dcs-sms CLI, grouped by namespace.
 
 | Command | Description |
 |---|---|
-| [`me unit get`](me-unit-get.md) | return full data for a unit by name or id |
+| [`me unit get`](me-unit-get.md) | return full data for a unit (by --name/--id, or first unit of a group via --group-name/--group-id) |
 | [`me unit list`](me-unit-list.md) | list all units in the open mission |
 | [`me unit payload`](me-unit-payload.md) | manage a unit's per-pylon weapon payload (sub-verbs: set, clear) |
 | [`me unit set-alt`](me-unit-set-alt.md) | set a unit's altitude in meters |

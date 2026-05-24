@@ -14,9 +14,9 @@ dcs-sms me drawing create-circle [flags]
 
 | Name | Type | Default | Description |
 |---|---|---|---|
-| `--color` | string | `""` | outline color: name, #rrggbb (alpha=0xff), or #rrggbbaa |
+| `--color` | string | `""` | outline color: name, #rrggbb (alpha=0xff), #rrggbbaa, or 0xRRGGBBAA |
 | `--east` | float | `0` | meters east of theatre origin |
-| `--fill-color` | string | `""` | fill color: name, #rrggbb (alpha=0x80), or #rrggbbaa |
+| `--fill-color` | string | `""` | fill color: name, #rrggbb (alpha=0x80), #rrggbbaa, or 0xRRGGBBAA |
 | `--hidden-on-planner` | bool | `false` | hide on mission planner |
 | `--layer` | string | `""` | layer: Red\|Blue\|Neutral\|Common\|Author (default Common) |
 | `--name` | string | `""` | drawing name (auto-allocated if empty) |

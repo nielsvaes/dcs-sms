@@ -13,6 +13,7 @@ type meDrawingListOpts struct {
 	Type       string
 	Mode       string
 	Name       string
+	NamePrefix string
 	Timeout    time.Duration
 	Pretty     bool
 	SavedGames string
@@ -25,6 +26,7 @@ func meDrawingListFlags() (*flag.FlagSet, *meDrawingListOpts) {
 	fs.StringVar(&opts.Type, "type", "", "Line | Polygon | TextBox | Icon")
 	fs.StringVar(&opts.Mode, "mode", "", "circle | oval | rect | free | arrow | segments | segment")
 	fs.StringVar(&opts.Name, "name", "", "name substring (case-insensitive)")
+	fs.StringVar(&opts.NamePrefix, "name-prefix", "", "anchored name prefix (case-insensitive); combines with --name if both given")
 	fs.DurationVar(&opts.Timeout, "timeout", 30*time.Second, "wall-clock timeout")
 	fs.BoolVar(&opts.Pretty, "pretty", false, "indent JSON output")
 	fs.StringVar(&opts.SavedGames, "saved-games", "", "override Saved Games path")
@@ -63,6 +65,9 @@ func meDrawingListCmd(args []string, stdout, stderr io.Writer) int {
 	}
 	if opts.Name != "" {
 		parts = append(parts, fmt.Sprintf("name = %q", opts.Name))
+	}
+	if opts.NamePrefix != "" {
+		parts = append(parts, fmt.Sprintf("name_prefix = %q", opts.NamePrefix))
 	}
 	luaArgs := "{ " + strings.Join(parts, ", ") + " }"
 

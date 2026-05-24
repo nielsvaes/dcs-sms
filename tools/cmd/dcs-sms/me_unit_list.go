@@ -28,7 +28,7 @@ func meUnitListFlags() (*flag.FlagSet, *meUnitListOpts) {
 	fs.StringVar(&opts.Category, "category", "", "filter by category: plane | helicopter | vehicle | ship | static")
 	fs.StringVar(&opts.Group, "group", "", "filter by group name (exact match)")
 	fs.StringVar(&opts.Name, "name", "", "filter by unit-name substring (case-insensitive)")
-	fs.StringVar(&opts.Type, "type", "", "filter by airframe / unit type (exact, e.g. F-16C_50)")
+	fs.StringVar(&opts.Type, "type", "", "filter by airframe / unit type (exact match; comma-separate for any-of, e.g. flak18,flak36,bofors40)")
 	fs.DurationVar(&opts.Timeout, "timeout", 30*time.Second, "wall-clock timeout")
 	fs.BoolVar(&opts.Pretty, "pretty", false, "indent JSON output")
 	fs.StringVar(&opts.SavedGames, "saved-games", "", "override Saved Games path")
@@ -68,7 +68,20 @@ func meUnitListCmd(args []string, stdout, stderr io.Writer) int {
 		parts = append(parts, fmt.Sprintf("name = %q", opts.Name))
 	}
 	if opts.Type != "" {
-		parts = append(parts, fmt.Sprintf("type = %q", opts.Type))
+		// Split comma-list into a Lua list; the verb tests inclusion against
+		// the set so callers can pass either a single airframe ("F-16C_50") or
+		// any-of ("flak18,flak36,bofors40"). Empty entries (e.g. trailing
+		// commas, double commas) are skipped silently.
+		var quoted []string
+		for _, t := range strings.Split(opts.Type, ",") {
+			t = strings.TrimSpace(t)
+			if t != "" {
+				quoted = append(quoted, fmt.Sprintf("%q", t))
+			}
+		}
+		if len(quoted) > 0 {
+			parts = append(parts, "type = { "+strings.Join(quoted, ", ")+" }")
+		}
 	}
 	luaArgs := "{ " + strings.Join(parts, ", ") + " }"
 

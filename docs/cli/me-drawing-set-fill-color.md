@@ -14,7 +14,7 @@ dcs-sms me drawing set-fill-color [flags]
 
 | Name | Type | Default | Description |
 |---|---|---|---|
-| `--color` | string | `""` | color: name, #rrggbb, or #rrggbbaa |
+| `--color` | string | `""` | color: name, #rrggbb, #rrggbbaa, or 0xRRGGBBAA |
 | `--name` | string | `""` | drawing name |
 | `--pretty` | bool | `false` | indent JSON output |
 | `--saved-games` | string | `""` | override Saved Games path |

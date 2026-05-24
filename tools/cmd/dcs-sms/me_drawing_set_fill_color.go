@@ -19,7 +19,7 @@ func meDrawingSetFillColorFlags() (*flag.FlagSet, *meDrawingSetFillColorOpts) {
 	opts := &meDrawingSetFillColorOpts{}
 	fs := flag.NewFlagSet("me drawing set-fill-color", flag.ContinueOnError)
 	fs.StringVar(&opts.Name, "name", "", "drawing name")
-	fs.StringVar(&opts.Color, "color", "", "color: name, #rrggbb, or #rrggbbaa")
+	fs.StringVar(&opts.Color, "color", "", "color: name, #rrggbb, #rrggbbaa, or 0xRRGGBBAA")
 	fs.DurationVar(&opts.Timeout, "timeout", 30*time.Second, "wall-clock timeout")
 	fs.BoolVar(&opts.Pretty, "pretty", false, "indent JSON output")
 	fs.StringVar(&opts.SavedGames, "saved-games", "", "override Saved Games path")
