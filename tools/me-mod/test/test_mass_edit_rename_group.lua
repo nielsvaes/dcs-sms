@@ -127,7 +127,11 @@ do
     check('mixed-unchanged: unchanged=1', result.unchanged == 1)
     check('mixed-unchanged: failed=0',    result.failed == 0)
     check('mixed-unchanged: g1 unchanged', g1.name == 'Foo')
-    check('mixed-unchanged: g2 renamed',   g2.name == 'Foo')
+    -- g2 was renamed to 'Foo' but 'Foo' is taken by g1, so check_group_name
+    -- auto-disambiguates to 'Foo #2' (mock collision suffix; real DCS uses
+    -- 'Foo-1'). The form still counts this as a rename — that's the
+    -- documented ME-panel behaviour the writer mirrors.
+    check('mixed-unchanged: g2 renamed',   g2.name == 'Foo #2', 'got ' .. tostring(g2.name))
     check('mixed-unchanged: toast contains "1 renamed"',
           result.toast:find('1 renamed') ~= nil, 'got ' .. tostring(result.toast))
     check('mixed-unchanged: toast contains "1 unchanged"',
