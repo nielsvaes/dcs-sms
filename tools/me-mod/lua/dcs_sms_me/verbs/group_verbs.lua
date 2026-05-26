@@ -17,6 +17,34 @@ local find_country_by_name  = H.find_country_by_name
 local inject_group          = H.inject_group
 local compute_lat_lon       = H.compute_lat_lon
 
+-- _check_unit_type — guard against bad type strings reaching the .miz.
+-- DCS's save serializer (me_mission.lua:setRequiredModules) derefs
+-- me_db.unit_by_type[type]._origin without nil-checking, so an unknown
+-- type that the ME accepted at create-time silently produces a group
+-- that crashes File→Save with a Lua traceback the user can't undo.
+-- We reject up front instead.
+--
+-- Returns nil on success, { ok=false, error=... } on rejection. Returns
+-- nil (accept) when me_db_api isn't loadable — that happens in the Lua
+-- mock test harness, which would otherwise reject every test type.
+-- Production DCS always has me_db_api by the time the bridge dispatches.
+local function _check_unit_type(verb_name, type_id)
+    local ok_db, DB = pcall(require, 'me_db_api')
+    if not ok_db or type(DB) ~= 'table' or type(DB.unit_by_type) ~= 'table' then
+        return nil
+    end
+    if DB.unit_by_type[type_id] == nil then
+        return { ok = false,
+                 error = verb_name .. ': unknown unit type "' .. type_id ..
+                         '" — not in me_db_api.unit_by_type. Creating it would '
+                         .. 'crash File→Save (me_mission.lua:setRequiredModules '
+                         .. 'derefs unitDef._origin without a nil-check). '
+                         .. 'Check the spelling against the canonical DCS unit DB '
+                         .. '(e.g. framework/constants/units.lua).' }
+    end
+    return nil
+end
+
 -- ============================================================
 -- Group lifecycle verbs
 -- ============================================================
@@ -106,6 +134,8 @@ function M.group_create_plane(args)
     if type(args.type) ~= 'string' or args.type == '' then
         return { ok = false, error = 'group_create_plane requires args.type (string, airframe id)' }
     end
+    local bad = _check_unit_type('group_create_plane', args.type)
+    if bad then return bad end
     if type(args.north) ~= 'number' or type(args.east) ~= 'number' then
         return { ok = false, error = 'group_create_plane requires args.north and args.east (numbers, meters)' }
     end
@@ -218,6 +248,8 @@ function M.group_create_helicopter(args)
     if type(args.type) ~= 'string' or args.type == '' then
         return { ok = false, error = 'group_create_helicopter requires args.type (string, airframe id)' }
     end
+    local bad = _check_unit_type('group_create_helicopter', args.type)
+    if bad then return bad end
     if type(args.north) ~= 'number' or type(args.east) ~= 'number' then
         return { ok = false, error = 'group_create_helicopter requires args.north and args.east (numbers, meters)' }
     end
@@ -324,6 +356,8 @@ function M.group_create_vehicle(args)
     if type(args.type) ~= 'string' or args.type == '' then
         return { ok = false, error = 'group_create_vehicle requires args.type (string, vehicle id)' }
     end
+    local bad = _check_unit_type('group_create_vehicle', args.type)
+    if bad then return bad end
     if type(args.north) ~= 'number' or type(args.east) ~= 'number' then
         return { ok = false, error = 'group_create_vehicle requires args.north and args.east (numbers, meters)' }
     end
@@ -412,6 +446,8 @@ function M.group_create_ship(args)
     if type(args.type) ~= 'string' or args.type == '' then
         return { ok = false, error = 'group_create_ship requires args.type (string, ship id)' }
     end
+    local bad = _check_unit_type('group_create_ship', args.type)
+    if bad then return bad end
     if type(args.north) ~= 'number' or type(args.east) ~= 'number' then
         return { ok = false, error = 'group_create_ship requires args.north and args.east (numbers, meters)' }
     end
@@ -522,6 +558,8 @@ function M.group_create_static(args)
     if type(args.type) ~= 'string' or args.type == '' then
         return { ok = false, error = 'group_create_static requires args.type (string, static id)' }
     end
+    local bad = _check_unit_type('group_create_static', args.type)
+    if bad then return bad end
     if type(args.north) ~= 'number' or type(args.east) ~= 'number' then
         return { ok = false, error = 'group_create_static requires args.north and args.east (numbers, meters)' }
     end
@@ -665,6 +703,13 @@ function M.group_add_unit(args)
         return { ok = false,
                  error = cat .. ' groups can only contain one airframe; existing="'
                          .. tostring(first_unit.type) .. '", requested="' .. utype .. '"' }
+    end
+    -- Only validate when --type was explicit; inheriting from last_unit means
+    -- the group already lives in the mission with that type and validating now
+    -- couldn't fix it.
+    if type(args.type) == 'string' and args.type ~= '' then
+        local bad = _check_unit_type('group_add_unit', utype)
+        if bad then return bad end
     end
 
     -- Field defaults — explicit args win, otherwise inherit from last unit.

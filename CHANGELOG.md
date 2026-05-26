@@ -105,6 +105,11 @@ This is the first tag after a long quiet period — `sms.version` had been froze
 
 ## ME-mod
 
+### [0.14.3] — 2026-05-26
+
+**Fixed**
+- `me group create-{plane,helicopter,vehicle,ship,static}` and `me group add-unit` now reject unknown unit types up front instead of producing a group that crashes File→Save. Root cause: DCS's `me_mission.lua:setRequiredModules` derefs `unitDef._origin` without nil-checking, so any type string that isn't in `me_db.unit_by_type` (typos like `M2A2 Bradley` instead of `M-2 Bradley`, or `HMMWV M1043 HMG Armament` instead of `M1043 HMMWV Armament`) freezes the ME on the "Saving..." dialog with no way to recover the unsaved mission. The verbs previously accepted any non-empty string and trusted DCS to validate at spawn time — DCS doesn't validate until save. The rejection error names the bad type and points at `framework/constants/units.lua` as the canonical list to check spelling against. `group_add_unit` validates only when `--type` is passed explicitly; inheriting the last unit's type skips the check, since validating an already-existing type can't fix it.
+
 ### [0.14.2] — 2026-05-23
 
 **Fixed**

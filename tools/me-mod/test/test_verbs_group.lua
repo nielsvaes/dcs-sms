@@ -39,15 +39,29 @@ package.preload['utils_common'] = function()
     }
 end
 
--- me_db_api stub for group_set_formation's custom-template path.
-package.preload['me_db_api'] = function()
-    return {
-        templates = {
-            ['Hawk SAM Battery'] = { name = 'Hawk SAM Battery', units = {} },
-            ['SA-2 Battery']     = { name = 'SA-2 Battery',     units = {} },
-        },
-    }
-end
+-- me_db_api stub.
+--   templates    — used by group_set_formation's custom-template path.
+--   unit_by_type — used by group_create_*'s type-existence guard against
+--                  save-time crashes (me_mission.lua:setRequiredModules
+--                  derefs unitDef._origin on nil for unknown types).
+local me_db_api_stub = {
+    templates = {
+        ['Hawk SAM Battery'] = { name = 'Hawk SAM Battery', units = {} },
+        ['SA-2 Battery']     = { name = 'SA-2 Battery',     units = {} },
+    },
+    unit_by_type = {
+        ['F-16C_50']    = { _origin = '_core_' },
+        ['F-14B']       = { _origin = '_core_' },
+        ['UH-1H']       = { _origin = '_core_' },
+        ['Hummer']      = { _origin = '_core_' },
+        ['CVN_71']      = { _origin = '_core_' },
+        ['Watchtower']  = { _origin = '_core_' },
+        ['Hawk pcp']    = { _origin = '_core_' },
+        ['Hawk sr']     = { _origin = '_core_' },
+        ['cargo_crate'] = { _origin = '_core_' },
+    },
+}
+package.preload['me_db_api'] = function() return me_db_api_stub end
 
 -- me_payload + me_route stubs for group_set_country (livery fixup + airfield
 -- re-attract). Track invocations so tests can assert they ran.
@@ -193,6 +207,84 @@ local function test_create_plane_country_not_in_tree()
         country = 'Atlantis', type = 'F-16C_50', north = 0, east = 0 })
     assert_false(r.ok, 'create_plane: missing country fails')
     assert_contains(r.error, 'Atlantis', 'create_plane: error names country')
+end
+
+-- ============================================================
+-- Unit-type-existence guard (the save-crash class)
+--
+-- DCS's save serializer at me_mission.lua:setRequiredModules derefs
+-- unitDef._origin on a nil unitDef when a unit's type isn't in
+-- me_db.unit_by_type, which freezes File→Save. Every create-* verb +
+-- group_add_unit refuse unknown types up front rather than producing a
+-- save-crashing group.
+-- ============================================================
+
+local function test_create_plane_unknown_type_rejected()
+    mock.new_mission()
+    local r = verbs.group_create_plane({
+        country = 'USA', type = 'F-99 Imaginary', north = 0, east = 0 })
+    assert_false(r.ok, 'unknown plane type: rejected')
+    assert_contains(r.error, 'unknown unit type', 'unknown plane type: error message')
+    assert_contains(r.error, 'F-99 Imaginary', 'unknown plane type: names the type')
+end
+
+local function test_create_helicopter_unknown_type_rejected()
+    mock.new_mission()
+    local r = verbs.group_create_helicopter({
+        country = 'USA', type = 'Helo-Of-The-Imagination', north = 0, east = 0 })
+    assert_false(r.ok, 'unknown helo type: rejected')
+    assert_contains(r.error, 'unknown unit type', 'unknown helo type: error message')
+end
+
+local function test_create_vehicle_unknown_type_rejected()
+    mock.new_mission()
+    -- This is the exact bug pattern that triggered the work: 'M2A2 Bradley'
+    -- looks plausible (real DCS uses 'M-2 Bradley') but is missing from
+    -- me_db.unit_by_type, so save would crash.
+    local r = verbs.group_create_vehicle({
+        country = 'USA', type = 'M2A2 Bradley', north = 0, east = 0 })
+    assert_false(r.ok, 'M2A2 Bradley typo: rejected')
+    assert_contains(r.error, 'M2A2 Bradley', 'M2A2 Bradley typo: names the type')
+    assert_contains(r.error, 'crash File', 'M2A2 Bradley typo: warns about save crash')
+end
+
+local function test_create_ship_unknown_type_rejected()
+    mock.new_mission()
+    local r = verbs.group_create_ship({
+        country = 'USA', type = 'SS Imaginary', north = 0, east = 0 })
+    assert_false(r.ok, 'unknown ship type: rejected')
+    assert_contains(r.error, 'unknown unit type', 'unknown ship type: error message')
+end
+
+local function test_create_static_unknown_type_rejected()
+    mock.new_mission()
+    local r = verbs.group_create_static({
+        country = 'USA', type = 'Fictional Bunker', north = 0, east = 0 })
+    assert_false(r.ok, 'unknown static type: rejected')
+    assert_contains(r.error, 'Fictional Bunker', 'unknown static type: names the type')
+end
+
+local function test_add_unit_unknown_type_rejected()
+    mock.new_mission()
+    local g = mock.add_vehicle({ name = 'Convoy', unit_type = 'Hawk pcp' })
+    local r = verbs.group_add_unit({ name = 'Convoy', type = 'Nonexistent Tank' })
+    assert_false(r.ok, 'add_unit unknown type: rejected')
+    assert_contains(r.error, 'Nonexistent Tank', 'add_unit unknown type: names the type')
+end
+
+local function test_add_unit_inherits_type_no_validation()
+    -- When --type is omitted, group_add_unit inherits the last unit's type.
+    -- Validating an already-existing type here would be useless (the group
+    -- is already in the mission), so we explicitly DON'T validate that path.
+    mock.new_mission()
+    -- Seed the group with a type that's NOT in the unit_by_type stub.
+    -- (In practice the group would only exist if it was created back when
+    -- the verb's validation didn't reject it — e.g. a loaded older .miz.)
+    local g = mock.add_vehicle({ name = 'Legacy', unit_type = 'Hawk pcp' })
+    -- Mutate post-creation to simulate a type that wouldn't pass validation.
+    g.units[1].type = 'Some Pre-Existing Type'
+    local r = verbs.group_add_unit({ name = 'Legacy' })  -- no type arg
+    assert_true(r.ok, 'add_unit inheriting type: not rejected')
 end
 
 -- ============================================================
@@ -953,16 +1045,21 @@ local tests = {
     test_create_plane_overrides,
     test_create_plane_arg_validation,
     test_create_plane_country_not_in_tree,
+    test_create_plane_unknown_type_rejected,
     test_create_helicopter_happy,
     test_create_helicopter_arg_validation,
+    test_create_helicopter_unknown_type_rejected,
     test_create_vehicle_happy,
     test_create_vehicle_arg_validation,
+    test_create_vehicle_unknown_type_rejected,
     test_create_ship_happy_over_water,
     test_create_ship_refused_on_land,
     test_create_ship_force_bypasses_surface,
     test_create_ship_shallow_water_ok,
+    test_create_ship_unknown_type_rejected,
     test_create_static_happy,
     test_create_static_dead_can_cargo,
+    test_create_static_unknown_type_rejected,
     test_remove_by_name,
     test_remove_by_id,
     test_remove_not_found,
@@ -972,6 +1069,8 @@ local tests = {
     test_add_unit_vehicle_heterogeneous_ok,
     test_add_unit_offset,
     test_add_unit_arg_validation,
+    test_add_unit_unknown_type_rejected,
+    test_add_unit_inherits_type_no_validation,
     test_remove_unit_happy,
     test_remove_unit_last_refused,
     test_remove_unit_not_found,
