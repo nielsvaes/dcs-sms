@@ -159,10 +159,14 @@ local function resolve_action_entry(key)
 end
 
 -- refresh_route_panel — re-render the right-side Route panel (waypoint
--- dropdown + selected-WP fields). Required after any route mutation —
+-- dropdown + selected-WP fields) AND the per-waypoint actions listbox
+-- (the task list inside the panel). Required after any route mutation —
 -- update_group_map_objects only repaints the map layer; the route panel
 -- caches its display state separately and won't pick up new/removed/
--- renamed waypoints without an explicit panel_route.update() call.
+-- renamed waypoints without an explicit panel_route.update() call, and
+-- the task listbox is a sibling widget that update() doesn't cascade
+-- into — without actionsListBox:update(true) a freshly added/removed
+-- task stays invisible until the user clicks the WP again.
 --
 -- Safe no-op if me_route isn't available (defensive — same posture as
 -- refresh_group_view's pcall on update_group_map_objects).
@@ -171,6 +175,10 @@ local function refresh_route_panel()
         local panel_route = require('me_route')
         if type(panel_route.update) == 'function' then
             panel_route.update()
+        end
+        if type(panel_route.actionsListBox) == 'table'
+                and type(panel_route.actionsListBox.update) == 'function' then
+            panel_route.actionsListBox:update(true)
         end
     end)
 end
