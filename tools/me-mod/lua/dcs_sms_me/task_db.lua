@@ -41,10 +41,11 @@ local _cache = nil   -- { by_id = { [TaskId] = entry, ... },
                      -- entry = { canonical = TaskId, kind = 'waypoint'|'enroute',
                      --           display_name = string, desc = string, params = table }
 
-local function _safe_log(level, msg)
+local function _safe_log(level_name, msg)
     local ok_log, log = pcall(function() return _G.log end)
     if ok_log and log and type(log.write) == 'function' then
-        log.write('sms.me.task_db', level, msg)
+        local lvl = log[level_name] or log.INFO
+        log.write('sms.me.task_db', lvl, msg)
     end
 end
 
