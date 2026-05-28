@@ -168,9 +168,17 @@ end
 -- into — without actionsListBox:update(true) a freshly added/removed
 -- task stays invisible until the user clicks the WP again.
 --
+-- Optionally takes the group whose route was mutated. When supplied, also
+-- selects that group in the aircraft (AIRPLANE GROUP / VEHICLE GROUP …)
+-- info panel so the user sees the same two-panel layout (group panel +
+-- route panel) the ME shows after a map-click. Without this, a verb that
+-- targets a programmatically-created group leaves the top half of the
+-- right side blank because the group was never "selected" through the
+-- ME's MapWindow click path.
+--
 -- Safe no-op if me_route isn't available (defensive — same posture as
 -- refresh_group_view's pcall on update_group_map_objects).
-local function refresh_route_panel()
+local function refresh_route_panel(g)
     pcall(function()
         local panel_route = require('me_route')
         if type(panel_route.update) == 'function' then
@@ -179,6 +187,22 @@ local function refresh_route_panel()
         if type(panel_route.actionsListBox) == 'table'
                 and type(panel_route.actionsListBox.update) == 'function' then
             panel_route.actionsListBox:update(true)
+        end
+        -- If a group is provided, also pop the route window itself —
+        -- programmatically created groups have neither panel up until
+        -- the user clicks the group on the map.
+        if g and type(panel_route.show) == 'function' then
+            panel_route.show(true)
+        end
+    end)
+    if not g then return end
+    pcall(function()
+        local panel_aircraft = require('me_aircraft')
+        if type(panel_aircraft.setGroup) == 'function' then
+            panel_aircraft.setGroup(g)
+        end
+        if type(panel_aircraft.show) == 'function' then
+            panel_aircraft.show(true)
         end
     end)
 end
@@ -1207,7 +1231,7 @@ local function _add_task_impl(args, kind)
     if not entry then return { ok = false, error = cerr } end
     table.insert(tasks, entry)
     _renumber(tasks)
-    refresh_route_panel()
+    refresh_route_panel(g)
     refresh_group_view(g)
     return { ok = true, group = g.name, index = args.index, task = canonical,
              kind = kind, slot = #tasks }
@@ -1252,7 +1276,7 @@ local function _remove_task_impl(args, kind)
     end
     local removed = table.remove(tasks, args.slot)
     _renumber(tasks)
-    refresh_route_panel()
+    refresh_route_panel(g)
     refresh_group_view(g)
     return { ok = true, group = g.name, index = args.index, slot = args.slot,
              removed_task = removed.id, kind = kind }
@@ -1288,7 +1312,7 @@ local function _clear_tasks_impl(args, kind)
     end
     wp.task.params.tasks = kept
     _renumber(kept)
-    refresh_route_panel()
+    refresh_route_panel(g)
     refresh_group_view(g)
     return { ok = true, group = g.name, index = args.index, removed_count = dropped,
              kind = kind, remaining = #kept }
