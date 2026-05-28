@@ -105,6 +105,15 @@ This is the first tag after a long quiet period — `sms.version` had been froze
 
 ## ME-mod
 
+### [0.15.0] — 2026-05-28
+
+**Added**
+- `me waypoint add-task`, `remove-task`, `clear-tasks` and the enroute
+  trio (`add-enroute-task`, `remove-enroute-task`, `clear-enroute-tasks`)
+  for managing per-waypoint ComboTask payloads from the CLI (gh #69).
+- `me waypoint list-tasks` and `me waypoint describe-task` to introspect
+  legal task ids and their parameter schemas from ED's `me_action_db`.
+
 ### [0.14.3] — 2026-05-26
 
 **Fixed**
