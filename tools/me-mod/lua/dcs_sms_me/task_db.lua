@@ -1,11 +1,31 @@
 -- task_db.lua — lazy loader + cache over ED's me_action_db.
 --
 -- Public surface (call via `local T = require('dcs_sms_me.task_db')`):
---   T.resolve(task_id, group_task, kind) -> canonical, descr, err
+--   T.resolve(task_id, group_task, kind) -> canonical, entry, err
 --   T.list(group_task)                   -> { waypoint = {...}, enroute = {...} }, err
---   T.list_all()                         -> { { group_task=..., waypoint=..., enroute=... }, ... }, err
---   T.describe(task_id, kind)            -> descr, err   (kind may be nil to accept either)
+--   T.list_all()                         -> { { kind='waypoint', tasks={...} }, ... }, err
+--   T.describe(task_id, kind)            -> entry, err   (kind may be nil to accept either)
+--   T.descr_fields(entry)                -> {{id,type,default}, ...}
+--   T.descr_default_params(entry)        -> shallow copy of entry.params
 --   T.reset()                            -> nil          (testing hook: forget the cache)
+--
+-- Live probe (May 2026 ED Open Beta build) found me_action_db's top
+-- level is mostly functions and constants — the task descriptors live
+-- in `me_action_db.actionsData`, a 114-entry array where each entry
+-- has `{desc, displayName, task={id, params}, type}`. The `type` field
+-- discriminates: 1=waypoint task, 2=enroute task, 3=command, 4=option.
+-- Only types 1 and 2 are in scope for gh #69; commands and options
+-- wrap WrappedAction and are out of scope.
+--
+-- Task ids can appear multiple times in actionsData (e.g. EngageTargets
+-- repeats 6× — presumably one variant per group-task context with
+-- different defaults). We keep the first occurrence per (task_id, kind).
+--
+-- Group-task gating ("for a CAS group, only Bombing/AttackGroup/... are
+-- legal") is NOT a static index in actionsData. ED does it at runtime
+-- via me_action_db.isGroupCapableOfAction(group, action) which needs
+-- a live group reference. v1 of gh #69 drops the static gate; the
+-- group_task argument on resolve/list is accepted and ignored.
 --
 -- The cache is built once per ME session on first call. The mock-test
 -- harness can inject a fake `me_action_db` via package.preload BEFORE
@@ -16,9 +36,10 @@
 
 local M = {}
 
-local _cache = nil   -- { by_id = { [TaskId] = entry, ... }, by_group_task = { [GT] = {wp={...},en={...}} } }
-                      -- entry = { canonical = TaskId, kind = 'waypoint'|'enroute', descr = <descr>,
-                      --           group_tasks = { GT1, GT2, ... } }
+local _cache = nil   -- { by_id = { [TaskId] = entry, ... },
+                     --   waypoint_ids = {sorted}, enroute_ids = {sorted} }
+                     -- entry = { canonical = TaskId, kind = 'waypoint'|'enroute',
+                     --           display_name = string, desc = string, params = table }
 
 local function _safe_log(level, msg)
     local ok_log, log = pcall(function() return _G.log end)
@@ -27,93 +48,39 @@ local function _safe_log(level, msg)
     end
 end
 
--- _walk_nested: me_action_db = { GT = { waypointTasks = {...}, enrouteTasks = {...} } }
-local function _walk_nested(db)
-    local cache = { by_id = {}, by_group_task = {} }
-    for gt, gt_entry in pairs(db) do
-        if type(gt_entry) == 'table' then
-            local wp_list, en_list = {}, {}
-            local function ingest(sub, kind, dest_list)
-                if type(sub) ~= 'table' then return end
-                for task_id, descr in pairs(sub) do
-                    if type(task_id) == 'string' and type(descr) == 'table' then
-                        table.insert(dest_list, task_id)
-                        local entry = cache.by_id[task_id]
-                        if not entry then
-                            entry = { canonical = task_id, kind = kind, descr = descr, group_tasks = {} }
-                            cache.by_id[task_id] = entry
-                        end
-                        -- group_tasks dedup
-                        local seen = false
-                        for _, g in ipairs(entry.group_tasks) do
-                            if g == gt then seen = true; break end
-                        end
-                        if not seen then table.insert(entry.group_tasks, gt) end
-                    end
-                end
-            end
-            ingest(gt_entry.waypointTasks or gt_entry.waypoint_tasks, 'waypoint', wp_list)
-            ingest(gt_entry.enrouteTasks  or gt_entry.enroute_tasks,  'enroute',  en_list)
-            table.sort(wp_list); table.sort(en_list)
-            cache.by_group_task[gt] = { waypoint = wp_list, enroute = en_list }
-        end
-    end
-    return cache
-end
-
--- _walk_flat: me_action_db = { TaskId = { kind=..., group_tasks={...}, ... } }
-local function _walk_flat(db)
-    local cache = { by_id = {}, by_group_task = {} }
-    for task_id, descr in pairs(db) do
-        if type(task_id) == 'string' and type(descr) == 'table' then
-            local kind = descr.kind or descr.task_kind
-            local gts  = descr.group_tasks or descr.groupTasks or {}
-            if (kind == 'waypoint' or kind == 'enroute') and type(gts) == 'table' then
-                cache.by_id[task_id] = {
-                    canonical = task_id, kind = kind, descr = descr,
-                    group_tasks = gts,
-                }
-                for _, gt in ipairs(gts) do
-                    cache.by_group_task[gt] = cache.by_group_task[gt] or { waypoint = {}, enroute = {} }
-                    table.insert(cache.by_group_task[gt][kind], task_id)
-                end
-            end
-        end
-    end
-    for _, gt_lists in pairs(cache.by_group_task) do
-        table.sort(gt_lists.waypoint); table.sort(gt_lists.enroute)
-    end
-    return cache
-end
-
--- _looks_nested: heuristic. True if any value under db is a table that
--- contains `waypointTasks` or `enrouteTasks` (camelCase or snake_case).
-local function _looks_nested(db)
-    for _, v in pairs(db) do
-        if type(v) == 'table' and (v.waypointTasks or v.enrouteTasks
-                or v.waypoint_tasks or v.enroute_tasks) then
-            return true
-        end
-    end
-    return false
-end
-
-local function _count(t)
-    local n = 0; for _ in pairs(t) do n = n + 1 end; return n
-end
-
 local function _build()
     local ok, db = pcall(require, 'me_action_db')
     if not ok or type(db) ~= 'table' then
         return nil, "me_action_db not available (require failed) — this verb needs ED's MissionEditor/modules/me_action_db.lua"
     end
-    local shape_nested = _looks_nested(db)
-    local cache = shape_nested and _walk_nested(db) or _walk_flat(db)
-    if not next(cache.by_id) then
-        return nil, "me_action_db loaded but no task descriptors found — ED may have changed the module shape (probe with `dcs-sms exec --target gui 'return type(require(\"me_action_db\"))'`)"
+    if type(db.actionsData) ~= 'table' then
+        return nil, "me_action_db.actionsData missing or wrong type — ED may have changed the module shape"
     end
-    _safe_log('INFO', string.format('task_db cache built (shape=%s, tasks=%d)',
-        shape_nested and 'nested' or 'flat', _count(cache.by_id)))
+    local TYPE_WAYPOINT, TYPE_ENROUTE = 1, 2
+    local cache = { by_id = {}, waypoint_ids = {}, enroute_ids = {} }
+    for _, a in ipairs(db.actionsData) do
+        if type(a) == 'table' and type(a.task) == 'table' and type(a.task.id) == 'string' then
+            local kind = (a.type == TYPE_WAYPOINT) and 'waypoint'
+                      or (a.type == TYPE_ENROUTE)  and 'enroute'
+                      or nil
+            if kind and not cache.by_id[a.task.id] then
+                cache.by_id[a.task.id] = {
+                    canonical    = a.task.id,
+                    kind         = kind,
+                    display_name = a.displayName or a.task.id,
+                    desc         = a.desc or '',
+                    params       = (type(a.task.params) == 'table') and a.task.params or {},
+                }
+                table.insert(kind == 'waypoint' and cache.waypoint_ids or cache.enroute_ids, a.task.id)
+            end
+        end
+    end
+    table.sort(cache.waypoint_ids); table.sort(cache.enroute_ids)
+    if not next(cache.by_id) then
+        return nil, "me_action_db.actionsData walked but no task descriptors found"
+    end
+    _safe_log('INFO', string.format('task_db cache built (waypoint=%d, enroute=%d)',
+        #cache.waypoint_ids, #cache.enroute_ids))
     return cache, nil
 end
 
@@ -130,6 +97,9 @@ function M.reset()
 end
 
 function M.resolve(task_id, group_task, kind)
+    -- group_task is accepted for backwards-compat (callers in route_verbs
+    -- still pass it) but ignored: ED's group-task gating is runtime-only.
+    local _ = group_task
     if type(task_id) ~= 'string' or task_id == '' then
         return nil, nil, 'task id is required'
     end
@@ -143,46 +113,31 @@ function M.resolve(task_id, group_task, kind)
         return nil, nil, 'task "' .. task_id .. '" is a ' .. entry.kind ..
                         ' task, not a ' .. kind .. ' task'
     end
-    if group_task and group_task ~= '' then
-        local ok_gt = false
-        for _, g in ipairs(entry.group_tasks) do
-            if g == group_task then ok_gt = true; break end
-        end
-        if not ok_gt then
-            return nil, nil, 'task "' .. task_id .. '" is not legal for group task "'
-                            .. group_task .. '"'
-        end
-    end
-    return entry.canonical, entry.descr, nil
+    return entry.canonical, entry, nil
+end
+
+local function _copy_list(src)
+    local out = {}
+    for i, v in ipairs(src) do out[i] = v end
+    return out
 end
 
 function M.list(group_task)
+    -- group_task accepted for backwards-compat, ignored (no static gating).
+    local _ = group_task
     local cache, err = _ensure()
     if not cache then return nil, err end
-    local lists = cache.by_group_task[group_task]
-    if not lists then
-        return { waypoint = {}, enroute = {} }, nil
-    end
-    -- shallow-copy so callers can't mutate the cache
-    local wp = {}; for i, v in ipairs(lists.waypoint) do wp[i] = v end
-    local en = {}; for i, v in ipairs(lists.enroute)  do en[i] = v end
-    return { waypoint = wp, enroute = en }, nil
+    return { waypoint = _copy_list(cache.waypoint_ids),
+             enroute  = _copy_list(cache.enroute_ids) }, nil
 end
 
 function M.list_all()
     local cache, err = _ensure()
     if not cache then return nil, err end
-    local out = {}
-    local keys = {}
-    for gt in pairs(cache.by_group_task) do table.insert(keys, gt) end
-    table.sort(keys)
-    for _, gt in ipairs(keys) do
-        local lists = cache.by_group_task[gt]
-        local wp = {}; for i, v in ipairs(lists.waypoint) do wp[i] = v end
-        local en = {}; for i, v in ipairs(lists.enroute)  do en[i] = v end
-        table.insert(out, { group_task = gt, waypoint = wp, enroute = en })
-    end
-    return out, nil
+    return {
+        { kind = 'waypoint', tasks = _copy_list(cache.waypoint_ids) },
+        { kind = 'enroute',  tasks = _copy_list(cache.enroute_ids)  },
+    }, nil
 end
 
 function M.describe(task_id, kind)
@@ -199,57 +154,29 @@ function M.describe(task_id, kind)
     return entry, nil
 end
 
--- _descr_fields: best-effort flatten of a descriptor's parameter schema.
--- Used by describe-task to produce JSON-friendly output.
-function M.descr_fields(descr)
+-- M.descr_fields: flatten the entry.params defaults table into a sorted
+-- list of {id, type, default} rows for JSON-friendly describe output.
+function M.descr_fields(entry)
     local out = {}
-    if type(descr) ~= 'table' then return out end
-    local fields = descr.fields or descr.params or descr.fields_schema
-    if type(fields) ~= 'table' then
-        -- fall back to inferring from the default params table
-        local defaults = descr.default or descr.defaults or {}
-        if type(defaults) == 'table' then
-            for k, v in pairs(defaults) do
-                table.insert(out, { id = k, type = type(v), default = v })
-            end
-        end
-        table.sort(out, function(a, b) return tostring(a.id) < tostring(b.id) end)
+    if type(entry) ~= 'table' or type(entry.params) ~= 'table' then
         return out
     end
-    -- ordered list (1-indexed array)
-    for _, f in ipairs(fields) do
-        if type(f) == 'table' and type(f.id or f.name) == 'string' then
-            local entry = { id = f.id or f.name }
-            if f.type then entry.type = f.type end
-            if f.default ~= nil then entry.default = f.default end
-            if type(f.values) == 'table' then entry.options = f.values
-            elseif type(f.options) == 'table' then entry.options = f.options end
-            table.insert(out, entry)
-        end
+    for k, v in pairs(entry.params) do
+        table.insert(out, { id = k, type = type(v), default = v })
     end
+    table.sort(out, function(a, b) return tostring(a.id) < tostring(b.id) end)
     return out
 end
 
--- M.descr_default_params: pull a defaults table out of the descriptor for
--- use as a base when the add-task verb composes a new task entry.
-function M.descr_default_params(descr)
-    if type(descr) ~= 'table' then return {} end
-    local defaults = descr.default or descr.defaults
-    if type(defaults) == 'table' then
-        local copy = {}; for k, v in pairs(defaults) do copy[k] = v end
-        return copy
+-- M.descr_default_params: shallow copy of entry.params for use as a
+-- base when the add-task verb composes a new task entry.
+function M.descr_default_params(entry)
+    if type(entry) ~= 'table' or type(entry.params) ~= 'table' then
+        return {}
     end
-    -- derive from fields list
-    local out = {}
-    local fields = descr.fields or descr.params or descr.fields_schema
-    if type(fields) == 'table' then
-        for _, f in ipairs(fields) do
-            if type(f) == 'table' and (f.id or f.name) and f.default ~= nil then
-                out[f.id or f.name] = f.default
-            end
-        end
-    end
-    return out
+    local copy = {}
+    for k, v in pairs(entry.params) do copy[k] = v end
+    return copy
 end
 
 return M

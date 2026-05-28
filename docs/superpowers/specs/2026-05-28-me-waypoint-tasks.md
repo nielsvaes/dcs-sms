@@ -257,3 +257,39 @@ when present.)
 None. Any ambiguity discovered at implementation time gets resolved
 against the trigger pattern (the closest precedent in the codebase),
 documented inline as a comment, and the spec is amended.
+
+## Deviations from initial design (2026-05-28)
+
+Live probe of ED's `me_action_db` (DCS Open Beta build, May 2026) revealed
+the module's shape doesn't match either of the two shapes the spec
+hypothesized. The actual layout is:
+
+- `me_action_db.actionsData` is a 114-entry array; each entry is
+  `{desc, displayName, task={id, params}, type}`.
+- `type` is the discriminator: 1=waypoint task, 2=enroute task,
+  3=command, 4=option. Counts at probe time: 24 / 15 / 19 / 22.
+- Group-task gating ("which task ids are legal for a CAS group's
+  waypoint") is NOT a static lookup — it's a runtime predicate
+  `isGroupCapableOfAction(group, action)` that takes a live group
+  reference.
+
+**Consequences for the surface in this spec:**
+
+- **D6 (group-task gating):** dropped from v1. `add-task` / `add-enroute-task`
+  validate only that the task id exists and matches the requested kind;
+  they do not refuse ids that ED's GUI would also have rejected for the
+  group's main task. ED still enforces semantic validity at save / run
+  time. Re-introducing static gating would require crawling
+  `isGroupCapableOfAction` for every (group, action) pair on first use,
+  or running it live at add-task time — left for a follow-up if
+  user-reported.
+- **D7 (list-tasks shape):** `--group-name` / `--group-id` are accepted
+  by the CLI for forward-compatibility but ignored by the Lua verb;
+  output is always the full waypoint + enroute lists (filtered by
+  `--kind` if passed). `--all` becomes implicit.
+- **D8 (describe-task shape):** the response omits `group_tasks` (no
+  static index of "where is this task legal"). Keeps `task`, `kind`,
+  `display_name`, `desc`, `fields`. `fields` is derived from the
+  task's `params` defaults (each entry: `{id, type, default}` —
+  no `options` arrays because the real descriptors don't carry them
+  in `actionsData`).

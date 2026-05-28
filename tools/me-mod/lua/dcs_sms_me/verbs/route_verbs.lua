@@ -1084,10 +1084,12 @@ end
 -- ============================================================
 --
 -- Both task kinds share storage at wp.task.params.tasks; the kind is
--- defined by which descriptor table the task id appears in
--- (waypointTasks vs enrouteTasks within me_action_db, keyed by the
--- group's main task). The `--kind` discriminator is therefore not
--- carried on the data — it's enforced at verb-call time via task_db.
+-- defined by the entry's `type` discriminator in
+-- me_action_db.actionsData (1=waypoint, 2=enroute). The `--kind`
+-- discriminator is therefore not carried on the data — it's enforced
+-- at verb-call time via task_db. See spec "Deviations" section for
+-- the live-probe-driven pivot away from the original group-task-keyed
+-- shape assumption.
 
 -- _ensure_combo: guarantee wp.task is { id='ComboTask', params={ tasks={...} } }.
 -- Returns the tasks array.
@@ -1181,19 +1183,19 @@ local function _add_task_impl(args, kind)
     local wp, _, g, _, err = find_waypoint(has_name and args.name or nil,
                                            has_id and args.id or nil, args.index)
     if not wp then return { ok = false, error = err } end
-    local group_task = g.task
-    if type(group_task) ~= 'string' or group_task == '' or group_task == 'Nothing' then
-        return { ok = false, error = "group's main task is '" .. tostring(group_task or '') ..
-                                     "'; set it with `me group set-task` before adding waypoint tasks" }
-    end
-    local canonical, descr, rerr = task_db.resolve(args.task, group_task, kind)
+    -- Group-task gating was dropped in the live-probe pivot: ED's
+    -- isGroupCapableOfAction is a runtime predicate over a live group
+    -- reference, not a static index. We validate only that the task id
+    -- exists and matches the requested kind; ED still enforces semantic
+    -- validity at save/run time. See the spec's "Deviations" section.
+    local canonical, entry_descr, rerr = task_db.resolve(args.task, nil, kind)
     if not canonical then
         return { ok = false, error = (rerr or 'task lookup failed') ..
-                                     " — run `me waypoint list-tasks --group-name " ..
-                                     tostring(g.name or '?') .. "` to see legal ids" }
+                                     " — run `me waypoint list-tasks --kind " ..
+                                     kind .. "` to see legal ids" }
     end
     local tasks = _ensure_combo(wp)
-    local entry, cerr = _compose_task_entry(canonical, descr, args.fields, #tasks)
+    local entry, cerr = _compose_task_entry(canonical, entry_descr, args.fields, #tasks)
     if not entry then return { ok = false, error = cerr } end
     table.insert(tasks, entry)
     _renumber(tasks)
@@ -1291,26 +1293,23 @@ function M.waypoint_list_tasks(args)
     if type(args) ~= 'table' then
         return { ok = false, error = 'waypoint_list_tasks requires args (table)' }
     end
-    if args.all then
-        local rows, err = task_db.list_all()
-        if not rows then return { ok = false, error = err } end
-        return { ok = true, all = true, categories = rows }
+    -- Live-probe pivot: there is no static group-task→legal-tasks index;
+    -- the only meaningful filter is --kind. We accept (and ignore) any
+    -- --name / --id / --all keys the Go layer may still pass so old
+    -- CLI invocations don't error during the pivot.
+    local kind = nil
+    if args.kind ~= nil then
+        if args.kind ~= 'waypoint' and args.kind ~= 'enroute' then
+            return { ok = false, error = "kind must be 'waypoint' or 'enroute'" }
+        end
+        kind = args.kind
     end
-    local has_name = type(args.name) == 'string' and args.name ~= ''
-    local has_id = type(args.id) == 'number'
-    if has_name == has_id then
-        return { ok = false, error = 'requires --all or exactly one of args.name / args.id' }
-    end
-    -- locate group (no waypoint needed for list)
-    local g = find_group_in_mission(has_name and args.name or nil,
-                                    has_id and args.id or nil)
-    if not g then
-        return { ok = false, error = 'group not found' }
-    end
-    local lists, err = task_db.list(g.task or '')
+    local lists, err = task_db.list(nil)
     if not lists then return { ok = false, error = err } end
-    return { ok = true, group = g.name, group_task = g.task or '',
-             waypoint_tasks = lists.waypoint, enroute_tasks = lists.enroute }
+    local wp_tasks = (kind == nil or kind == 'waypoint') and lists.waypoint or {}
+    local en_tasks = (kind == nil or kind == 'enroute')  and lists.enroute  or {}
+    return { ok = true, kind = kind or 'all',
+             waypoint_tasks = wp_tasks, enroute_tasks = en_tasks }
 end
 
 function M.waypoint_describe_task(args)
@@ -1326,9 +1325,13 @@ function M.waypoint_describe_task(args)
     end
     local entry, err = task_db.describe(args.task, kind)
     if not entry then return { ok = false, error = err } end
-    local fields = task_db.descr_fields(entry.descr)
+    -- Live-probe pivot: descriptors live in actionsData entries with
+    -- display_name/desc/params. group_tasks is gone (no static gating
+    -- index — see spec "Deviations" section).
+    local fields = task_db.descr_fields(entry)
     return { ok = true, task = entry.canonical, kind = entry.kind,
-             group_tasks = entry.group_tasks, fields = fields }
+             display_name = entry.display_name, desc = entry.desc,
+             fields = fields }
 end
 
 return M
