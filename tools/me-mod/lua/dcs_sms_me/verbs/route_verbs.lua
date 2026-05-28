@@ -1118,10 +1118,9 @@ local function _classify_slot(tasks, slot)
     if type(entry) ~= 'table' or type(entry.id) ~= 'string' then
         return 'unknown', nil, nil
     end
-    local canonical, _, err = task_db.resolve(entry.id, nil, nil)
-    if not canonical then return 'unknown', entry.id, nil end
-    -- look up kind via the cached entry
-    local d, derr = task_db.describe(entry.id, nil)
+    -- describe returns nil on unknown id and an entry with .kind on success;
+    -- no separate resolve call needed.
+    local d = task_db.describe(entry.id, nil)
     if not d then return 'unknown', entry.id, nil end
     return d.kind, entry.id, nil
 end
@@ -1228,10 +1227,18 @@ local function _remove_task_impl(args, kind)
     local tasks = _ensure_combo(wp)
     local found_kind, task_id, cerr = _classify_slot(tasks, args.slot)
     if cerr then return { ok = false, error = cerr } end
+    if found_kind == 'unknown' then
+        return { ok = false, error = 'slot ' .. args.slot .. ' holds task "' ..
+                                     tostring(task_id or '?') ..
+                                     '" which is not recognized by task_db; ' ..
+                                     'cannot determine kind' }
+    end
     if found_kind ~= kind then
-        return { ok = false, error = 'slot ' .. args.slot .. ' holds a ' .. tostring(found_kind) ..
-                                     ' task ("' .. tostring(task_id or '?') .. '"); use the ' ..
-                                     tostring(found_kind) .. ' remove verb instead' }
+        return { ok = false, error = 'slot ' .. args.slot ..
+                                     ' holds an entry of kind ' .. tostring(found_kind) ..
+                                     ' ("' .. tostring(task_id or '?') ..
+                                     '"); use the ' .. tostring(found_kind) ..
+                                     ' remove verb instead' }
     end
     local removed = table.remove(tasks, args.slot)
     _renumber(tasks)
@@ -1262,7 +1269,7 @@ local function _clear_tasks_impl(args, kind)
     local tasks = _ensure_combo(wp)
     local kept, dropped = {}, 0
     for i = 1, #tasks do
-        local k = select(1, _classify_slot(tasks, i))
+        local k = _classify_slot(tasks, i)
         if k == kind then
             dropped = dropped + 1
         else
@@ -1295,14 +1302,8 @@ function M.waypoint_list_tasks(args)
         return { ok = false, error = 'requires --all or exactly one of args.name / args.id' }
     end
     -- locate group (no waypoint needed for list)
-    local Mission = require('me_mission')
-    local g = nil
-    if has_name then g = find_group_in_mission(args.name)
-    else
-        for _, gg in pairs(Mission.group_by_id or {}) do
-            if gg.groupId == args.id then g = gg; break end
-        end
-    end
+    local g = find_group_in_mission(has_name and args.name or nil,
+                                    has_id and args.id or nil)
     if not g then
         return { ok = false, error = 'group not found' }
     end
