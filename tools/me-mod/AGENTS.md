@@ -55,7 +55,7 @@ The full set of nouns and verbs (see [`../../docs/cli/`](../../docs/cli/) for fl
 | **`drawing`** | `list`, `get`, `remove`, `create-circle`, `create-oval`, `create-rect`, `create-arrow`, `create-line`, `create-polygon`, `create-chevron`, `create-textbox`, `create-icon`, `set-name`, `set-pos`, `set-angle`, `set-color`, `set-fill-color`, `set-thickness`, `set-text` |
 | **`trigger`** | `list`, `get`, `list-predicates`, `describe-predicate`, `create`, `remove`, `set-name`, `set-eventlist`, `add-condition`, `remove-condition`, `add-action`, `remove-action`, `reorder`, `reorder-condition`, `reorder-action` |
 | **`route`** | `list`, `get`, `clear` |
-| **`waypoint`** | `add`, `insert`, `remove`, `get`, `set-pos`, `set-alt`, `set-speed`, `set-speed-locked`, `set-eta`, `set-eta-locked`, `set-type`, `set-action`, `set-mode`, `set-name`, `set-formation`, `link-airbase` |
+| **`waypoint`** | `add`, `insert`, `remove`, `get`, `set-pos`, `set-alt`, `set-speed`, `set-speed-locked`, `set-eta`, `set-eta-locked`, `set-type`, `set-action`, `set-mode`, `set-name`, `set-formation`, `link-airbase`, `add-task`, `remove-task`, `clear-tasks`, `add-enroute-task`, `remove-enroute-task`, `clear-enroute-tasks`, `list-tasks`, `describe-task` |
 | **`airbase`** | `list`, `get`, `set-coalition` |
 | **`resources`** | `get`, `set` |
 | **`camera`** | `get`, `focus` |
