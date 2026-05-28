@@ -25,8 +25,8 @@ func meWaypointAddEnrouteTaskFlags() (*flag.FlagSet, *meWaypointAddEnrouteTaskOp
 	fs.StringVar(&opts.GroupName, "group-name", "", "group name (mutually exclusive with --group-id)")
 	fs.IntVar(&opts.GroupID, "group-id", 0, "group id (mutually exclusive with --group-name)")
 	fs.IntVar(&opts.Index, "index", -1, "waypoint index (0-based; required)")
-	fs.StringVar(&opts.Task, "task", "", "task id from me_action_db enrouteTasks (e.g. EngageTargets, CAP, CAS, EngageGroup). "+
-		"Run `me waypoint list-tasks --group-name <X>` to see legal ids for a group's main task.")
+	fs.StringVar(&opts.Task, "task", "", "task id from me_action_db (e.g. EngageTargets, CAP, EngageGroup). "+
+		"Run `me waypoint list-tasks --kind enroute` to see legal ids.")
 	fs.DurationVar(&opts.Timeout, "timeout", 30*time.Second, "wall-clock timeout")
 	fs.BoolVar(&opts.Pretty, "pretty", false, "indent JSON output")
 	fs.StringVar(&opts.SavedGames, "saved-games", "", "override Saved Games path")
