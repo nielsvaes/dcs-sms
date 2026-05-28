@@ -23,6 +23,8 @@ local find_unit_in_mission  = H.find_unit_in_mission
 local find_group_in_mission = H.find_group_in_mission
 local find_airbase_by_name  = H.find_airbase_by_name
 
+local task_db = require('dcs_sms_me.task_db')
+
 -- ============================================================
 -- Route / waypoint geometry verbs
 -- ============================================================
@@ -1074,6 +1076,258 @@ function M.unit_set_parking(args)
         crossroad_index = match.crossroad_index,
         north = u.x, east = u.y,
     }
+end
+
+
+-- ============================================================
+-- waypoint task / enroute-task verbs (gh #69)
+-- ============================================================
+--
+-- Both task kinds share storage at wp.task.params.tasks; the kind is
+-- defined by which descriptor table the task id appears in
+-- (waypointTasks vs enrouteTasks within me_action_db, keyed by the
+-- group's main task). The `--kind` discriminator is therefore not
+-- carried on the data — it's enforced at verb-call time via task_db.
+
+-- _ensure_combo: guarantee wp.task is { id='ComboTask', params={ tasks={...} } }.
+-- Returns the tasks array.
+local function _ensure_combo(wp)
+    if type(wp.task) ~= 'table' then
+        wp.task = { id = 'ComboTask', params = { tasks = {} } }
+    end
+    if type(wp.task.params) ~= 'table' then wp.task.params = {} end
+    if type(wp.task.params.tasks) ~= 'table' then wp.task.params.tasks = {} end
+    return wp.task.params.tasks
+end
+
+-- _renumber: rewrite ['number'] = 1..N over the tasks array.
+local function _renumber(tasks)
+    for i, t in ipairs(tasks) do
+        if type(t) == 'table' then t.number = i end
+    end
+end
+
+-- _classify_slot: return ('waypoint'|'enroute'|'unknown', task_id, err)
+-- for the given 1-based slot of tasks. err is non-nil iff slot is OOR.
+local function _classify_slot(tasks, slot)
+    if type(slot) ~= 'number' or slot < 1 or slot > #tasks then
+        return nil, nil, 'slot out of range: ' .. tostring(slot) ..
+                        ' (have ' .. #tasks .. ' tasks at this waypoint)'
+    end
+    local entry = tasks[slot]
+    if type(entry) ~= 'table' or type(entry.id) ~= 'string' then
+        return 'unknown', nil, nil
+    end
+    local canonical, _, err = task_db.resolve(entry.id, nil, nil)
+    if not canonical then return 'unknown', entry.id, nil end
+    -- look up kind via the cached entry
+    local d, derr = task_db.describe(entry.id, nil)
+    if not d then return 'unknown', entry.id, nil end
+    return d.kind, entry.id, nil
+end
+
+-- _compose_task_entry: build a fresh task table from descr defaults +
+-- caller-overridden fields. Returns (entry, err).
+local function _compose_task_entry(task_id, descr, fields, tasks_len)
+    local params = task_db.descr_default_params(descr)
+    -- caller field overrides apply to params first; structural keys
+    -- (enabled/auto/number) land on the wrapping entry below.
+    local enabled, auto, number = true, false, tasks_len + 1
+    if type(fields) == 'table' then
+        for k, v in pairs(fields) do
+            if k == 'enabled' then
+                if type(v) ~= 'boolean' then
+                    return nil, 'enabled must be boolean (got ' .. type(v) .. ')'
+                end
+                enabled = v
+            elseif k == 'auto' then
+                if type(v) ~= 'boolean' then
+                    return nil, 'auto must be boolean (got ' .. type(v) .. ')'
+                end
+                auto = v
+            elseif k == 'number' then
+                if type(v) ~= 'number' then
+                    return nil, 'number must be a number (got ' .. type(v) .. ')'
+                end
+                number = v
+            else
+                params[k] = v
+            end
+        end
+    end
+    return {
+        id = task_id,
+        enabled = enabled,
+        auto = auto,
+        number = number,
+        params = params,
+    }, nil
+end
+
+local function _add_task_impl(args, kind)
+    if type(args) ~= 'table' then
+        return { ok = false, error = 'waypoint_add_' .. kind .. '_task requires args (table)' }
+    end
+    local has_name = type(args.name) == 'string' and args.name ~= ''
+    local has_id = type(args.id) == 'number'
+    if has_name == has_id then
+        return { ok = false, error = 'requires exactly one of args.name or args.id' }
+    end
+    if type(args.index) ~= 'number' then
+        return { ok = false, error = 'requires args.index (integer >= 0)' }
+    end
+    if type(args.task) ~= 'string' or args.task == '' then
+        return { ok = false, error = 'requires args.task (string)' }
+    end
+    local wp, _, g, _, err = find_waypoint(has_name and args.name or nil,
+                                           has_id and args.id or nil, args.index)
+    if not wp then return { ok = false, error = err } end
+    local group_task = g.task
+    if type(group_task) ~= 'string' or group_task == '' or group_task == 'Nothing' then
+        return { ok = false, error = "group's main task is '" .. tostring(group_task or '') ..
+                                     "'; set it with `me group set-task` before adding waypoint tasks" }
+    end
+    local canonical, descr, rerr = task_db.resolve(args.task, group_task, kind)
+    if not canonical then
+        return { ok = false, error = (rerr or 'task lookup failed') ..
+                                     " — run `me waypoint list-tasks --group-name " ..
+                                     tostring(g.name or '?') .. "` to see legal ids" }
+    end
+    local tasks = _ensure_combo(wp)
+    local entry, cerr = _compose_task_entry(canonical, descr, args.fields, #tasks)
+    if not entry then return { ok = false, error = cerr } end
+    table.insert(tasks, entry)
+    _renumber(tasks)
+    refresh_route_panel()
+    refresh_group_view(g)
+    return { ok = true, group = g.name, index = args.index, task = canonical,
+             kind = kind, slot = #tasks }
+end
+
+function M.waypoint_add_task(args)         return _add_task_impl(args, 'waypoint') end
+function M.waypoint_add_enroute_task(args) return _add_task_impl(args, 'enroute') end
+
+local function _remove_task_impl(args, kind)
+    if type(args) ~= 'table' then
+        return { ok = false, error = 'remove requires args (table)' }
+    end
+    local has_name = type(args.name) == 'string' and args.name ~= ''
+    local has_id = type(args.id) == 'number'
+    if has_name == has_id then
+        return { ok = false, error = 'requires exactly one of args.name or args.id' }
+    end
+    if type(args.index) ~= 'number' then
+        return { ok = false, error = 'requires args.index (integer >= 0)' }
+    end
+    if type(args.slot) ~= 'number' or args.slot < 1 then
+        return { ok = false, error = 'requires args.slot (integer >= 1)' }
+    end
+    local wp, _, g, _, err = find_waypoint(has_name and args.name or nil,
+                                           has_id and args.id or nil, args.index)
+    if not wp then return { ok = false, error = err } end
+    local tasks = _ensure_combo(wp)
+    local found_kind, task_id, cerr = _classify_slot(tasks, args.slot)
+    if cerr then return { ok = false, error = cerr } end
+    if found_kind ~= kind then
+        return { ok = false, error = 'slot ' .. args.slot .. ' holds a ' .. tostring(found_kind) ..
+                                     ' task ("' .. tostring(task_id or '?') .. '"); use the ' ..
+                                     tostring(found_kind) .. ' remove verb instead' }
+    end
+    local removed = table.remove(tasks, args.slot)
+    _renumber(tasks)
+    refresh_route_panel()
+    refresh_group_view(g)
+    return { ok = true, group = g.name, index = args.index, slot = args.slot,
+             removed_task = removed.id, kind = kind }
+end
+
+function M.waypoint_remove_task(args)         return _remove_task_impl(args, 'waypoint') end
+function M.waypoint_remove_enroute_task(args) return _remove_task_impl(args, 'enroute') end
+
+local function _clear_tasks_impl(args, kind)
+    if type(args) ~= 'table' then
+        return { ok = false, error = 'clear requires args (table)' }
+    end
+    local has_name = type(args.name) == 'string' and args.name ~= ''
+    local has_id = type(args.id) == 'number'
+    if has_name == has_id then
+        return { ok = false, error = 'requires exactly one of args.name or args.id' }
+    end
+    if type(args.index) ~= 'number' then
+        return { ok = false, error = 'requires args.index (integer >= 0)' }
+    end
+    local wp, _, g, _, err = find_waypoint(has_name and args.name or nil,
+                                           has_id and args.id or nil, args.index)
+    if not wp then return { ok = false, error = err } end
+    local tasks = _ensure_combo(wp)
+    local kept, dropped = {}, 0
+    for i = 1, #tasks do
+        local k = select(1, _classify_slot(tasks, i))
+        if k == kind then
+            dropped = dropped + 1
+        else
+            table.insert(kept, tasks[i])
+        end
+    end
+    wp.task.params.tasks = kept
+    _renumber(kept)
+    refresh_route_panel()
+    refresh_group_view(g)
+    return { ok = true, group = g.name, index = args.index, removed_count = dropped,
+             kind = kind, remaining = #kept }
+end
+
+function M.waypoint_clear_tasks(args)         return _clear_tasks_impl(args, 'waypoint') end
+function M.waypoint_clear_enroute_tasks(args) return _clear_tasks_impl(args, 'enroute') end
+
+function M.waypoint_list_tasks(args)
+    if type(args) ~= 'table' then
+        return { ok = false, error = 'waypoint_list_tasks requires args (table)' }
+    end
+    if args.all then
+        local rows, err = task_db.list_all()
+        if not rows then return { ok = false, error = err } end
+        return { ok = true, all = true, categories = rows }
+    end
+    local has_name = type(args.name) == 'string' and args.name ~= ''
+    local has_id = type(args.id) == 'number'
+    if has_name == has_id then
+        return { ok = false, error = 'requires --all or exactly one of args.name / args.id' }
+    end
+    -- locate group (no waypoint needed for list)
+    local Mission = require('me_mission')
+    local g = nil
+    if has_name then g = find_group_in_mission(args.name)
+    else
+        for _, gg in pairs(Mission.group_by_id or {}) do
+            if gg.groupId == args.id then g = gg; break end
+        end
+    end
+    if not g then
+        return { ok = false, error = 'group not found' }
+    end
+    local lists, err = task_db.list(g.task or '')
+    if not lists then return { ok = false, error = err } end
+    return { ok = true, group = g.name, group_task = g.task or '',
+             waypoint_tasks = lists.waypoint, enroute_tasks = lists.enroute }
+end
+
+function M.waypoint_describe_task(args)
+    if type(args) ~= 'table' or type(args.task) ~= 'string' or args.task == '' then
+        return { ok = false, error = 'waypoint_describe_task requires args.task (string)' }
+    end
+    local kind = nil
+    if args.kind ~= nil then
+        if args.kind ~= 'waypoint' and args.kind ~= 'enroute' then
+            return { ok = false, error = "kind must be 'waypoint' or 'enroute'" }
+        end
+        kind = args.kind
+    end
+    local entry, err = task_db.describe(args.task, kind)
+    if not entry then return { ok = false, error = err } end
+    local fields = task_db.descr_fields(entry.descr)
+    return { ok = true, task = entry.canonical, kind = entry.kind,
+             group_tasks = entry.group_tasks, fields = fields }
 end
 
 return M
