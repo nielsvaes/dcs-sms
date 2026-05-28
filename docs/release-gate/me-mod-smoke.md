@@ -114,3 +114,39 @@ Verify the refactor preserved Prefab Manager behaviour exactly:
 - [ ] Folder name validation: try "CAP/x", "..", "CON" → all rejected with status message.
 - [ ] Resize window → tree stays at 200 px wide; file grid widens.
 - [ ] Reload (Ctrl+Shift+R) or close/re-open Prefab Manager → tree refreshes from disk.
+
+## v0.15.0 — waypoint task verbs (gh #69)
+
+- [ ] **Add a Bombing waypoint task via `me waypoint add-task`.**
+      Open a mission with any group. Run
+      `dcs-sms me waypoint add-task --group-name "<G>" --index 1 --task Bombing altitude=1500 expend=All`.
+      Confirm exit 0, the JSON return reports `slot = 1`, and the ME's
+      route panel shows the Bombing task at waypoint 1. (Group-task
+      gating is informational only — the verb no longer rejects
+      wrong-main-task post-pivot.)
+
+- [ ] **Add an EngageTargets enroute task to a CAP group.**
+      Run `dcs-sms me waypoint add-enroute-task --group-name "<G>" --index 1 --task EngageTargets`.
+      Confirm exit 0 and the task appears in the ME route panel under
+      enroute tasks for the waypoint.
+
+- [ ] **Kind-gating fail check.**
+      Run `dcs-sms me waypoint add-task --group-name "<G>" --index 1 --task EngageTargets`.
+      Confirm exit 1 with an error mentioning the task is an enroute task.
+
+- [ ] **`remove-task --slot 99` rejects.**
+      Confirm exit 1 with "slot out of range".
+
+- [ ] **`clear-tasks` keeps enroute tasks.**
+      Pre-add one waypoint and one enroute task. Run `clear-tasks`.
+      Confirm only the waypoint kind was removed.
+
+- [ ] **`list-tasks` returns sane sets.**
+      Run `dcs-sms me waypoint list-tasks --group-name "<G>"` and confirm
+      the JSON has non-empty `waypoint_tasks` / `enroute_tasks` arrays
+      that match the group's main task.
+
+- [ ] **`describe-task --task Bombing`.**
+      Confirm fields include `weaponType`, `expend`, `altitude`, etc.
+
+- [ ] **Round-trip save: write tasks, save .miz, reload, confirm tasks persist.**
