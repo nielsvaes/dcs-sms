@@ -168,13 +168,16 @@ end
 -- into — without actionsListBox:update(true) a freshly added/removed
 -- task stays invisible until the user clicks the WP again.
 --
--- Optionally takes the group whose route was mutated. When supplied, also
--- selects that group in the aircraft (AIRPLANE GROUP / VEHICLE GROUP …)
--- info panel so the user sees the same two-panel layout (group panel +
--- route panel) the ME shows after a map-click. Without this, a verb that
--- targets a programmatically-created group leaves the top half of the
--- right side blank because the group was never "selected" through the
--- ME's MapWindow click path.
+-- The optional `g` argument is currently unused (kept on the signature
+-- for forward compatibility); the AIRPLANE GROUP / VEHICLE GROUP info
+-- panel does NOT auto-raise after a route mutation. Programmatically
+-- created groups (`me group create-plane`, …) never go through ED's
+-- MapWindow selection path, and trying to force the aircraft panel up
+-- here turned out to require setGroup + vdata.type priming + show +
+-- skipping switchView when view already matches — and even then the
+-- listbox state didn't survive a subsequent user click, so the user
+-- still saw an empty Advanced Waypoint Actions section. Tracking that
+-- separately; for now we keep refresh_route_panel narrow.
 --
 -- Safe no-op if me_route isn't available (defensive — same posture as
 -- refresh_group_view's pcall on update_group_map_objects).
@@ -188,43 +191,7 @@ local function refresh_route_panel(g)
                 and type(panel_route.actionsListBox.update) == 'function' then
             panel_route.actionsListBox:update(true)
         end
-        -- If a group is provided, also pop the route window itself —
-        -- programmatically created groups have neither panel up until
-        -- the user clicks the group on the map.
-        if g and type(panel_route.show) == 'function' then
-            panel_route.show(true)
-        end
     end)
-    if not g then return end
-    -- me_aircraft handles both plane and helicopter via switchView; the
-    -- panel defaults to 'helicopter' at module load. switchView is what
-    -- the ME calls on map-click of a group of the other category — but
-    -- it clears vdata.type as a side effect, and a subsequent show()
-    -- then crashes inside updateModulation (DB.unit_by_type[nil]). We
-    -- therefore prime vdata.type FROM the group's first unit before
-    -- calling show, and only switchView when the current view actually
-    -- differs from the group's category.
-    if g.type == 'plane' or g.type == 'helicopter' then
-        pcall(function()
-            local panel_aircraft = require('me_aircraft')
-            if type(panel_aircraft.switchView) == 'function'
-                    and panel_aircraft.__view__ ~= g.type then
-                panel_aircraft.switchView(g.type)
-            end
-            if type(panel_aircraft.setGroup) == 'function' then
-                panel_aircraft.setGroup(g)
-            end
-            if type(panel_aircraft.vdata) == 'table'
-                    and type(g.units) == 'table'
-                    and type(g.units[1]) == 'table'
-                    and type(g.units[1].type) == 'string' then
-                panel_aircraft.vdata.type = g.units[1].type
-            end
-            if type(panel_aircraft.show) == 'function' then
-                panel_aircraft.show(true)
-            end
-        end)
-    end
 end
 
 -- ensure_map_objects — guarantee g.mapObjects is populated. ME-native
