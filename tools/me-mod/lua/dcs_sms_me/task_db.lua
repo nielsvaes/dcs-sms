@@ -1,31 +1,49 @@
 -- task_db.lua — lazy loader + cache over ED's me_action_db.
 --
 -- Public surface (call via `local T = require('dcs_sms_me.task_db')`):
---   T.resolve(task_id, group_task, kind) -> canonical, entry, err
---   T.list(group_task)                   -> { waypoint = {...}, enroute = {...} }, err
---   T.list_all()                         -> { { kind='waypoint', tasks={...} }, ... }, err
---   T.describe(task_id, kind)            -> entry, err   (kind may be nil to accept either)
---   T.descr_fields(entry)                -> {{id,type,default}, ...}
---   T.descr_default_params(entry)        -> shallow copy of entry.params
---   T.reset()                            -> nil          (testing hook: forget the cache)
+--   T.resolve(canonical_id, group_type, group_task, kind)
+--       -> canonical, entry, err
+--   T.list(group_type, group_task)
+--       -> { waypoint = {...}, enroute = {...} }, err
+--   T.list_all()
+--       -> { { group_type='plane', group_task='CAS',
+--              waypoint = {...}, enroute = {...} }, ... }, err
+--   T.describe(canonical_id, kind)
+--       -> entry, err   (kind may be nil to accept either)
+--   T.descr_fields(entry)
+--       -> {{id,type,default}, ...}
+--   T.descr_default_params(entry)
+--       -> shallow copy of entry.params
+--   T.reset()
+--       -> nil          (testing hook: forget the cache)
 --
--- Live probe (May 2026 ED Open Beta build) found me_action_db's top
--- level is mostly functions and constants — the task descriptors live
--- in `me_action_db.actionsData`, a 114-entry array where each entry
--- has `{desc, displayName, task={id, params}, type}`. The `type` field
--- discriminates: 1=waypoint task, 2=enroute task, 3=command, 4=option.
--- Only types 1 and 2 are in scope for gh #69; commands and options
--- wrap WrappedAction and are out of scope.
+-- Live probe (May 2026 ED Open Beta) of me_action_db:
 --
--- Task ids can appear multiple times in actionsData (e.g. EngageTargets
--- repeats 6× — presumably one variant per group-task context with
--- different defaults). We keep the first occurrence per (task_id, kind).
+-- - `me_action_db.actionsData`: 114-entry array. Each entry =
+--   `{ desc, displayName, task={id, key?, params}, type }`. `type`
+--   discriminates: 1=waypoint task, 2=enroute task, 3=command,
+--   4=option. Only types 1 and 2 are in scope for gh #69.
 --
--- Group-task gating ("for a CAS group, only Bombing/AttackGroup/... are
--- legal") is NOT a static index in actionsData. ED does it at runtime
--- via me_action_db.isGroupCapableOfAction(group, action) which needs
--- a live group reference. v1 of gh #69 drops the static gate; the
--- group_task argument on resolve/list is accepted and ignored.
+-- - Some entries share a `task.id` but carry distinct `task.key`
+--   values — e.g. all 5 enroute "EngageTargets" variants have
+--   `task.id="EngageTargets"` and `task.key in {CAS,CAP,SEAD,
+--   FighterSweep,AntiShip}`. ED treats each variant as its own
+--   action (different defaults, different group-task slot in
+--   availableActions). We treat each variant as a distinct
+--   canonical identifier: `canonical = task.key or task.id`.
+--   So `--task CAS` resolves to the CAS-flavored EngageTargets,
+--   `--task Bombing` to Bombing, etc.
+--
+-- - `me_action_db.availableActions`: the static legality index
+--   `availableActions[group_type][type_num][group_task] = {action_id, ...}`
+--   where each action_id is an integer index into actionsData. When
+--   the group's `group_task` has no entry, fall back to
+--   `availableActions[group_type][type_num]['Default']`. ED's UI uses
+--   this same index to decide whether to render a task entry — if
+--   the action's id isn't in this list, ED silently filters the task
+--   out of the listbox even though the data persists. So gh #69
+--   verbs MUST gate adds against this list, or the user gets a task
+--   that's written into the .miz but invisible in the editor.
 --
 -- The cache is built once per ME session on first call. The mock-test
 -- harness can inject a fake `me_action_db` via package.preload BEFORE
@@ -36,10 +54,35 @@
 
 local M = {}
 
-local _cache = nil   -- { by_id = { [TaskId] = entry, ... },
-                     --   waypoint_ids = {sorted}, enroute_ids = {sorted} }
-                     -- entry = { canonical = TaskId, kind = 'waypoint'|'enroute',
-                     --           display_name = string, desc = string, params = table }
+local TYPE_WAYPOINT, TYPE_ENROUTE = 1, 2
+
+-- _cache shape:
+--   {
+--     by_canonical = {
+--       [canonical_id] = {
+--         canonical    = string,            -- task.key or task.id
+--         task_id      = string,            -- DCS task.id (e.g. "EngageTargets")
+--         task_key     = string|nil,        -- DCS task.key when present
+--         kind         = 'waypoint'|'enroute',
+--         action_id    = integer,           -- index into actionsData
+--         display_name = string,
+--         desc         = string,
+--         params       = table,             -- task.params defaults
+--       },
+--       ...
+--     },
+--     by_action_id = { [action_id] = entry, ... },  -- reverse lookup
+--     -- availability index, mirror of me_action_db.availableActions but
+--     -- only types 1 and 2, mapped to canonical identifiers:
+--     legal = {
+--       [group_type] = {
+--         waypoint = { [group_task_or_Default] = {canonical_id, ...} },
+--         enroute  = { [group_task_or_Default] = {canonical_id, ...} },
+--       },
+--       ...
+--     },
+--   }
+local _cache = nil
 
 local function _safe_log(level_name, msg)
     local ok_log, log = pcall(function() return _G.log end)
@@ -47,6 +90,12 @@ local function _safe_log(level_name, msg)
         local lvl = log[level_name] or log.INFO
         log.write('sms.me.task_db', lvl, msg)
     end
+end
+
+local function _kind_for_type(t)
+    if t == TYPE_WAYPOINT then return 'waypoint' end
+    if t == TYPE_ENROUTE  then return 'enroute'  end
+    return nil
 end
 
 local function _build()
@@ -57,31 +106,74 @@ local function _build()
     if type(db.actionsData) ~= 'table' then
         return nil, "me_action_db.actionsData missing or wrong type — ED may have changed the module shape"
     end
-    local TYPE_WAYPOINT, TYPE_ENROUTE = 1, 2
-    local cache = { by_id = {}, waypoint_ids = {}, enroute_ids = {} }
-    for _, a in ipairs(db.actionsData) do
-        if type(a) == 'table' and type(a.task) == 'table' and type(a.task.id) == 'string' then
-            local kind = (a.type == TYPE_WAYPOINT) and 'waypoint'
-                      or (a.type == TYPE_ENROUTE)  and 'enroute'
-                      or nil
-            if kind and not cache.by_id[a.task.id] then
-                cache.by_id[a.task.id] = {
-                    canonical    = a.task.id,
+
+    local cache = {
+        by_canonical = {},
+        by_action_id = {},
+        legal = {},
+    }
+
+    -- Walk actionsData, build canonical entries
+    for action_id, a in ipairs(db.actionsData) do
+        local kind = _kind_for_type(a.type)
+        if kind and type(a.task) == 'table' and type(a.task.id) == 'string' then
+            local canonical = a.task.key or a.task.id
+            -- If a duplicate (task.key or task.id) lands on the same canonical
+            -- key (rare — only for unkeyed duplicates), keep the first.
+            if not cache.by_canonical[canonical] then
+                local entry = {
+                    canonical    = canonical,
+                    task_id      = a.task.id,
+                    task_key     = a.task.key,
                     kind         = kind,
-                    display_name = a.displayName or a.task.id,
+                    action_id    = action_id,
+                    display_name = a.displayName or canonical,
                     desc         = a.desc or '',
                     params       = (type(a.task.params) == 'table') and a.task.params or {},
                 }
-                table.insert(kind == 'waypoint' and cache.waypoint_ids or cache.enroute_ids, a.task.id)
+                cache.by_canonical[canonical] = entry
+                cache.by_action_id[action_id] = entry
             end
         end
     end
-    table.sort(cache.waypoint_ids); table.sort(cache.enroute_ids)
-    if not next(cache.by_id) then
+
+    -- Walk availableActions to build the legal-actions-per-(group_type, kind, group_task) index
+    if type(db.availableActions) == 'table' then
+        for group_type, by_action_type in pairs(db.availableActions) do
+            if type(by_action_type) == 'table' then
+                cache.legal[group_type] = { waypoint = {}, enroute = {} }
+                for action_type, by_group_task in pairs(by_action_type) do
+                    local kind = _kind_for_type(action_type)
+                    if kind and type(by_group_task) == 'table' then
+                        for group_task, action_id_list in pairs(by_group_task) do
+                            if type(action_id_list) == 'table' then
+                                local canon_list = {}
+                                local seen = {}
+                                for _, aid in ipairs(action_id_list) do
+                                    local entry = cache.by_action_id[aid]
+                                    if entry and not seen[entry.canonical] then
+                                        table.insert(canon_list, entry.canonical)
+                                        seen[entry.canonical] = true
+                                    end
+                                end
+                                table.sort(canon_list)
+                                cache.legal[group_type][kind][group_task] = canon_list
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    if not next(cache.by_canonical) then
         return nil, "me_action_db.actionsData walked but no task descriptors found"
     end
-    _safe_log('INFO', string.format('task_db cache built (waypoint=%d, enroute=%d)',
-        #cache.waypoint_ids, #cache.enroute_ids))
+
+    _safe_log('INFO', string.format(
+        'task_db cache built (%d canonical task entries; %d group types in legal index)',
+        (function() local n = 0; for _ in pairs(cache.by_canonical) do n = n + 1 end; return n end)(),
+        (function() local n = 0; for _ in pairs(cache.legal) do n = n + 1 end; return n end)()))
     return cache, nil
 end
 
@@ -97,22 +189,45 @@ function M.reset()
     _cache = nil
 end
 
-function M.resolve(task_id, group_task, kind)
-    -- group_task is accepted for backwards-compat (callers in route_verbs
-    -- still pass it) but ignored: ED's group-task gating is runtime-only.
-    local _ = group_task
-    if type(task_id) ~= 'string' or task_id == '' then
+-- _legal_for: return the array of canonical ids legal for
+-- (group_type, kind, group_task), falling back to 'Default' when the
+-- specific group_task isn't indexed. Returns {} if nothing matches.
+local function _legal_for(cache, group_type, kind, group_task)
+    local by_group = cache.legal[group_type] and cache.legal[group_type][kind]
+    if not by_group then return {} end
+    if group_task and by_group[group_task] then return by_group[group_task] end
+    return by_group['Default'] or {}
+end
+
+function M.resolve(canonical_id, group_type, group_task, kind)
+    if type(canonical_id) ~= 'string' or canonical_id == '' then
         return nil, nil, 'task id is required'
     end
     local cache, err = _ensure()
     if not cache then return nil, nil, err end
-    local entry = cache.by_id[task_id]
+    local entry = cache.by_canonical[canonical_id]
     if not entry then
-        return nil, nil, 'unknown task id "' .. task_id .. '"'
+        return nil, nil, 'unknown task id "' .. canonical_id .. '"'
     end
     if kind and entry.kind ~= kind then
-        return nil, nil, 'task "' .. task_id .. '" is a ' .. entry.kind ..
+        return nil, nil, 'task "' .. canonical_id .. '" is a ' .. entry.kind ..
                         ' task, not a ' .. kind .. ' task'
+    end
+    -- Static legality gate via availableActions. Only checked when caller
+    -- passes both group_type AND group_task — bare resolve()s skip the
+    -- gate (used by describe / classification).
+    if group_type and group_task and group_task ~= '' then
+        local legal = _legal_for(cache, group_type, entry.kind, group_task)
+        local ok = false
+        for _, c in ipairs(legal) do
+            if c == canonical_id then ok = true; break end
+        end
+        if not ok then
+            return nil, nil, 'task "' .. canonical_id .. '" is not a legal ' ..
+                             entry.kind .. ' task for group type "' .. group_type ..
+                             '" with main task "' .. group_task ..
+                             '" (run `me waypoint list-tasks --group-name <X>` to see legal ids)'
+        end
     end
     return entry.canonical, entry, nil
 end
@@ -123,36 +238,79 @@ local function _copy_list(src)
     return out
 end
 
-function M.list(group_task)
-    -- group_task accepted for backwards-compat, ignored (no static gating).
-    local _ = group_task
+function M.list(group_type, group_task)
     local cache, err = _ensure()
     if not cache then return nil, err end
-    return { waypoint = _copy_list(cache.waypoint_ids),
-             enroute  = _copy_list(cache.enroute_ids) }, nil
+    if group_type and group_task and group_task ~= '' then
+        return {
+            waypoint = _copy_list(_legal_for(cache, group_type, 'waypoint', group_task)),
+            enroute  = _copy_list(_legal_for(cache, group_type, 'enroute',  group_task)),
+        }, nil
+    end
+    -- No group context: return all canonical ids by kind (sorted).
+    local wp, en = {}, {}
+    for canonical, entry in pairs(cache.by_canonical) do
+        if entry.kind == 'waypoint' then table.insert(wp, canonical)
+        else table.insert(en, canonical) end
+    end
+    table.sort(wp); table.sort(en)
+    return { waypoint = wp, enroute = en }, nil
 end
 
 function M.list_all()
     local cache, err = _ensure()
     if not cache then return nil, err end
-    return {
-        { kind = 'waypoint', tasks = _copy_list(cache.waypoint_ids) },
-        { kind = 'enroute',  tasks = _copy_list(cache.enroute_ids)  },
-    }, nil
+    local out = {}
+    local gtypes = {}
+    for gt in pairs(cache.legal) do table.insert(gtypes, gt) end
+    table.sort(gtypes)
+    for _, group_type in ipairs(gtypes) do
+        local by_kind = cache.legal[group_type]
+        local gtasks = {}
+        local seen_gt = {}
+        for _, kind in ipairs({'waypoint', 'enroute'}) do
+            for group_task in pairs(by_kind[kind] or {}) do
+                if not seen_gt[group_task] then
+                    table.insert(gtasks, group_task); seen_gt[group_task] = true
+                end
+            end
+        end
+        table.sort(gtasks)
+        for _, group_task in ipairs(gtasks) do
+            table.insert(out, {
+                group_type = group_type,
+                group_task = group_task,
+                waypoint   = _copy_list(by_kind.waypoint[group_task] or {}),
+                enroute    = _copy_list(by_kind.enroute [group_task] or {}),
+            })
+        end
+    end
+    return out, nil
 end
 
-function M.describe(task_id, kind)
-    if type(task_id) ~= 'string' or task_id == '' then
+function M.describe(canonical_id, kind)
+    if type(canonical_id) ~= 'string' or canonical_id == '' then
         return nil, 'task id is required'
     end
     local cache, err = _ensure()
     if not cache then return nil, err end
-    local entry = cache.by_id[task_id]
-    if not entry then return nil, 'unknown task id "' .. task_id .. '"' end
+    local entry = cache.by_canonical[canonical_id]
+    if not entry then return nil, 'unknown task id "' .. canonical_id .. '"' end
     if kind and entry.kind ~= kind then
-        return nil, 'task "' .. task_id .. '" is a ' .. entry.kind .. ' task, not ' .. kind
+        return nil, 'task "' .. canonical_id .. '" is a ' .. entry.kind .. ' task, not ' .. kind
     end
     return entry, nil
+end
+
+-- M.describe_by_stored: look up an entry from an in-mission task table.
+-- Required because what's stored at wp.task.params.tasks[i] carries
+-- (id, key, ...) and we need to find the right canonical entry —
+-- task.key takes precedence when present, otherwise task.id.
+function M.describe_by_stored(stored_task)
+    if type(stored_task) ~= 'table' then return nil, 'stored task is not a table' end
+    local canonical = stored_task.key or stored_task.id
+    if type(canonical) ~= 'string' then return nil, 'stored task has no id/key' end
+    return M.describe(canonical, nil)
 end
 
 -- M.descr_fields: flatten the entry.params defaults table into a sorted

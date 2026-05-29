@@ -1128,30 +1128,38 @@ local function _renumber(tasks)
     end
 end
 
--- _classify_slot: return ('waypoint'|'enroute'|'unknown', task_id, err)
--- for the given 1-based slot of tasks. err is non-nil iff slot is OOR.
+-- _classify_slot: return ('waypoint'|'enroute'|'unknown', canonical, err)
+-- for the given 1-based slot of tasks. The stored entry may carry both
+-- `id` (DCS task.id) and `key` (descriptor variant key); we look up by
+-- key when present, falling back to id — same disambiguation ED does.
 local function _classify_slot(tasks, slot)
     if type(slot) ~= 'number' or slot < 1 or slot > #tasks then
         return nil, nil, 'slot out of range: ' .. tostring(slot) ..
                         ' (have ' .. #tasks .. ' tasks at this waypoint)'
     end
     local entry = tasks[slot]
-    if type(entry) ~= 'table' or type(entry.id) ~= 'string' then
+    if type(entry) ~= 'table' then
         return 'unknown', nil, nil
     end
-    -- describe returns nil on unknown id and an entry with .kind on success;
-    -- no separate resolve call needed.
-    local d = task_db.describe(entry.id, nil)
-    if not d then return 'unknown', entry.id, nil end
-    return d.kind, entry.id, nil
+    local d = task_db.describe_by_stored(entry)
+    if not d then
+        return 'unknown', entry.key or entry.id, nil
+    end
+    return d.kind, d.canonical, nil
 end
 
--- _compose_task_entry: build a fresh task table from descr defaults +
--- caller-overridden fields. Returns (entry, err).
-local function _compose_task_entry(task_id, descr, fields, tasks_len)
+-- _compose_task_entry: build a fresh task entry from a task_db descriptor
+-- + caller-overridden fields. Returns (entry, err).
+--
+-- The entry shape mirrors what ED's me_action_db.setTask_ produces when
+-- a user clicks "Add task" in the GUI: copies actionData.task verbatim
+-- (id + key + params) and wraps it with enabled / auto / number. If
+-- descr carries a task.key (descriptor variant like CAS/CAP/SEAD
+-- EngageTargets) we copy it onto the entry — without it ED can't
+-- identify the descriptor variant and silently filters the task from
+-- the listbox.
+local function _compose_task_entry(descr, fields, tasks_len)
     local params = task_db.descr_default_params(descr)
-    -- caller field overrides apply to params first; structural keys
-    -- (enabled/auto/number) land on the wrapping entry below.
     local enabled, auto, number = true, false, tasks_len + 1
     if type(fields) == 'table' then
         for k, v in pairs(fields) do
@@ -1175,13 +1183,15 @@ local function _compose_task_entry(task_id, descr, fields, tasks_len)
             end
         end
     end
-    return {
-        id = task_id,
+    local entry = {
+        id      = descr.task_id,
         enabled = enabled,
-        auto = auto,
-        number = number,
-        params = params,
-    }, nil
+        auto    = auto,
+        number  = number,
+        params  = params,
+    }
+    if descr.task_key then entry.key = descr.task_key end
+    return entry, nil
 end
 
 local function _add_task_impl(args, kind)
@@ -1202,19 +1212,18 @@ local function _add_task_impl(args, kind)
     local wp, _, g, _, err = find_waypoint(has_name and args.name or nil,
                                            has_id and args.id or nil, args.index)
     if not wp then return { ok = false, error = err } end
-    -- Group-task gating was dropped in the live-probe pivot: ED's
-    -- isGroupCapableOfAction is a runtime predicate over a live group
-    -- reference, not a static index. We validate only that the task id
-    -- exists and matches the requested kind; ED still enforces semantic
-    -- validity at save/run time. See the spec's "Deviations" section.
-    local canonical, entry_descr, rerr = task_db.resolve(args.task, nil, kind)
+    if type(g.task) ~= 'string' or g.task == '' then
+        return { ok = false, error = "group's main task is not set; set it with `me group set-task` first" }
+    end
+    -- Gate via me_action_db.availableActions[g.type][kind][g.task]. ED's
+    -- listbox uses the same index; without this gate we'd write a task
+    -- entry that persists in the .miz but stays invisible in the editor.
+    local canonical, entry_descr, rerr = task_db.resolve(args.task, g.type, g.task, kind)
     if not canonical then
-        return { ok = false, error = (rerr or 'task lookup failed') ..
-                                     " — run `me waypoint list-tasks --kind " ..
-                                     kind .. "` to see legal ids" }
+        return { ok = false, error = rerr or 'task lookup failed' }
     end
     local tasks = _ensure_combo(wp)
-    local entry, cerr = _compose_task_entry(canonical, entry_descr, args.fields, #tasks)
+    local entry, cerr = _compose_task_entry(entry_descr, args.fields, #tasks)
     if not entry then return { ok = false, error = cerr } end
     table.insert(tasks, entry)
     _renumber(tasks)
@@ -1246,18 +1255,18 @@ local function _remove_task_impl(args, kind)
                                            has_id and args.id or nil, args.index)
     if not wp then return { ok = false, error = err } end
     local tasks = _ensure_combo(wp)
-    local found_kind, task_id, cerr = _classify_slot(tasks, args.slot)
+    local found_kind, canonical, cerr = _classify_slot(tasks, args.slot)
     if cerr then return { ok = false, error = cerr } end
     if found_kind == 'unknown' then
         return { ok = false, error = 'slot ' .. args.slot .. ' holds task "' ..
-                                     tostring(task_id or '?') ..
+                                     tostring(canonical or '?') ..
                                      '" which is not recognized by task_db; ' ..
                                      'cannot determine kind' }
     end
     if found_kind ~= kind then
         return { ok = false, error = 'slot ' .. args.slot ..
                                      ' holds an entry of kind ' .. tostring(found_kind) ..
-                                     ' ("' .. tostring(task_id or '?') ..
+                                     ' ("' .. tostring(canonical or '?') ..
                                      '"); use the ' .. tostring(found_kind) ..
                                      ' remove verb instead' }
     end
@@ -1266,7 +1275,7 @@ local function _remove_task_impl(args, kind)
     refresh_route_panel(g)
     refresh_group_view(g)
     return { ok = true, group = g.name, index = args.index, slot = args.slot,
-             removed_task = removed.id, kind = kind }
+             removed_task = canonical, kind = kind }
 end
 
 function M.waypoint_remove_task(args)         return _remove_task_impl(args, 'waypoint') end
@@ -1312,10 +1321,6 @@ function M.waypoint_list_tasks(args)
     if type(args) ~= 'table' then
         return { ok = false, error = 'waypoint_list_tasks requires args (table)' }
     end
-    -- Live-probe pivot: there is no static group-task→legal-tasks index;
-    -- the only meaningful filter is --kind. We accept (and ignore) any
-    -- --name / --id / --all keys the Go layer may still pass so old
-    -- CLI invocations don't error during the pivot.
     local kind = nil
     if args.kind ~= nil then
         if args.kind ~= 'waypoint' and args.kind ~= 'enroute' then
@@ -1323,12 +1328,31 @@ function M.waypoint_list_tasks(args)
         end
         kind = args.kind
     end
-    local lists, err = task_db.list(nil)
+    -- If a group is named (or --all not requested), filter by the group's
+    -- main task via me_action_db.availableActions so the response matches
+    -- what ED's UI will actually render. Falls back to the global list when
+    -- no group is given.
+    local has_name = type(args.name) == 'string' and args.name ~= ''
+    local has_id = type(args.id) == 'number'
+    local group_type, group_task, group_name
+    if has_name or has_id then
+        local g = find_group_in_mission(has_name and args.name or nil,
+                                         has_id  and args.id   or nil)
+        if not g then return { ok = false, error = 'group not found' } end
+        group_type = g.type; group_task = g.task or ''; group_name = g.name
+    end
+    local lists, err = task_db.list(group_type, group_task)
     if not lists then return { ok = false, error = err } end
     local wp_tasks = (kind == nil or kind == 'waypoint') and lists.waypoint or {}
     local en_tasks = (kind == nil or kind == 'enroute')  and lists.enroute  or {}
-    return { ok = true, kind = kind or 'all',
-             waypoint_tasks = wp_tasks, enroute_tasks = en_tasks }
+    local resp = { ok = true, kind = kind or 'all',
+                   waypoint_tasks = wp_tasks, enroute_tasks = en_tasks }
+    if group_name then
+        resp.group = group_name
+        resp.group_type = group_type
+        resp.group_task = group_task
+    end
+    return resp
 end
 
 function M.waypoint_describe_task(args)
