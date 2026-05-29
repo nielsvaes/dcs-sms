@@ -196,15 +196,35 @@ local function refresh_route_panel(g)
         end
     end)
     if not g then return end
-    pcall(function()
-        local panel_aircraft = require('me_aircraft')
-        if type(panel_aircraft.setGroup) == 'function' then
-            panel_aircraft.setGroup(g)
-        end
-        if type(panel_aircraft.show) == 'function' then
-            panel_aircraft.show(true)
-        end
-    end)
+    -- me_aircraft handles both plane and helicopter via switchView; the
+    -- panel defaults to 'helicopter' at module load. switchView is what
+    -- the ME calls on map-click of a group of the other category — but
+    -- it clears vdata.type as a side effect, and a subsequent show()
+    -- then crashes inside updateModulation (DB.unit_by_type[nil]). We
+    -- therefore prime vdata.type FROM the group's first unit before
+    -- calling show, and only switchView when the current view actually
+    -- differs from the group's category.
+    if g.type == 'plane' or g.type == 'helicopter' then
+        pcall(function()
+            local panel_aircraft = require('me_aircraft')
+            if type(panel_aircraft.switchView) == 'function'
+                    and panel_aircraft.__view__ ~= g.type then
+                panel_aircraft.switchView(g.type)
+            end
+            if type(panel_aircraft.setGroup) == 'function' then
+                panel_aircraft.setGroup(g)
+            end
+            if type(panel_aircraft.vdata) == 'table'
+                    and type(g.units) == 'table'
+                    and type(g.units[1]) == 'table'
+                    and type(g.units[1].type) == 'string' then
+                panel_aircraft.vdata.type = g.units[1].type
+            end
+            if type(panel_aircraft.show) == 'function' then
+                panel_aircraft.show(true)
+            end
+        end)
+    end
 end
 
 -- ensure_map_objects — guarantee g.mapObjects is populated. ME-native
