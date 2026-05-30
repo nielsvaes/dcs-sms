@@ -75,6 +75,7 @@ func TestMeWaypointClearEnrouteTasksCmd_FailModes(t *testing.T) {
 func TestMeWaypointListTasksCmd_FailModes(t *testing.T) {
 	cases := []setterCase{
 		{"bad-kind", []string{"--kind", "weird"}, "waypoint"},
+		{"name-and-id", []string{"--group-name", "x", "--group-id", "1"}, "mutually exclusive"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) { runFailCase(t, meWaypointListTasksCmd, c) })
