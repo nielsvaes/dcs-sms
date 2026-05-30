@@ -105,6 +105,37 @@ This is the first tag after a long quiet period — `sms.version` had been froze
 
 ## ME-mod
 
+### [Unreleased]
+
+**Fixed**
+- `me-mod` CLI now emits Lua-syntax string literals for non-printable
+  codepoints when shelling commands into the Mission Editor. Go's
+  `%q` (via `strconv.Quote`) uses `\uXXXX` escapes that Lua 5.1
+  silently drops, corrupting the C1 control range (U+0080..U+009F),
+  ZWJ/ZWNJ, BOM, and bidi marks on round-trip — a group rename that
+  fed in `U+008F` came back with literal `u008F` baked into the
+  mission. New `luaQuote()` helper escapes only the necessary bytes
+  (`\`, `"`, ASCII control 0x00-0x1F + 0x7F) using Lua's `\ddd`
+  decimal form; bytes 0x80-0xFF pass through verbatim so UTF-8
+  sequences (CJK, emoji, accented Latin, Cyrillic) survive intact.
+  Sweep-rewrote 208 `fmt.Sprintf`/`Fprintf` call sites across 118
+  `me_*.go` verb files (`fmt.Errorf`, stderr writes, and tests left
+  alone). Closes #70.
+- `me file save` and `me file save-as` now surface DCS's per-group
+  validation errors instead of the useless generic `save failed
+  (mission validation or I/O); enable showError to see details`
+  message. DCS's `check_mission` builds the per-group error string
+  in a chunk-local `showErrorMessageBox` closure that can't be
+  intercepted from outside the `me_mission` chunk (the bare-name
+  call resolves through upvalues and `debug.setupvalue` is sandboxed
+  in the ME env). New `_verify_mission` helper re-implements the
+  loop using the globally-accessible `panel_route.verify` and
+  `panel_aircraft.verify` (the latter only for Player/Client skill
+  strings, matching `check_mission`). E.g. a route with no
+  locked-time waypoints now returns `save failed (mission validation):
+  26JG:\nRoute has no waypoints with locked time!` instead of the
+  generic message. Closes part of #68.
+
 ### [0.15.0] — 2026-05-28
 
 **Added**
