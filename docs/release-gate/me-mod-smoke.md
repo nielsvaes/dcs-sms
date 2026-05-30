@@ -188,7 +188,6 @@ reachable regardless of window height.
 - [ ] Groups whose names did NOT contain `Foo` remain unchanged.
 - [ ] Press `Ctrl+Z` while the Mass Edit window has focus. The two renamed groups revert to their original names.
 - [ ] Click `Refresh`. The list re-walks the mission; any external rename (e.g. via ME group panel) is picked up.
-- [ ] Click `Cancel`. The window hides. DCS-SMS → Mass Edit reopens it.
 
 ### Auto-name units
 
@@ -364,8 +363,7 @@ tinted red/blue/neutral per the unit's group country.
 
 - [ ] **Find & replace in unit names:** check 2+ units, Find="-1" Replace="-A" → names update; toast "2 renamed".
 - [ ] **Add prefix:** check 2 units, Prefix="[P] " → names update; toast "2 renamed".
-- [ ] **Add suffix:** check 2 units, Suffix="-Lead", Keep# OFF → names get suffix appended.
-- [ ] **Auto-name:** check 3 units, Base="Falcon" Start="5" → units become Falcon-5, Falcon-6, Falcon-7.
+- [ ] **Add suffix:** check 2 units, Suffix="-Lead", Keep Num OFF → names get suffix appended.
 - [ ] **Set skill:** check 2 units, pick "Excellent" → skill changes; toast "2 skill set".
 - [ ] **Set onboard #:** check 3 planes (only), Start="010" → 010 / 011 / 012; click Random → all change to distinct 3-digit numbers.
 - [ ] **Set livery:** check 2 planes of same airframe, pick a livery → both planes update.

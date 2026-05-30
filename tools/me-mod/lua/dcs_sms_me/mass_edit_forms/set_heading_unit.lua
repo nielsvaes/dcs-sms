@@ -240,7 +240,7 @@ function M.new(parent_raw, get_checked, on_after_apply, get_categories)
         local ok, b = pcall(Button.new)
         if ok and b then
             skin_helper.apply(b, 'dtc_button')
-            if b.setText then pcall(b.setText, b, 'Apply') end
+            if b.setText then pcall(b.setText, b, 'Set Heading') end
             abs_btn = add(b)
         end
     end
@@ -262,7 +262,7 @@ function M.new(parent_raw, get_checked, on_after_apply, get_categories)
         local ok, b = pcall(Button.new)
         if ok and b then
             skin_helper.apply(b, 'dtc_button')
-            if b.setText then pcall(b.setText, b, 'Apply') end
+            if b.setText then pcall(b.setText, b, 'Set Heading') end
             del_btn = add(b)
         end
     end

@@ -124,7 +124,6 @@ local W = {
         tree_headers = {},
         name_filter  = nil,
         refresh_btn  = nil,
-        cancel_btn   = nil,
         empty_label  = nil,
         sel_all_btn  = nil,
         sel_inv_btn  = nil,
@@ -276,7 +275,12 @@ local function show_forms_for_active_scope()
 end
 
 local function update_map_buttons_visibility()
-    local visible = (W.scope == 'group')
+    -- Unit scope reuses the buttons via mass_edit_map_sync's
+    -- compute_fetch_units / compute_push_units — From map expands the
+    -- selected groups into their units; Highlight collapses checked
+    -- units back to their parent groups (ME selection writer is
+    -- group-only).
+    local visible = (W.scope == 'group' or W.scope == 'unit')
     local function show(btn, v)
         if btn and btn.setVisible then pcall(btn.setVisible, btn, v) end
     end
@@ -802,7 +806,7 @@ local LAYOUT = {
     -- Right pane (forms) starts at this width and the left (tree) pane
     -- absorbs all horizontal slack as the window grows / shrinks. The
     -- user can drag the inter-pane splitter to override this value.
-    FORM_PANE_W     = 440,
+    FORM_PANE_W     = 476,
     -- Clamp range for the user-draggable splitter. Min keeps the form
     -- pane wide enough for label + input + toggle + button on a single
     -- row; max leaves at least ~260px for the tree.
@@ -848,10 +852,10 @@ local function relayout(w, h)
         W.widgets.name_filter:set_bounds(L.EDGE, row1_y, left_w, L.ROW_H)
     end
 
-    -- Bottom button band (right-anchored Cancel only — no Apply in this UI).
-    local btn_y       = h - L.FOOTER_RESERVED - L.BTN_H - L.GAP
-    local body_bottom = btn_y - L.GAP
-    set(W.widgets.cancel_btn, w - L.EDGE - L.BTN_W, btn_y, L.BTN_W, L.BTN_H)
+    -- Body extends down to the footer reservation. (Previously a Cancel
+    -- button sat in a band above this; removed in favor of the window's
+    -- top-right close X.)
+    local body_bottom = h - L.FOOTER_RESERVED
 
     -- Bottom-of-left-pane button strip: Refresh on the left, bulk-
     -- selection buttons right-aligned to the tree's right edge.
@@ -861,8 +865,8 @@ local function relayout(w, h)
     local sel_btn_w   = 70
     local sel_strip_y = body_bottom - L.BTN_H
     set(W.widgets.refresh_btn, L.EDGE, sel_strip_y, L.REFRESH_W, L.BTN_H)
-    local on_group    = W.scope == 'group'
-    local strip_n     = on_group and 5 or 3
+    local show_map_btns = (W.scope == 'group' or W.scope == 'unit')
+    local strip_n     = show_map_btns and 5 or 3
     local sel_total_w = sel_btn_w * strip_n + L.GAP * (strip_n - 1)
     local sel_x       = L.EDGE + left_w - sel_total_w
     -- Don't overlap the left-anchored Refresh button if the tree is narrow.
@@ -871,7 +875,7 @@ local function relayout(w, h)
     set(W.widgets.sel_all_btn, sel_x, sel_strip_y, sel_btn_w, L.BTN_H)
     set(W.widgets.sel_inv_btn, sel_x + sel_btn_w + L.GAP, sel_strip_y, sel_btn_w, L.BTN_H)
     set(W.widgets.sel_clr_btn, sel_x + (sel_btn_w + L.GAP) * 2, sel_strip_y, sel_btn_w, L.BTN_H)
-    if on_group then
+    if show_map_btns then
         set(W.widgets.from_map_btn, sel_x + (sel_btn_w + L.GAP) * 3, sel_strip_y, sel_btn_w, L.BTN_H)
         set(W.widgets.to_map_btn,   sel_x + (sel_btn_w + L.GAP) * 4, sel_strip_y, sel_btn_w, L.BTN_H)
     end
@@ -883,11 +887,10 @@ local function relayout(w, h)
 
     -- Splitter handle: thin vertical grab bar centered in the SPLIT_GUTTER
     -- strip with SPLITTER_MARGIN of breathing room on each side. Spans
-    -- the full body height — top of the name-filter row to bottom of the
-    -- Cancel button — so the user has a tall grab target instead of just
-    -- the tree-pane slice.
+    -- the full body height — top of the name-filter row to body_bottom —
+    -- so the user has a tall grab target instead of just the tree-pane slice.
     local splitter_y = row1_y
-    local splitter_h = (btn_y + L.BTN_H) - splitter_y
+    local splitter_h = body_bottom - splitter_y
     if W.splitter then
         W.splitter:set_bounds(split_x + L.SPLITTER_MARGIN, splitter_y, L.SPLITTER_W, splitter_h)
         -- Keep its draggable range in sync with the current window size.
@@ -983,7 +986,7 @@ local function build_window()
 
     W.sms_window = sms_window.new({
         title    = 'Mass Edit  [loaded ' .. os.date('%H:%M:%S') .. ']',
-        size     = { w = 900, h = 621 },
+        size     = { w = 1200, h = 621 },
         min_size = { w = 720, h = 500 },
         -- Compose default_on_undo with a list refresh so the user sees the
         -- restored values immediately after Ctrl+Z (instead of stale ones
@@ -1111,16 +1114,33 @@ local function build_window()
     local function on_fetch_from_map()
         pcall(function()
             local snap = selection.snapshot()
-            local r = map_sync.compute_fetch(W, snap)
+            local r
+            if W.scope == 'unit' then
+                r = map_sync.compute_fetch_units(W, snap)
+            else
+                r = map_sync.compute_fetch(W, snap)
+            end
             if r.toast then toast(r.toast, r.sev) end
-            -- compute_fetch already mutated W on success; rebuild reflects it.
-            if r.ok and not r.empty then M.rebuild_treeview() end
+            -- compute_fetch* already mutated W on success; rebuild
+            -- reflects the new check state, and gating recomputes so
+            -- unit-scope forms (set_onboard_num_unit etc.) flip from
+            -- "0 applicable" to "N applicable" without the user having
+            -- to manually toggle a checkbox first.
+            if r.ok and not r.empty then
+                M.rebuild_treeview()
+                recompute_form_gating()
+            end
         end)
     end
 
     local function on_push_to_map()
         pcall(function()
-            local r = map_sync.compute_push(W)
+            local r
+            if W.scope == 'unit' then
+                r = map_sync.compute_push_units(W)
+            else
+                r = map_sync.compute_push(W)
+            end
             if r.empty then
                 toast(r.toast, r.sev)
                 return
@@ -1130,24 +1150,16 @@ local function build_window()
                 toast('Failed to push: ' .. tostring(wr.error), 'err')
                 return
             end
-            toast(string.format('Pushed %d groups to map', wr.count), 'info')
+            if W.scope == 'unit' and r.unit_count then
+                toast(string.format('Pushed %d groups (%d units) to map', wr.count, r.unit_count), 'info')
+            else
+                toast(string.format('Pushed %d groups to map', wr.count), 'info')
+            end
         end)
     end
 
     W.widgets.from_map_btn = make_bulk_btn('From map',  on_fetch_from_map)
     W.widgets.to_map_btn   = make_bulk_btn('Highlight', on_push_to_map)
-
-    -- Cancel button.
-    if Button and Button.new then
-        local ok, b = pcall(Button.new)
-        if ok and b then
-            skin_helper.apply(b, 'dtc_button')
-            if b.setText then pcall(b.setText, b, 'Cancel') end
-            if b.addMouseDownCallback then pcall(b.addMouseDownCallback, b, function() M.hide() end) end
-            pcall(raw.insertWidget, raw, b)
-            W.widgets.cancel_btn = b
-        end
-    end
 
     -- Right-pane container — a ScrollPane that holds every scope's
     -- forms (and the empty-scope placeholder). When dxgui's ScrollPane

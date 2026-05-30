@@ -24,7 +24,6 @@ local export_import_warehouse_airbase   = require('dcs_sms_me.mass_edit_forms.ex
 local find_replace_unit_name    = require('dcs_sms_me.mass_edit_forms.find_replace_unit_name')
 local add_prefix_unit_name      = require('dcs_sms_me.mass_edit_forms.add_prefix_unit_name')
 local add_suffix_unit_name      = require('dcs_sms_me.mass_edit_forms.add_suffix_unit_name')
-local auto_name_unit            = require('dcs_sms_me.mass_edit_forms.auto_name_unit')
 local set_skill_unit            = require('dcs_sms_me.mass_edit_forms.set_skill_unit')
 local set_onboard_num_unit      = require('dcs_sms_me.mass_edit_forms.set_onboard_num_unit')
 local set_livery_unit           = require('dcs_sms_me.mass_edit_forms.set_livery_unit')
@@ -48,8 +47,8 @@ M.by_scope = {
         toggle_group_flags,
     },
     -- Unit scope mirrors the group scope's name-mutating-first ordering.
-    -- Find/replace + prefix + suffix + auto-name first (the rename family),
-    -- then identity (skill, onboard #), then pose/loadout (livery, heading,
+    -- Find/replace + prefix + suffix first (the rename family), then
+    -- identity (skill, onboard #), then pose/loadout (livery, heading,
     -- fuel %). Planes-only / planes+helos forms (set_onboard_num_unit,
     -- set_livery_unit, set_fuel_pct_unit) gray out for non-applicable
     -- selections via the applicability observer in mass_edit.lua.
@@ -57,7 +56,6 @@ M.by_scope = {
         find_replace_unit_name,
         add_prefix_unit_name,
         add_suffix_unit_name,
-        auto_name_unit,
         set_skill_unit,
         set_onboard_num_unit,
         set_livery_unit,

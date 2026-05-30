@@ -170,7 +170,7 @@ function M.new(parent_raw, get_checked, on_after_apply, get_categories)
         local ok, t = pcall(ToggleButton.new)
         if ok and t then
             skin_helper.apply(t, 'dtc_button')
-            if t.setText then pcall(t.setText, t, 'Keep #') end
+            if t.setText then pcall(t.setText, t, 'Keep Num') end
             if t.setTooltipText then
                 pcall(t.setTooltipText, t,
                     'When ON, names ending in -<n> or _<n> get the ' ..
@@ -235,7 +235,7 @@ function M.new(parent_raw, get_checked, on_after_apply, get_categories)
             if widget and widget.setBounds then pcall(widget.setBounds, widget, px, py, pw, ph) end
         end
 
-        -- Right-anchored: Add suffix (rightmost), Keep # toggle to its
+        -- Right-anchored: Add suffix (rightmost), Keep Num toggle to its
         -- left. Input fills the remaining width after the label and the
         -- two right-side buttons.
         local row_y    = y
