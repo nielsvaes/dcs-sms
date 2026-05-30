@@ -21,7 +21,6 @@ local selection       = require('dcs_sms_me.selection')
 local mass_forms      = require('dcs_sms_me.mass_edit_forms')
 local skin_helper     = require('dcs_sms_me.skin_helper')
 local map_sync        = require('dcs_sms_me.mass_edit_map_sync')
-local me_select_writer = require('dcs_sms_me.me_select_writer')
 local me_camera        = require('dcs_sms_me.me_camera')
 local me_group_focus   = require('dcs_sms_me.me_group_focus')
 local splitter_mod     = require('dcs_sms_me.splitter')
@@ -129,7 +128,7 @@ local W = {
         sel_inv_btn  = nil,
         sel_clr_btn  = nil,
         from_map_btn = nil,
-        to_map_btn   = nil,
+        cross_select_btn   = nil,
         form_scroll  = nil,
     },
     _built = false,
@@ -275,17 +274,23 @@ local function show_forms_for_active_scope()
 end
 
 local function update_map_buttons_visibility()
-    -- Unit scope reuses the buttons via mass_edit_map_sync's
-    -- compute_fetch_units / compute_push_units — From map expands the
-    -- selected groups into their units; Highlight collapses checked
-    -- units back to their parent groups (ME selection writer is
-    -- group-only).
+    -- Group + unit scopes share the bulk-row map/scope buttons. From map
+    -- pulls the F10 map's marquee selection into checks (per-scope: group
+    -- → checks groups; unit → expands marqueed groups into their units).
+    -- The cross-select button switches scope AND pre-checks across: on
+    -- group it labels "Select units" (and switches → unit with all units
+    -- of checked groups pre-checked); on unit it labels "Select group"
+    -- (switches → group with the unique parent groups of checked units).
     local visible = (W.scope == 'group' or W.scope == 'unit')
     local function show(btn, v)
         if btn and btn.setVisible then pcall(btn.setVisible, btn, v) end
     end
     show(W.widgets.from_map_btn, visible)
-    show(W.widgets.to_map_btn,   visible)
+    show(W.widgets.cross_select_btn, visible)
+    if visible and W.widgets.cross_select_btn and W.widgets.cross_select_btn.setText then
+        local label = (W.scope == 'group') and 'Select units' or 'Select group'
+        pcall(W.widgets.cross_select_btn.setText, W.widgets.cross_select_btn, label)
+    end
 end
 
 -- Module-level recursion guard. When on_scope_changed programmatically
@@ -611,10 +616,14 @@ local function build_tree_widget()
                 -- click extends from this row.
                 local entity       = r.entity
                 local parent_group = W.parent_map[entity] or entity
+                -- Airbase entries store coords as north/east (not x/y),
+                -- so fall back to those after the unit/group x/y check.
                 local cam_x = (type(entity.x)       == 'number' and entity.x)
                            or (type(parent_group.x) == 'number' and parent_group.x)
+                           or (type(entity.north)   == 'number' and entity.north)
                 local cam_y = (type(entity.y)       == 'number' and entity.y)
                            or (type(parent_group.y) == 'number' and parent_group.y)
+                           or (type(entity.east)    == 'number' and entity.east)
                 if cam_x and cam_y then me_camera.pan_to(cam_x, cam_y) end
                 if type(parent_group) == 'table' and parent_group.groupId then
                     -- Unit scope: surface the clicked unit inside the
@@ -877,7 +886,7 @@ local function relayout(w, h)
     set(W.widgets.sel_clr_btn, sel_x + (sel_btn_w + L.GAP) * 2, sel_strip_y, sel_btn_w, L.BTN_H)
     if show_map_btns then
         set(W.widgets.from_map_btn, sel_x + (sel_btn_w + L.GAP) * 3, sel_strip_y, sel_btn_w, L.BTN_H)
-        set(W.widgets.to_map_btn,   sel_x + (sel_btn_w + L.GAP) * 4, sel_strip_y, sel_btn_w, L.BTN_H)
+        set(W.widgets.cross_select_btn,   sel_x + (sel_btn_w + L.GAP) * 4, sel_strip_y, sel_btn_w, L.BTN_H)
     end
 
     -- Left pane: tree fills from row1_y to just above the bulk-button strip.
@@ -1133,33 +1142,69 @@ local function build_window()
         end)
     end
 
-    local function on_push_to_map()
+    local function on_cross_select()
         pcall(function()
-            local r
-            if W.scope == 'unit' then
-                r = map_sync.compute_push_units(W)
-            else
-                r = map_sync.compute_push(W)
-            end
-            if r.empty then
-                toast(r.toast, r.sev)
-                return
-            end
-            local wr = me_select_writer.set_group_selection(r.group_refs)
-            if not wr.ok then
-                toast('Failed to push: ' .. tostring(wr.error), 'err')
-                return
-            end
-            if W.scope == 'unit' and r.unit_count then
-                toast(string.format('Pushed %d groups (%d units) to map', wr.count, r.unit_count), 'info')
-            else
-                toast(string.format('Pushed %d groups to map', wr.count), 'info')
+            if W.scope == 'group' then
+                -- Group → Unit: collect every unit of every checked
+                -- group, then switch scope. Setting W.checked.unit BEFORE
+                -- on_scope_changed runs lets rebuild_pool's drop-stale
+                -- pass keep the refs (the new unit pool contains the same
+                -- u table refs we collected from g.units).
+                local checked_groups = {}
+                local group_count = 0
+                for _, g in ipairs(W.pool or {}) do
+                    if W.checked.group[g] then
+                        checked_groups[g] = true
+                        group_count = group_count + 1
+                    end
+                end
+                if group_count == 0 then toast('Nothing checked', 'warn'); return end
+
+                local new_unit_checks = {}
+                local unit_count = 0
+                for g, _ in pairs(checked_groups) do
+                    if type(g.units) == 'table' then
+                        for _, u in ipairs(g.units) do
+                            new_unit_checks[u] = true
+                            unit_count = unit_count + 1
+                        end
+                    end
+                end
+
+                W.checked.unit = new_unit_checks
+                W.anchor.unit  = nil
+                on_scope_changed('unit')
+                toast(string.format('Selected %d units from %d groups', unit_count, group_count), 'info')
+            elseif W.scope == 'unit' then
+                -- Unit → Group: collect the unique parent groups of
+                -- every checked unit, then switch scope. Same pre-set-
+                -- then-switch pattern as the group → unit branch.
+                local new_group_checks = {}
+                local checked_unit_count = 0
+                for _, u in ipairs(W.pool or {}) do
+                    if W.checked.unit[u] then
+                        checked_unit_count = checked_unit_count + 1
+                        local g = (W.parent_map or {})[u]
+                        if g then new_group_checks[g] = true end
+                    end
+                end
+                if checked_unit_count == 0 then toast('Nothing checked', 'warn'); return end
+
+                local group_count = 0
+                for _ in pairs(new_group_checks) do group_count = group_count + 1 end
+
+                W.checked.group = new_group_checks
+                W.anchor.group  = nil
+                on_scope_changed('group')
+                toast(string.format('Selected %d groups from %d units', group_count, checked_unit_count), 'info')
             end
         end)
     end
 
-    W.widgets.from_map_btn = make_bulk_btn('From map',  on_fetch_from_map)
-    W.widgets.to_map_btn   = make_bulk_btn('Highlight', on_push_to_map)
+    W.widgets.from_map_btn       = make_bulk_btn('From map',     on_fetch_from_map)
+    -- Initial label; update_map_buttons_visibility re-sets it on every
+    -- scope change.
+    W.widgets.cross_select_btn   = make_bulk_btn('Select units', on_cross_select)
 
     -- Right-pane container — a ScrollPane that holds every scope's
     -- forms (and the empty-scope placeholder). When dxgui's ScrollPane

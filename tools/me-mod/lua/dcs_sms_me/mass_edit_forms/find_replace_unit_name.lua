@@ -154,6 +154,7 @@ local LAYOUT = {
     REPL_LBL_W = 64,  -- 'Replace:' is wider than 'Find:'
     ROW_H      = 24,
     BTN_W      = 90,
+    SWAP_W     = 28,  -- '⇅' swap button between the two inputs
     GAP_X      = 6,
     GAP_Y      = 4,
     FOOTER_PAD = 6,
@@ -173,7 +174,7 @@ function M.new(parent_raw, get_checked, on_after_apply, get_categories)
         return widget
     end
 
-    local find_lbl, find_box, repl_lbl, repl_box, apply_btn
+    local find_lbl, find_box, swap_btn, repl_lbl, repl_box, apply_btn
 
     if Static and Static.new then
         local ok, s = pcall(Static.new, 'Find:')
@@ -182,6 +183,22 @@ function M.new(parent_raw, get_checked, on_after_apply, get_categories)
     if clearable_edit and clearable_edit.new then
         find_box = clearable_edit.new(parent_raw, {})
         if find_box then owned[#owned + 1] = find_box end
+    end
+
+    -- Swap button between the two inputs — same widget the group-scope
+    -- find/replace exposes. Lets the user invert a rename in one click
+    -- after applying it (e.g. find "Viper" replace "Eagle", then swap
+    -- to put it back).
+    if Button and Button.new then
+        local ok, b = pcall(Button.new)
+        if ok and b then
+            skin_helper.apply(b, 'dtc_button')
+            if b.setText then pcall(b.setText, b, '< >') end
+            if b.setTooltipText then
+                pcall(b.setTooltipText, b, 'Swap Find and Replace text')
+            end
+            swap_btn = add(b)
+        end
     end
 
     if Static and Static.new then
@@ -200,6 +217,17 @@ function M.new(parent_raw, get_checked, on_after_apply, get_categories)
             if b.setText then pcall(b.setText, b, 'Replace') end
             apply_btn = add(b)
         end
+    end
+
+    if swap_btn and swap_btn.addMouseDownCallback then
+        pcall(swap_btn.addMouseDownCallback, swap_btn, function()
+            pcall(function()
+                local f = (find_box and find_box.getText and find_box:getText()) or ''
+                local r = (repl_box and repl_box.getText and repl_box:getText()) or ''
+                if find_box and find_box.setText then find_box:setText(r) end
+                if repl_box and repl_box.setText then repl_box:setText(f) end
+            end)
+        end)
     end
 
     if apply_btn and apply_btn.addMouseDownCallback then
@@ -247,24 +275,29 @@ function M.new(parent_raw, get_checked, on_after_apply, get_categories)
 
         local row_y = y
 
-        -- Single-row layout: [Find:][find_box] [Replace:][repl_box] [Replace]
-        -- The Replace button is right-anchored; the two EditBoxes share the
-        -- remaining horizontal space equally.
+        -- Single-row layout:
+        --   [Find:][find_box] [⇅] [Replace:][repl_box] [Replace]
+        -- The Replace button is right-anchored; the two EditBoxes share
+        -- the remaining horizontal space equally with the swap button
+        -- between them.
         local apply_x = x + w - L.PAD_X - L.BTN_W
 
         local find_lbl_x = x + L.PAD_X
         local find_box_x = find_lbl_x + L.LABEL_W + L.GAP_X
         local remaining  = apply_x - L.GAP_X - find_box_x
         -- Split remaining horizontal space between the two input columns,
-        -- accounting for the Replace: label width and the inter-column gap.
-        local each_input = math.floor((remaining - L.REPL_LBL_W - 2 * L.GAP_X) / 2)
+        -- accounting for swap button + Replace: label + the 4 gaps.
+        local each_input = math.floor(
+            (remaining - L.SWAP_W - L.REPL_LBL_W - 4 * L.GAP_X) / 2)
         if each_input < 60 then each_input = 60 end
 
-        local repl_lbl_x = find_box_x + each_input + L.GAP_X
+        local swap_x    = find_box_x + each_input + L.GAP_X
+        local repl_lbl_x = swap_x + L.SWAP_W + L.GAP_X
         local repl_box_x = repl_lbl_x + L.REPL_LBL_W + L.GAP_X
 
         set(find_lbl,  find_lbl_x, row_y, L.LABEL_W,    L.ROW_H)
         set(find_box,  find_box_x, row_y, each_input,   L.ROW_H)
+        set(swap_btn,  swap_x,     row_y, L.SWAP_W,     L.ROW_H)
         set(repl_lbl,  repl_lbl_x, row_y, L.REPL_LBL_W, L.ROW_H)
         set(repl_box,  repl_box_x, row_y, each_input,   L.ROW_H)
         set(apply_btn, apply_x,    row_y, L.BTN_W,      L.ROW_H)

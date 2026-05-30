@@ -115,15 +115,11 @@ end)
 
 local LAYOUT = {
     PAD_X      = 8,
-    PAD_Y      = 6,
     LABEL_W    = 56,
+    REPL_LBL_W = 64,  -- 'Replace:' is wider than 'Find:'
     ROW_H      = 24,
     BTN_W      = 90,
-    SWAP_W     = 28,
-    -- Vertical gap between the Find row and the Replace row. Tall
-    -- enough to host a swap button (24×24) centered in it with a few
-    -- pixels of padding above + below.
-    ROW_GAP_Y  = 32,
+    SWAP_W     = 28,  -- '⇅' swap button between the two inputs
     GAP_X      = 6,
     GAP_Y      = 4,
     FOOTER_PAD = 6,
@@ -131,7 +127,7 @@ local LAYOUT = {
 
 local function form_height()
     local L = LAYOUT
-    return L.ROW_H + L.ROW_GAP_Y + L.ROW_H + L.FOOTER_PAD
+    return L.ROW_H + L.FOOTER_PAD
 end
 
 function M.new(parent_raw, get_checked, on_after_apply)
@@ -143,7 +139,7 @@ function M.new(parent_raw, get_checked, on_after_apply)
         return widget
     end
 
-    local find_lbl, find_box, repl_lbl, repl_box, swap_btn, apply_btn
+    local find_lbl, find_box, swap_btn, repl_lbl, repl_box, apply_btn
 
     if Static and Static.new then
         local ok, s = pcall(Static.new, 'Find:')
@@ -152,26 +148,27 @@ function M.new(parent_raw, get_checked, on_after_apply)
     find_box = clearable_edit.new(parent_raw, {})
     if find_box then owned[#owned + 1] = find_box end
 
-    if Static and Static.new then
-        local ok, s = pcall(Static.new, 'Replace:')
-        if ok and s then skin_helper.apply(s, 'staticSkin_ME'); repl_lbl = add(s) end
-    end
-    repl_box = clearable_edit.new(parent_raw, {})
-    if repl_box then owned[#owned + 1] = repl_box end
-
-    -- Swap button between input column and the Apply button. Vertically
-    -- centered between the Find and Replace rows.
+    -- Swap button between the two inputs. Single click inverts a rename
+    -- (e.g. after applying find "Viper" replace "Eagle", swap and re-
+    -- apply to put it back).
     if Button and Button.new then
         local ok, b = pcall(Button.new)
         if ok and b then
             skin_helper.apply(b, 'dtc_button')
-            if b.setText then pcall(b.setText, b, '⇅') end
+            if b.setText then pcall(b.setText, b, '< >') end
             if b.setTooltipText then
                 pcall(b.setTooltipText, b, 'Swap Find and Replace text')
             end
             swap_btn = add(b)
         end
     end
+
+    if Static and Static.new then
+        local ok, s = pcall(Static.new, 'Replace:')
+        if ok and s then skin_helper.apply(s, 'staticSkin_ME'); repl_lbl = add(s) end
+    end
+    repl_box = clearable_edit.new(parent_raw, {})
+    if repl_box then owned[#owned + 1] = repl_box end
 
     if Button and Button.new then
         local ok, b = pcall(Button.new)
@@ -221,33 +218,42 @@ function M.new(parent_raw, get_checked, on_after_apply)
 
     function panel:get_height() return form_height() end
 
+    function panel:set_enabled(flag)
+        local en = flag and true or false
+        for _, w in ipairs(owned) do
+            if w.setEnabled then pcall(w.setEnabled, w, en) end
+        end
+    end
+
     function panel:set_bounds(x, y, w, h)
         local L = LAYOUT
         local function set(widget, px, py, pw, ph)
             if widget and widget.setBounds then pcall(widget.setBounds, widget, px, py, pw, ph) end
         end
 
-        local row_y_1 = y
+        local row_y = y
+
+        -- Single-row layout matching the unit-scope form:
+        --   [Find:][find_box] [⇅] [Replace:][repl_box] [Replace]
         local apply_x = x + w - L.PAD_X - L.BTN_W
-        local input_x = x + L.PAD_X + L.LABEL_W + L.GAP_X
-        local input_w = apply_x - L.GAP_X - input_x
-        if input_w < 80 then input_w = 80 end
-        set(find_lbl, x + L.PAD_X, row_y_1, L.LABEL_W, L.ROW_H)
-        set(find_box, input_x,      row_y_1, input_w,  L.ROW_H)
 
-        local row_y_2 = row_y_1 + L.ROW_H + L.ROW_GAP_Y
-        set(repl_lbl, x + L.PAD_X, row_y_2, L.LABEL_W, L.ROW_H)
-        set(repl_box, input_x,      row_y_2, input_w,  L.ROW_H)
+        local find_lbl_x = x + L.PAD_X
+        local find_box_x = find_lbl_x + L.LABEL_W + L.GAP_X
+        local remaining  = apply_x - L.GAP_X - find_box_x
+        local each_input = math.floor(
+            (remaining - L.SWAP_W - L.REPL_LBL_W - 4 * L.GAP_X) / 2)
+        if each_input < 60 then each_input = 60 end
 
-        -- Apply button vertically centered across both input rows.
-        local apply_y = row_y_1 + (L.ROW_H + L.ROW_GAP_Y) / 2
-        set(apply_btn, apply_x, apply_y, L.BTN_W, L.ROW_H)
+        local swap_x     = find_box_x + each_input + L.GAP_X
+        local repl_lbl_x = swap_x + L.SWAP_W + L.GAP_X
+        local repl_box_x = repl_lbl_x + L.REPL_LBL_W + L.GAP_X
 
-        -- Swap button: horizontally centered on the input column, sits
-        -- in the gap between the two input rows.
-        local swap_x = input_x + math.floor((input_w - L.SWAP_W) / 2)
-        local swap_y = row_y_1 + L.ROW_H + math.floor((L.ROW_GAP_Y - L.ROW_H) / 2)
-        set(swap_btn, swap_x, swap_y, L.SWAP_W, L.ROW_H)
+        set(find_lbl,  find_lbl_x, row_y, L.LABEL_W,    L.ROW_H)
+        set(find_box,  find_box_x, row_y, each_input,   L.ROW_H)
+        set(swap_btn,  swap_x,     row_y, L.SWAP_W,     L.ROW_H)
+        set(repl_lbl,  repl_lbl_x, row_y, L.REPL_LBL_W, L.ROW_H)
+        set(repl_box,  repl_box_x, row_y, each_input,   L.ROW_H)
+        set(apply_btn, apply_x,    row_y, L.BTN_W,      L.ROW_H)
     end
 
     return panel

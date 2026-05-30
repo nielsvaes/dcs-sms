@@ -111,48 +111,6 @@ do
     check('fetch partial: sev=warn',              r.sev == 'warn')
 end
 
--- ---------------------------------------------------------------------------
--- compute_push
--- ---------------------------------------------------------------------------
-
--- Case 1: nothing checked -> empty=true, no group_refs.
-do
-    local g1 = { groupId = 1 }
-    local W = make_W({ g1 })  -- pool has g1 but it's not checked
-
-    local r = sync.compute_push(W)
-
-    check('push empty: ok=true',                  r.ok == true)
-    check('push empty: empty=true',               r.empty == true)
-    check('push empty: group_refs is nil or 0',   (r.group_refs == nil) or (#r.group_refs == 0))
-    check('push empty: toast = Nothing checked to push',
-          r.toast == 'Nothing checked to push')
-    check('push empty: sev=warn',                 r.sev == 'warn')
-end
-
--- Case 2: 3 of 5 pool entries checked -> group_refs in pool order
--- (deterministic — the host walks W.pool, not W.checked).
-do
-    local g1 = { groupId = 1 }
-    local g2 = { groupId = 2 }
-    local g3 = { groupId = 3 }
-    local g4 = { groupId = 4 }
-    local g5 = { groupId = 5 }
-    local W = make_W({ g1, g2, g3, g4, g5 })
-    W.checked.group[g2] = true
-    W.checked.group[g4] = true
-    W.checked.group[g5] = true
-
-    local r = sync.compute_push(W)
-
-    check('push some: ok=true',                   r.ok == true)
-    check('push some: not empty',                 not r.empty)
-    check('push some: 3 refs',                    #r.group_refs == 3)
-    check('push some: pool-order [1]=g2',         r.group_refs[1] == g2)
-    check('push some: pool-order [2]=g4',         r.group_refs[2] == g4)
-    check('push some: pool-order [3]=g5',         r.group_refs[3] == g5)
-end
-
 if failures > 0 then
     print(string.format('%d failure(s)', failures))
     os.exit(1)

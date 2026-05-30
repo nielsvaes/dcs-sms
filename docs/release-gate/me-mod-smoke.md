@@ -158,9 +158,7 @@ reachable regardless of window height.
 - [ ] **Airbase tab lists all airbases.** Clicking the Airbase scope tab populates the treeview with every map airfield in the mission, with columns Name / Coalition (tinted red/blue/yellow) / North / East. Sorting by clicking any column header works as on other scopes.
 - [ ] **Marquee drag on F10 map bulk-checks.** With the Mass Edit window open (any scope), drag a rectangle on the F10 map covering several airbases. Switch to the Airbase scope — the airbases inside the rectangle are checked. Drawing a second rectangle UNIONS more airbases into the checked set rather than replacing.
 - [ ] **Set Coalition form.** Pick a coalition in the combo, click Set — every checked airbase flips coalition; the F10 map color updates immediately. Undo (Ctrl+Z) restores prior per-airbase coalitions.
-- [ ] **Set Warehouse form (tri-state).** Leave all three tri-states at LEAVE and click Apply — a "no categories selected" warning appears. Set Aircraft=ON (unlimited) and click Apply — every checked airbase's `unlimitedAircrafts` flag flips true. Set Equipment=OFF (empty) and click Apply — the airbases' weapon pool counts zero out. Undo restores prior warehouse state.
 - [ ] **Export/Import warehouse.** Check exactly one airbase, type a name like "Cold War Loadout", click Save — file appears in `<Saved Games>\DCS\dcs-sms\airbase-warehouses\<name>.lua`. Check several other airbases, pick the saved entry in the Saved combo, click Apply — the loaded warehouse splats onto every checked airbase. Click Delete — the file is removed and the combo refreshes.
-- [ ] **Resource Manager refresh gotcha.** If DCS's Resource Manager dialog is open while Apply runs in the Set Warehouse form, the dialog's spinboxes / counts won't auto-refresh; closing + reopening the dialog shows the new values. This is a known DCS limitation, not a Mass Edit bug.
 
 ### Rename groups
 
@@ -364,6 +362,7 @@ tinted red/blue/neutral per the unit's group country.
 - [ ] **Find & replace in unit names:** check 2+ units, Find="-1" Replace="-A" → names update; toast "2 renamed".
 - [ ] **Add prefix:** check 2 units, Prefix="[P] " → names update; toast "2 renamed".
 - [ ] **Add suffix:** check 2 units, Suffix="-Lead", Keep Num OFF → names get suffix appended.
+- [ ] **Auto-name:** check 3 units, Base="Falcon" Start="5" → units become Falcon-5, Falcon-6, Falcon-7.
 - [ ] **Set skill:** check 2 units, pick "Excellent" → skill changes; toast "2 skill set".
 - [ ] **Set onboard #:** check 3 planes (only), Start="010" → 010 / 011 / 012; click Random → all change to distinct 3-digit numbers.
 - [ ] **Set livery:** check 2 planes of same airframe, pick a livery → both planes update.

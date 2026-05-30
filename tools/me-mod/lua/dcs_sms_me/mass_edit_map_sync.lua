@@ -1,8 +1,7 @@
--- mass_edit_map_sync.lua — pure logic for the From map / To map buttons.
---
--- The mass_edit.lua handlers (on_fetch_from_map, on_push_to_map) are
--- thin shims around these functions. Extracting the logic here keeps
--- the handlers testable without dxgui — same pattern as
+-- mass_edit_map_sync.lua — pure logic for the From map buttons (group +
+-- unit scope). The mass_edit.lua handler (on_fetch_from_map) is a thin
+-- shim around these functions. Extracting the logic here keeps the
+-- handlers testable without dxgui — same pattern as
 -- mass_edit_transforms.lua.
 --
 -- Both functions take the host's W table (mass_edit.lua's per-window
@@ -75,38 +74,6 @@ function M.compute_fetch(W, snap)
         toast = string.format('Fetched %d groups from map', count),
         sev   = 'info',
     }
-end
-
--- compute_push(W)
---   W: same shape as compute_fetch.
---
--- Returns:
---   { ok = true,
---     empty? = bool,
---     group_refs? = [g, g, ...]  -- pool order, only those in W.checked.group
---     toast?, sev? }
---
--- Walks W.pool (not W.checked) so the output order is deterministic and
--- matches the user's visible row order in the entity list. This makes
--- the count predictable across runs and lets the host pass group_refs
--- straight into me_select_writer.set_group_selection.
-function M.compute_push(W)
-    local checked = W.checked.group or {}
-    local refs = {}
-    for _, e in ipairs(W.pool or {}) do
-        if checked[e] then refs[#refs + 1] = e end
-    end
-
-    if #refs == 0 then
-        return {
-            ok    = true,
-            empty = true,
-            toast = 'Nothing checked to push',
-            sev   = 'warn',
-        }
-    end
-
-    return { ok = true, group_refs = refs }
 end
 
 -- compute_fetch_units(W, snap)
@@ -183,39 +150,6 @@ function M.compute_fetch_units(W, snap)
         toast = string.format('Fetched %d units from map', count),
         sev   = 'info',
     }
-end
-
--- compute_push_units(W)
---   Unit-scope analog of compute_push. The ME's selection writer only
---   takes group refs, so we walk the checked units, dedupe their
---   parent groups, and push the unique group set. unit_count is the
---   total checked unit count, used by the host for a nicer toast.
-function M.compute_push_units(W)
-    local checked = W.checked.unit or {}
-    local seen    = {}
-    local refs    = {}
-    local unit_count = 0
-    for _, u in ipairs(W.pool or {}) do
-        if checked[u] then
-            unit_count = unit_count + 1
-            local g = (W.parent_map or {})[u]
-            if g and not seen[g] then
-                seen[g] = true
-                refs[#refs + 1] = g
-            end
-        end
-    end
-
-    if #refs == 0 then
-        return {
-            ok    = true,
-            empty = true,
-            toast = 'Nothing checked to push',
-            sev   = 'warn',
-        }
-    end
-
-    return { ok = true, group_refs = refs, unit_count = unit_count }
 end
 
 return M

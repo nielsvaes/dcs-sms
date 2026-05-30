@@ -308,6 +308,13 @@ function M.new(parent_raw, get_checked, on_after_apply, get_categories)
 
     function panel:get_height() return form_height() end
 
+    function panel:set_enabled(flag)
+        local en = flag and true or false
+        for _, w in ipairs(owned) do
+            if w.setEnabled then pcall(w.setEnabled, w, en) end
+        end
+    end
+
     function panel:set_bounds(x, y, w, h)
         local L = LAYOUT
 

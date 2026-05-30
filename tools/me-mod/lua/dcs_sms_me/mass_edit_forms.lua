@@ -18,9 +18,9 @@ local auto_name_units_group   = require('dcs_sms_me.mass_edit_forms.auto_name_un
 local set_country             = require('dcs_sms_me.mass_edit_forms.set_country')
 local toggle_group_flags      = require('dcs_sms_me.mass_edit_forms.toggle_group_flags')
 local set_coalition_airbase             = require('dcs_sms_me.mass_edit_forms.set_coalition_airbase')
-local set_warehouse_airbase             = require('dcs_sms_me.mass_edit_forms.set_warehouse_airbase')
 local export_import_warehouse_airbase   = require('dcs_sms_me.mass_edit_forms.export_import_warehouse_airbase')
 
+local auto_name_unit            = require('dcs_sms_me.mass_edit_forms.auto_name_unit')
 local find_replace_unit_name    = require('dcs_sms_me.mass_edit_forms.find_replace_unit_name')
 local add_prefix_unit_name      = require('dcs_sms_me.mass_edit_forms.add_prefix_unit_name')
 local add_suffix_unit_name      = require('dcs_sms_me.mass_edit_forms.add_suffix_unit_name')
@@ -53,6 +53,7 @@ M.by_scope = {
     -- set_livery_unit, set_fuel_pct_unit) gray out for non-applicable
     -- selections via the applicability observer in mass_edit.lua.
     unit     = {
+        auto_name_unit,
         find_replace_unit_name,
         add_prefix_unit_name,
         add_suffix_unit_name,
@@ -67,7 +68,6 @@ M.by_scope = {
     drawing  = {},
     airbase  = {
         set_coalition_airbase,
-        set_warehouse_airbase,
         export_import_warehouse_airbase,
     },
 }
