@@ -49,7 +49,7 @@ The full set of nouns and verbs (see [`../../docs/cli/`](../../docs/cli/) for fl
 | Noun | Verbs |
 |---|---|
 | **`file`** | `new`, `open`, `save`, `save-as` |
-| **`group`** | `list`, `get`, `create-plane`, `create-helicopter`, `create-vehicle`, `create-ship`, `create-static`, `remove`, `add-unit`, `remove-unit`, `set-name`, `set-task`, `set-hidden`, `set-frequency`, `set-pos`, `set-country`, `set-formation`, `set-late-activation`, `set-uncontrolled` |
+| **`group`** | `list`, `get`, `create-plane`, `create-helicopter`, `create-vehicle`, `create-ship`, `create-static`, `remove`, `add-unit`, `remove-unit`, `set-name`, `set-task`, `set-hidden`, `set-frequency`, `set-pos`, `set-country`, `set-formation`, `set-late-activation`, `set-uncontrolled`, `focus` |
 | **`unit`** | `list`, `get`, `set-name`, `set-skill`, `set-livery`, `set-pos`, `set-heading`, `set-alt`, `set-onboard-num`, `set-callsign`, `set-loadout`, `set-fuel`, `set-chaff`, `set-flare`, `set-gun`, `set-parking`, `payload` |
 | **`zone`** | `list`, `get`, `create`, `remove`, `set-name`, `set-pos`, `set-radius`, `set-color`, `set-hidden`, `set-link`, `set-vertices` |
 | **`drawing`** | `list`, `get`, `remove`, `create-circle`, `create-oval`, `create-rect`, `create-arrow`, `create-line`, `create-polygon`, `create-chevron`, `create-textbox`, `create-icon`, `set-name`, `set-pos`, `set-angle`, `set-color`, `set-fill-color`, `set-thickness`, `set-text` |
