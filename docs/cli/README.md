@@ -88,6 +88,7 @@ Every command on the dcs-sms CLI, grouped by namespace.
 | [`me group create-ship`](me-group-create-ship.md) | spawn a new ship group at the given coordinates |
 | [`me group create-static`](me-group-create-static.md) | spawn a new static object group at the given coordinates |
 | [`me group create-vehicle`](me-group-create-vehicle.md) | spawn a new ground vehicle group at the given coordinates |
+| [`me group focus`](me-group-focus.md) | raise the AIRPLANE/HELICOPTER GROUP and route panels for a group (same UI state as a map click) |
 | [`me group get`](me-group-get.md) | return full data for a group by name or id |
 | [`me group list`](me-group-list.md) | list all groups in the open mission |
 | [`me group remove`](me-group-remove.md) | delete a group from the open mission |
@@ -172,7 +173,7 @@ Every command on the dcs-sms CLI, grouped by namespace.
 | [`me waypoint get`](me-waypoint-get.md) | get a single waypoint's full field set |
 | [`me waypoint insert`](me-waypoint-insert.md) | insert a waypoint at index N (shifts subsequent WPs up; --before K appends) |
 | [`me waypoint link-airbase`](me-waypoint-link-airbase.md) | link a waypoint to a specific airbase (sets airdromeId + moves WP to airbase position) |
-| [`me waypoint list-tasks`](me-waypoint-list-tasks.md) | list legal task ids from ED's me_action_db, optionally filtered by --kind |
+| [`me waypoint list-tasks`](me-waypoint-list-tasks.md) | list legal task ids from ED's me_action_db, optionally filtered by group and/or --kind |
 | [`me waypoint remove`](me-waypoint-remove.md) | remove a waypoint from a group's route (air groups: refused if it'd leave 0 WPs) |
 | [`me waypoint remove-enroute-task`](me-waypoint-remove-enroute-task.md) | remove an enroute-kind task by 1-based slot |
 | [`me waypoint remove-task`](me-waypoint-remove-task.md) | remove a waypoint-kind task by 1-based slot |
