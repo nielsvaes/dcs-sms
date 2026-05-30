@@ -105,7 +105,7 @@ This is the first tag after a long quiet period — `sms.version` had been froze
 
 ## ME-mod
 
-### [Unreleased]
+### [0.15.1] — 2026-05-30
 
 **Fixed**
 - `me-mod` CLI now emits Lua-syntax string literals for non-printable
