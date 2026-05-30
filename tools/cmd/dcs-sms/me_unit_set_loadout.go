@@ -8,12 +8,12 @@ import (
 )
 
 type meUnitSetLoadoutOpts struct {
-	Name       string
-	ID         int
-	Loadout    string
-	Timeout    time.Duration
-	Pretty     bool
-	SavedGames string
+	Name		string
+	ID		int
+	Loadout		string
+	Timeout		time.Duration
+	Pretty		bool
+	SavedGames	string
 }
 
 func meUnitSetLoadoutFlags() (*flag.FlagSet, *meUnitSetLoadoutOpts) {
@@ -30,9 +30,9 @@ func meUnitSetLoadoutFlags() (*flag.FlagSet, *meUnitSetLoadoutOpts) {
 
 func init() {
 	registerMeInfo("unit", "set-loadout", cmdInfo{
-		Run:      meUnitSetLoadoutCmd,
-		Flags:    flagsOnly(meUnitSetLoadoutFlags),
-		Synopsis: "apply a named loadout preset to a unit",
+		Run:		meUnitSetLoadoutCmd,
+		Flags:		flagsOnly(meUnitSetLoadoutFlags),
+		Synopsis:	"apply a named loadout preset to a unit",
 	})
 }
 
@@ -65,11 +65,11 @@ func meUnitSetLoadoutCmd(args []string, stdout, stderr io.Writer) int {
 
 	var idClause string
 	if hasName {
-		idClause = fmt.Sprintf("name = %q", opts.Name)
+		idClause = fmt.Sprintf("name = %s", luaQuote(opts.Name))
 	} else {
 		idClause = fmt.Sprintf("id = %d", opts.ID)
 	}
-	luaArgs := fmt.Sprintf("{ %s, loadout = %q }", idClause, opts.Loadout)
+	luaArgs := fmt.Sprintf("{ %s, loadout = %s }", idClause, luaQuote(opts.Loadout))
 
 	resp, exitCode := runMeVerb("unit_set_loadout", luaArgs, opts.Timeout, opts.SavedGames, stderr)
 	if exitCode != 0 {

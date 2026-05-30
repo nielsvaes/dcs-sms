@@ -8,11 +8,11 @@ import (
 )
 
 type meRouteClearOpts struct {
-	GroupName  string
-	GroupID    int
-	Timeout    time.Duration
-	Pretty     bool
-	SavedGames string
+	GroupName	string
+	GroupID		int
+	Timeout		time.Duration
+	Pretty		bool
+	SavedGames	string
 }
 
 func meRouteClearFlags() (*flag.FlagSet, *meRouteClearOpts) {
@@ -28,9 +28,9 @@ func meRouteClearFlags() (*flag.FlagSet, *meRouteClearOpts) {
 
 func init() {
 	registerMeInfo("route", "clear", cmdInfo{
-		Run:      meRouteClearCmd,
-		Flags:    flagsOnly(meRouteClearFlags),
-		Synopsis: "remove all waypoints from a group's route (air groups refused)",
+		Run:		meRouteClearCmd,
+		Flags:		flagsOnly(meRouteClearFlags),
+		Synopsis:	"remove all waypoints from a group's route (air groups refused)",
 	})
 }
 
@@ -50,7 +50,7 @@ func meRouteClearCmd(args []string, stdout, stderr io.Writer) int {
 	}
 	var idClause string
 	if hasName {
-		idClause = fmt.Sprintf("name = %q", opts.GroupName)
+		idClause = fmt.Sprintf("name = %s", luaQuote(opts.GroupName))
 	} else {
 		idClause = fmt.Sprintf("id = %d", opts.GroupID)
 	}

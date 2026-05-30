@@ -8,15 +8,15 @@ import (
 )
 
 type meUnitSetCallsignOpts struct {
-	Name       string
-	ID         int
-	Callsign   string
-	Squadron   int
-	Flight     int
-	Plane      int
-	Timeout    time.Duration
-	Pretty     bool
-	SavedGames string
+	Name		string
+	ID		int
+	Callsign	string
+	Squadron	int
+	Flight		int
+	Plane		int
+	Timeout		time.Duration
+	Pretty		bool
+	SavedGames	string
 }
 
 func meUnitSetCallsignFlags() (*flag.FlagSet, *meUnitSetCallsignOpts) {
@@ -36,9 +36,9 @@ func meUnitSetCallsignFlags() (*flag.FlagSet, *meUnitSetCallsignOpts) {
 
 func init() {
 	registerMeInfo("unit", "set-callsign", cmdInfo{
-		Run:      meUnitSetCallsignCmd,
-		Flags:    flagsOnly(meUnitSetCallsignFlags),
-		Synopsis: "set a unit's radio callsign",
+		Run:		meUnitSetCallsignCmd,
+		Flags:		flagsOnly(meUnitSetCallsignFlags),
+		Synopsis:	"set a unit's radio callsign",
 	})
 }
 
@@ -72,13 +72,13 @@ func meUnitSetCallsignCmd(args []string, stdout, stderr io.Writer) int {
 
 	var idClause string
 	if hasName {
-		idClause = fmt.Sprintf("name = %q", opts.Name)
+		idClause = fmt.Sprintf("name = %s", luaQuote(opts.Name))
 	} else {
 		idClause = fmt.Sprintf("id = %d", opts.ID)
 	}
 	luaArgs := fmt.Sprintf(
-		"{ %s, callsign = %q, squadron = %d, flight = %d, plane = %d }",
-		idClause, opts.Callsign, opts.Squadron, opts.Flight, opts.Plane,
+		"{ %s, callsign = %s, squadron = %d, flight = %d, plane = %d }",
+		idClause, luaQuote(opts.Callsign), opts.Squadron, opts.Flight, opts.Plane,
 	)
 
 	resp, exitCode := runMeVerb("unit_set_callsign", luaArgs, opts.Timeout, opts.SavedGames, stderr)

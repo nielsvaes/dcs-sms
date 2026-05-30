@@ -8,11 +8,11 @@ import (
 )
 
 type meZoneGetOpts struct {
-	Name       string
-	ID         int
-	Timeout    time.Duration
-	Pretty     bool
-	SavedGames string
+	Name		string
+	ID		int
+	Timeout		time.Duration
+	Pretty		bool
+	SavedGames	string
 }
 
 func meZoneGetFlags() (*flag.FlagSet, *meZoneGetOpts) {
@@ -28,9 +28,9 @@ func meZoneGetFlags() (*flag.FlagSet, *meZoneGetOpts) {
 
 func init() {
 	registerMeInfo("zone", "get", cmdInfo{
-		Run:      meZoneGetCmd,
-		Flags:    flagsOnly(meZoneGetFlags),
-		Synopsis: "return full data for a zone by name or id",
+		Run:		meZoneGetCmd,
+		Flags:		flagsOnly(meZoneGetFlags),
+		Synopsis:	"return full data for a zone by name or id",
 	})
 }
 
@@ -49,7 +49,7 @@ func meZoneGetCmd(args []string, stdout, stderr io.Writer) int {
 	}
 	var luaArgs string
 	if hasName {
-		luaArgs = fmt.Sprintf("{ name = %q }", opts.Name)
+		luaArgs = fmt.Sprintf("{ name = %s }", luaQuote(opts.Name))
 	} else {
 		luaArgs = fmt.Sprintf("{ id = %d }", opts.ID)
 	}

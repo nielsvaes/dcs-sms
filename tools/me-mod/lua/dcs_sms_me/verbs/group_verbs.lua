@@ -16,6 +16,35 @@ local find_group_in_mission = H.find_group_in_mission
 local find_country_by_name  = H.find_country_by_name
 local inject_group          = H.inject_group
 local compute_lat_lon       = H.compute_lat_lon
+local new_combo_task        = H.new_combo_task
+
+-- _check_unit_type — guard against bad type strings reaching the .miz.
+-- DCS's save serializer (me_mission.lua:setRequiredModules) derefs
+-- me_db.unit_by_type[type]._origin without nil-checking, so an unknown
+-- type that the ME accepted at create-time silently produces a group
+-- that crashes File→Save with a Lua traceback the user can't undo.
+-- We reject up front instead.
+--
+-- Returns nil on success, { ok=false, error=... } on rejection. Returns
+-- nil (accept) when me_db_api isn't loadable — that happens in the Lua
+-- mock test harness, which would otherwise reject every test type.
+-- Production DCS always has me_db_api by the time the bridge dispatches.
+local function _check_unit_type(verb_name, type_id)
+    local ok_db, DB = pcall(require, 'me_db_api')
+    if not ok_db or type(DB) ~= 'table' or type(DB.unit_by_type) ~= 'table' then
+        return nil
+    end
+    if DB.unit_by_type[type_id] == nil then
+        return { ok = false,
+                 error = verb_name .. ': unknown unit type "' .. type_id ..
+                         '" — not in me_db_api.unit_by_type. Creating it would '
+                         .. 'crash File→Save (me_mission.lua:setRequiredModules '
+                         .. 'derefs unitDef._origin without a nil-check). '
+                         .. 'Check the spelling against the canonical DCS unit DB '
+                         .. '(e.g. framework/constants/units.lua).' }
+    end
+    return nil
+end
 
 -- _check_unit_type — guard against bad type strings reaching the .miz.
 -- DCS's save serializer (me_mission.lua:setRequiredModules) derefs
@@ -206,7 +235,7 @@ function M.group_create_plane(args)
                     type = 'Turning Point',
                     ETA = 0, ETA_locked = true,
                     formation_template = '',
-                    task = { id = 'ComboTask', params = { tasks = {} } },
+                    task = new_combo_task(),
                 },
             },
             routeRelativeTOT = false,
@@ -317,7 +346,7 @@ function M.group_create_helicopter(args)
                     type = 'Turning Point',
                     ETA = 0, ETA_locked = true,
                     formation_template = '',
-                    task = { id = 'ComboTask', params = { tasks = {} } },
+                    task = new_combo_task(),
                 },
             },
             routeRelativeTOT = false,
@@ -406,7 +435,7 @@ function M.group_create_vehicle(args)
                     type = 'Turning Point',
                     ETA = 0, ETA_locked = true,
                     formation_template = '',
-                    task = { id = 'ComboTask', params = { tasks = {} } },
+                    task = new_combo_task(),
                 },
             },
             routeRelativeTOT = false,
@@ -516,7 +545,7 @@ function M.group_create_ship(args)
                     type = 'Turning Point',
                     ETA = 0, ETA_locked = true,
                     formation_template = '',
-                    task = { id = 'ComboTask', params = { tasks = {} } },
+                    task = new_combo_task(),
                 },
             },
             routeRelativeTOT = false,
@@ -612,7 +641,7 @@ function M.group_create_static(args)
                     ETA = 0, ETA_locked = true,
                     formation_template = '',
                     speed = 0, speed_locked = true,
-                    task = { id = 'ComboTask', params = { tasks = {} } },
+                    task = new_combo_task(),
                 },
             },
             routeRelativeTOT = false,
@@ -1509,6 +1538,84 @@ function M.group_get(args)
         snapshot.lon = lon
     end
     return { ok = true, group = snapshot }
+end
+
+-- group_focus — programmatically replicate "user clicks the group icon
+-- on the F10 map": pop the AIRPLANE GROUP / HELICOPTER GROUP info panel
+-- (me_aircraft) on top and the route panel (me_route) underneath, both
+-- populated with this group's data. Required after group-create verbs
+-- because ED's ME never routes them through MapWindow's click handler —
+-- the underlying data is correct but both right-side panels stay hidden
+-- until the user clicks. Calling `me group focus --name X` after a
+-- create lands the user in the same UI state a real map click would.
+--
+-- Only plane and helicopter groups raise the aircraft panel; ground and
+-- ship groups have separate info panels (out of scope here). The route
+-- panel pops for any group type that owns a route.
+--
+-- The panel raise sequence has to be exact:
+--   1. me_aircraft.switchView(g.type) — but only when the current view
+--      doesn't already match, because switchView clears vdata.type and a
+--      subsequent show() would crash inside updateModulation
+--      (DB.unit_by_type[nil]).
+--   2. me_aircraft.setGroup(g)
+--   3. me_aircraft.vdata.type = g.units[1].type — prime the unit ref so
+--      update() can find a unit definition.
+--   4. me_aircraft.show(true)
+--   5. me_route.show(true) — independent of the aircraft panel.
+function M.group_focus(args)
+    if type(args) ~= 'table' then
+        return { ok = false, error = 'group_focus requires args (table)' }
+    end
+    local has_name = type(args.name) == 'string' and args.name ~= ''
+    local has_id = type(args.id) == 'number'
+    if has_name == has_id then
+        return { ok = false, error = 'group_focus requires exactly one of args.name or args.id' }
+    end
+    local g = find_group_in_mission(has_name and args.name or nil,
+                                     has_id  and args.id   or nil)
+    if not g then
+        return { ok = false, error = 'group not found' }
+    end
+
+    local raised = { aircraft = false, route = false }
+
+    if g.type == 'plane' or g.type == 'helicopter' then
+        pcall(function()
+            local panel_aircraft = require('me_aircraft')
+            if type(panel_aircraft.switchView) == 'function'
+                    and panel_aircraft.__view__ ~= g.type then
+                panel_aircraft.switchView(g.type)
+            end
+            if type(panel_aircraft.setGroup) == 'function' then
+                panel_aircraft.setGroup(g)
+            end
+            if type(panel_aircraft.vdata) == 'table'
+                    and type(g.units) == 'table'
+                    and type(g.units[1]) == 'table'
+                    and type(g.units[1].type) == 'string' then
+                panel_aircraft.vdata.type = g.units[1].type
+            end
+            if type(panel_aircraft.show) == 'function' then
+                panel_aircraft.show(true)
+                raised.aircraft = panel_aircraft.isVisible
+                                  and panel_aircraft.isVisible() or true
+            end
+        end)
+    end
+
+    pcall(function()
+        local panel_route = require('me_route')
+        if type(panel_route.show) == 'function' then
+            panel_route.show(true)
+            raised.route = panel_route.window
+                           and panel_route.window:isVisible() or true
+        end
+    end)
+
+    return { ok = true, name = g.name, id = g.groupId,
+             type = g.type, task = g.task or '',
+             raised = raised }
 end
 
 return M

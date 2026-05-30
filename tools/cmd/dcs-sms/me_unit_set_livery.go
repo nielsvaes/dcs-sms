@@ -8,12 +8,12 @@ import (
 )
 
 type meUnitSetLiveryOpts struct {
-	Name       string
-	ID         int
-	Livery     string
-	Timeout    time.Duration
-	Pretty     bool
-	SavedGames string
+	Name		string
+	ID		int
+	Livery		string
+	Timeout		time.Duration
+	Pretty		bool
+	SavedGames	string
 }
 
 func meUnitSetLiveryFlags() (*flag.FlagSet, *meUnitSetLiveryOpts) {
@@ -30,9 +30,9 @@ func meUnitSetLiveryFlags() (*flag.FlagSet, *meUnitSetLiveryOpts) {
 
 func init() {
 	registerMeInfo("unit", "set-livery", cmdInfo{
-		Run:      meUnitSetLiveryCmd,
-		Flags:    flagsOnly(meUnitSetLiveryFlags),
-		Synopsis: "set a unit's livery id",
+		Run:		meUnitSetLiveryCmd,
+		Flags:		flagsOnly(meUnitSetLiveryFlags),
+		Synopsis:	"set a unit's livery id",
 	})
 }
 
@@ -68,11 +68,11 @@ func meUnitSetLiveryCmd(args []string, stdout, stderr io.Writer) int {
 
 	var idClause string
 	if hasName {
-		idClause = fmt.Sprintf("name = %q", opts.Name)
+		idClause = fmt.Sprintf("name = %s", luaQuote(opts.Name))
 	} else {
 		idClause = fmt.Sprintf("id = %d", opts.ID)
 	}
-	luaArgs := fmt.Sprintf("{ %s, livery = %q }", idClause, opts.Livery)
+	luaArgs := fmt.Sprintf("{ %s, livery = %s }", idClause, luaQuote(opts.Livery))
 
 	resp, exitCode := runMeVerb("unit_set_livery", luaArgs, opts.Timeout, opts.SavedGames, stderr)
 	if exitCode != 0 {

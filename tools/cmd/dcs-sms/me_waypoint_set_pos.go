@@ -8,16 +8,16 @@ import (
 )
 
 type meWaypointSetPosOpts struct {
-	GroupName  string
-	GroupID    int
-	Index      int
-	North      float64
-	East       float64
-	Timeout    time.Duration
-	Pretty     bool
-	SavedGames string
+	GroupName	string
+	GroupID		int
+	Index		int
+	North		float64
+	East		float64
+	Timeout		time.Duration
+	Pretty		bool
+	SavedGames	string
 
-	indexSet, northSet, eastSet bool
+	indexSet, northSet, eastSet	bool
 }
 
 func meWaypointSetPosFlags() (*flag.FlagSet, *meWaypointSetPosOpts) {
@@ -36,9 +36,9 @@ func meWaypointSetPosFlags() (*flag.FlagSet, *meWaypointSetPosOpts) {
 
 func init() {
 	registerMeInfo("waypoint", "set-pos", cmdInfo{
-		Run:      meWaypointSetPosCmd,
-		Flags:    flagsOnly(meWaypointSetPosFlags),
-		Synopsis: "move a waypoint to a new north/east coordinate",
+		Run:		meWaypointSetPosCmd,
+		Flags:		flagsOnly(meWaypointSetPosFlags),
+		Synopsis:	"move a waypoint to a new north/east coordinate",
 	})
 }
 
@@ -74,7 +74,7 @@ func meWaypointSetPosCmd(args []string, stdout, stderr io.Writer) int {
 	}
 	var idClause string
 	if hasName {
-		idClause = fmt.Sprintf("name = %q", opts.GroupName)
+		idClause = fmt.Sprintf("name = %s", luaQuote(opts.GroupName))
 	} else {
 		idClause = fmt.Sprintf("id = %d", opts.GroupID)
 	}

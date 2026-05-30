@@ -9,14 +9,14 @@ import (
 )
 
 type meDrawingListOpts struct {
-	Layer      string
-	Type       string
-	Mode       string
-	Name       string
-	NamePrefix string
-	Timeout    time.Duration
-	Pretty     bool
-	SavedGames string
+	Layer		string
+	Type		string
+	Mode		string
+	Name		string
+	NamePrefix	string
+	Timeout		time.Duration
+	Pretty		bool
+	SavedGames	string
 }
 
 func meDrawingListFlags() (*flag.FlagSet, *meDrawingListOpts) {
@@ -35,9 +35,9 @@ func meDrawingListFlags() (*flag.FlagSet, *meDrawingListOpts) {
 
 func init() {
 	registerMeInfo("drawing", "list", cmdInfo{
-		Run:      meDrawingListCmd,
-		Flags:    flagsOnly(meDrawingListFlags),
-		Synopsis: "list all drawings in the open mission",
+		Run:		meDrawingListCmd,
+		Flags:		flagsOnly(meDrawingListFlags),
+		Synopsis:	"list all drawings in the open mission",
 	})
 }
 
@@ -55,19 +55,19 @@ func meDrawingListCmd(args []string, stdout, stderr io.Writer) int {
 
 	var parts []string
 	if opts.Layer != "" {
-		parts = append(parts, fmt.Sprintf("layer = %q", opts.Layer))
+		parts = append(parts, fmt.Sprintf("layer = %s", luaQuote(opts.Layer)))
 	}
 	if opts.Type != "" {
-		parts = append(parts, fmt.Sprintf("type = %q", opts.Type))
+		parts = append(parts, fmt.Sprintf("type = %s", luaQuote(opts.Type)))
 	}
 	if opts.Mode != "" {
-		parts = append(parts, fmt.Sprintf("mode = %q", opts.Mode))
+		parts = append(parts, fmt.Sprintf("mode = %s", luaQuote(opts.Mode)))
 	}
 	if opts.Name != "" {
-		parts = append(parts, fmt.Sprintf("name = %q", opts.Name))
+		parts = append(parts, fmt.Sprintf("name = %s", luaQuote(opts.Name)))
 	}
 	if opts.NamePrefix != "" {
-		parts = append(parts, fmt.Sprintf("name_prefix = %q", opts.NamePrefix))
+		parts = append(parts, fmt.Sprintf("name_prefix = %s", luaQuote(opts.NamePrefix)))
 	}
 	luaArgs := "{ " + strings.Join(parts, ", ") + " }"
 

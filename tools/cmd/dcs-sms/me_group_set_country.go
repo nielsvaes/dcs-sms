@@ -8,12 +8,12 @@ import (
 )
 
 type meGroupSetCountryOpts struct {
-	Name       string
-	ID         int
-	Country    string
-	Timeout    time.Duration
-	Pretty     bool
-	SavedGames string
+	Name		string
+	ID		int
+	Country		string
+	Timeout		time.Duration
+	Pretty		bool
+	SavedGames	string
 }
 
 func meGroupSetCountryFlags() (*flag.FlagSet, *meGroupSetCountryOpts) {
@@ -30,9 +30,9 @@ func meGroupSetCountryFlags() (*flag.FlagSet, *meGroupSetCountryOpts) {
 
 func init() {
 	registerMeInfo("group", "set-country", cmdInfo{
-		Run:      meGroupSetCountryCmd,
-		Flags:    flagsOnly(meGroupSetCountryFlags),
-		Synopsis: "change a group's country/coalition",
+		Run:		meGroupSetCountryCmd,
+		Flags:		flagsOnly(meGroupSetCountryFlags),
+		Synopsis:	"change a group's country/coalition",
 	})
 }
 
@@ -68,11 +68,11 @@ func meGroupSetCountryCmd(args []string, stdout, stderr io.Writer) int {
 
 	var idClause string
 	if hasName {
-		idClause = fmt.Sprintf("name = %q", opts.Name)
+		idClause = fmt.Sprintf("name = %s", luaQuote(opts.Name))
 	} else {
 		idClause = fmt.Sprintf("id = %d", opts.ID)
 	}
-	luaArgs := fmt.Sprintf("{ %s, country = %q }", idClause, opts.Country)
+	luaArgs := fmt.Sprintf("{ %s, country = %s }", idClause, luaQuote(opts.Country))
 
 	resp, exitCode := runMeVerb("group_set_country", luaArgs, opts.Timeout, opts.SavedGames, stderr)
 	if exitCode != 0 {

@@ -8,11 +8,11 @@ import (
 )
 
 type meDrawingSetColorOpts struct {
-	Name       string
-	Color      string
-	Timeout    time.Duration
-	Pretty     bool
-	SavedGames string
+	Name		string
+	Color		string
+	Timeout		time.Duration
+	Pretty		bool
+	SavedGames	string
 }
 
 func meDrawingSetColorFlags() (*flag.FlagSet, *meDrawingSetColorOpts) {
@@ -28,9 +28,9 @@ func meDrawingSetColorFlags() (*flag.FlagSet, *meDrawingSetColorOpts) {
 
 func init() {
 	registerMeInfo("drawing", "set-color", cmdInfo{
-		Run:      meDrawingSetColorCmd,
-		Flags:    flagsOnly(meDrawingSetColorFlags),
-		Synopsis: "change a drawing's outline / line color",
+		Run:		meDrawingSetColorCmd,
+		Flags:		flagsOnly(meDrawingSetColorFlags),
+		Synopsis:	"change a drawing's outline / line color",
 	})
 }
 
@@ -60,7 +60,7 @@ func meDrawingSetColorCmd(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "dcs-sms me drawing set-color:", err)
 		return 2
 	}
-	luaArgs := fmt.Sprintf("{ name = %q, color = %s }", opts.Name, colorLua)
+	luaArgs := fmt.Sprintf("{ name = %s, color = %s }", luaQuote(opts.Name), colorLua)
 
 	resp, exitCode := runMeVerb("drawing_set_color", luaArgs, opts.Timeout, opts.SavedGames, stderr)
 	if exitCode != 0 {

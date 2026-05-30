@@ -8,11 +8,11 @@ import (
 )
 
 type meTriggerRemoveActionOpts struct {
-	Trigger    string
-	Index      int
-	Timeout    time.Duration
-	Pretty     bool
-	SavedGames string
+	Trigger		string
+	Index		int
+	Timeout		time.Duration
+	Pretty		bool
+	SavedGames	string
 }
 
 func meTriggerRemoveActionFlags() (*flag.FlagSet, *meTriggerRemoveActionOpts) {
@@ -28,9 +28,9 @@ func meTriggerRemoveActionFlags() (*flag.FlagSet, *meTriggerRemoveActionOpts) {
 
 func init() {
 	registerMeInfo("trigger", "remove-action", cmdInfo{
-		Run:      meTriggerRemoveActionCmd,
-		Flags:    flagsOnly(meTriggerRemoveActionFlags),
-		Synopsis: "delete one action from a trigger by index",
+		Run:		meTriggerRemoveActionCmd,
+		Flags:		flagsOnly(meTriggerRemoveActionFlags),
+		Synopsis:	"delete one action from a trigger by index",
 	})
 }
 
@@ -52,7 +52,7 @@ func meTriggerRemoveActionCmd(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "dcs-sms me trigger remove-action: --index (>= 1) is required")
 		return 2
 	}
-	luaArgs := fmt.Sprintf("{ trigger = %q, index = %d }", opts.Trigger, opts.Index)
+	luaArgs := fmt.Sprintf("{ trigger = %s, index = %d }", luaQuote(opts.Trigger), opts.Index)
 	resp, exitCode := runMeVerb("trigger_remove_action", luaArgs, opts.Timeout, opts.SavedGames, stderr)
 	if exitCode != 0 {
 		return exitCode

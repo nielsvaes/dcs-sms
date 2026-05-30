@@ -10,17 +10,17 @@ import (
 
 func init() {
 	registerMeInfo("airbase", "list", cmdInfo{
-		Run:      meAirbaseListCmd,
-		Flags:    flagsOnly(meAirbaseListFlags),
-		Synopsis: "list airbases on the current theatre (name, position, coalition)",
+		Run:		meAirbaseListCmd,
+		Flags:		flagsOnly(meAirbaseListFlags),
+		Synopsis:	"list airbases on the current theatre (name, position, coalition)",
 	})
 }
 
 type meAirbaseListOpts struct {
-	Coalition  string
-	Timeout    time.Duration
-	Pretty     bool
-	SavedGames string
+	Coalition	string
+	Timeout		time.Duration
+	Pretty		bool
+	SavedGames	string
 }
 
 func meAirbaseListFlags() (*flag.FlagSet, *meAirbaseListOpts) {
@@ -50,7 +50,7 @@ func meAirbaseListCmd(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 
-	luaArgs := fmt.Sprintf("{ coalition = %q }", strings.ToLower(opts.Coalition))
+	luaArgs := fmt.Sprintf("{ coalition = %s }", luaQuote(strings.ToLower(opts.Coalition)))
 	resp, exitCode := runMeVerb("airbase_list", luaArgs, opts.Timeout, opts.SavedGames, stderr)
 	if exitCode != 0 {
 		return exitCode

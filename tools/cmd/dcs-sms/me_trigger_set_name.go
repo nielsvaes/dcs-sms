@@ -8,11 +8,11 @@ import (
 )
 
 type meTriggerSetNameOpts struct {
-	Name       string
-	To         string
-	Timeout    time.Duration
-	Pretty     bool
-	SavedGames string
+	Name		string
+	To		string
+	Timeout		time.Duration
+	Pretty		bool
+	SavedGames	string
 }
 
 func meTriggerSetNameFlags() (*flag.FlagSet, *meTriggerSetNameOpts) {
@@ -28,9 +28,9 @@ func meTriggerSetNameFlags() (*flag.FlagSet, *meTriggerSetNameOpts) {
 
 func init() {
 	registerMeInfo("trigger", "set-name", cmdInfo{
-		Run:      meTriggerSetNameCmd,
-		Flags:    flagsOnly(meTriggerSetNameFlags),
-		Synopsis: "rename a trigger",
+		Run:		meTriggerSetNameCmd,
+		Flags:		flagsOnly(meTriggerSetNameFlags),
+		Synopsis:	"rename a trigger",
 	})
 }
 
@@ -53,7 +53,7 @@ func meTriggerSetNameCmd(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "dcs-sms me trigger set-name: --to is required")
 		return 2
 	}
-	luaArgs := fmt.Sprintf("{ name = %q, to = %q }", opts.Name, opts.To)
+	luaArgs := fmt.Sprintf("{ name = %s, to = %s }", luaQuote(opts.Name), luaQuote(opts.To))
 	resp, exitCode := runMeVerb("trigger_set_name", luaArgs, opts.Timeout, opts.SavedGames, stderr)
 	if exitCode != 0 {
 		return exitCode

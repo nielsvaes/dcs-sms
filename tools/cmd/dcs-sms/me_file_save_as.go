@@ -9,11 +9,11 @@ import (
 )
 
 type meFileSaveAsOpts struct {
-	Path       string
-	Reopen     bool
-	Timeout    time.Duration
-	Pretty     bool
-	SavedGames string
+	Path		string
+	Reopen		bool
+	Timeout		time.Duration
+	Pretty		bool
+	SavedGames	string
 }
 
 func meFileSaveAsFlags() (*flag.FlagSet, *meFileSaveAsOpts) {
@@ -29,9 +29,9 @@ func meFileSaveAsFlags() (*flag.FlagSet, *meFileSaveAsOpts) {
 
 func init() {
 	registerMeInfo("file", "save-as", cmdInfo{
-		Run:      meFileSaveAsCmd,
-		Flags:    flagsOnly(meFileSaveAsFlags),
-		Synopsis: "save the open mission to a new .miz path",
+		Run:		meFileSaveAsCmd,
+		Flags:		flagsOnly(meFileSaveAsFlags),
+		Synopsis:	"save the open mission to a new .miz path",
 	})
 }
 
@@ -55,7 +55,7 @@ func meFileSaveAsCmd(args []string, stdout, stderr io.Writer) int {
 	}
 
 	pathLua := strings.ReplaceAll(opts.Path, "\\", "/")
-	luaArgs := fmt.Sprintf("{ path = %q, reopen = %t }", pathLua, opts.Reopen)
+	luaArgs := fmt.Sprintf("{ path = %s, reopen = %t }", luaQuote(pathLua), opts.Reopen)
 
 	resp, exitCode := runMeVerb("file_save_as", luaArgs, opts.Timeout, opts.SavedGames, stderr)
 	if exitCode != 0 {

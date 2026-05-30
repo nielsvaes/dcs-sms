@@ -9,18 +9,18 @@ import (
 
 func init() {
 	registerMeInfo("resources", "get", cmdInfo{
-		Run:      meResourcesGetCmd,
-		Flags:    flagsOnly(meResourcesGetFlags),
-		Synopsis: "read the warehouse / resources entry for an airbase or a ship/structure unit",
+		Run:		meResourcesGetCmd,
+		Flags:		flagsOnly(meResourcesGetFlags),
+		Synopsis:	"read the warehouse / resources entry for an airbase or a ship/structure unit",
 	})
 }
 
 type meResourcesGetOpts struct {
-	Airbase    string
-	Unit       string
-	Timeout    time.Duration
-	Pretty     bool
-	SavedGames string
+	Airbase		string
+	Unit		string
+	Timeout		time.Duration
+	Pretty		bool
+	SavedGames	string
 }
 
 func meResourcesGetFlags() (*flag.FlagSet, *meResourcesGetOpts) {
@@ -54,9 +54,9 @@ func meResourcesGetCmd(args []string, stdout, stderr io.Writer) int {
 
 	var luaArgs string
 	if opts.Airbase != "" {
-		luaArgs = fmt.Sprintf("{ airbase = %q }", opts.Airbase)
+		luaArgs = fmt.Sprintf("{ airbase = %s }", luaQuote(opts.Airbase))
 	} else {
-		luaArgs = fmt.Sprintf("{ unit = %q }", opts.Unit)
+		luaArgs = fmt.Sprintf("{ unit = %s }", luaQuote(opts.Unit))
 	}
 	resp, exitCode := runMeVerb("resources_get", luaArgs, opts.Timeout, opts.SavedGames, stderr)
 	if exitCode != 0 {

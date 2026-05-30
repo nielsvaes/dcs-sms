@@ -8,12 +8,12 @@ import (
 )
 
 type meGroupSetLateActivationOpts struct {
-	Name       string
-	ID         int
-	Enabled    bool
-	Timeout    time.Duration
-	Pretty     bool
-	SavedGames string
+	Name		string
+	ID		int
+	Enabled		bool
+	Timeout		time.Duration
+	Pretty		bool
+	SavedGames	string
 }
 
 func meGroupSetLateActivationFlags() (*flag.FlagSet, *meGroupSetLateActivationOpts) {
@@ -32,9 +32,9 @@ func meGroupSetLateActivationFlags() (*flag.FlagSet, *meGroupSetLateActivationOp
 
 func init() {
 	registerMeInfo("group", "set-late-activation", cmdInfo{
-		Run:      meGroupSetLateActivationCmd,
-		Flags:    flagsOnly(meGroupSetLateActivationFlags),
-		Synopsis: "toggle a group's lateActivation flag (deferred spawn)",
+		Run:		meGroupSetLateActivationCmd,
+		Flags:		flagsOnly(meGroupSetLateActivationFlags),
+		Synopsis:	"toggle a group's lateActivation flag (deferred spawn)",
 	})
 }
 
@@ -63,7 +63,7 @@ func meGroupSetLateActivationCmd(args []string, stdout, stderr io.Writer) int {
 
 	var idClause string
 	if hasName {
-		idClause = fmt.Sprintf("name = %q", opts.Name)
+		idClause = fmt.Sprintf("name = %s", luaQuote(opts.Name))
 	} else {
 		idClause = fmt.Sprintf("id = %d", opts.ID)
 	}

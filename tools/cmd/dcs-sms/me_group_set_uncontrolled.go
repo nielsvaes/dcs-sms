@@ -8,12 +8,12 @@ import (
 )
 
 type meGroupSetUncontrolledOpts struct {
-	Name       string
-	ID         int
-	Enabled    bool
-	Timeout    time.Duration
-	Pretty     bool
-	SavedGames string
+	Name		string
+	ID		int
+	Enabled		bool
+	Timeout		time.Duration
+	Pretty		bool
+	SavedGames	string
 }
 
 func meGroupSetUncontrolledFlags() (*flag.FlagSet, *meGroupSetUncontrolledOpts) {
@@ -35,9 +35,9 @@ func meGroupSetUncontrolledFlags() (*flag.FlagSet, *meGroupSetUncontrolledOpts) 
 
 func init() {
 	registerMeInfo("group", "set-uncontrolled", cmdInfo{
-		Run:      meGroupSetUncontrolledCmd,
-		Flags:    flagsOnly(meGroupSetUncontrolledFlags),
-		Synopsis: "toggle a group's uncontrolled flag (spawns without AI controller)",
+		Run:		meGroupSetUncontrolledCmd,
+		Flags:		flagsOnly(meGroupSetUncontrolledFlags),
+		Synopsis:	"toggle a group's uncontrolled flag (spawns without AI controller)",
 	})
 }
 
@@ -66,7 +66,7 @@ func meGroupSetUncontrolledCmd(args []string, stdout, stderr io.Writer) int {
 
 	var idClause string
 	if hasName {
-		idClause = fmt.Sprintf("name = %q", opts.Name)
+		idClause = fmt.Sprintf("name = %s", luaQuote(opts.Name))
 	} else {
 		idClause = fmt.Sprintf("id = %d", opts.ID)
 	}

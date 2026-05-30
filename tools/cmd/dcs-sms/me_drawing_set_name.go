@@ -8,11 +8,11 @@ import (
 )
 
 type meDrawingSetNameOpts struct {
-	Name       string
-	NewName    string
-	Timeout    time.Duration
-	Pretty     bool
-	SavedGames string
+	Name		string
+	NewName		string
+	Timeout		time.Duration
+	Pretty		bool
+	SavedGames	string
 }
 
 func meDrawingSetNameFlags() (*flag.FlagSet, *meDrawingSetNameOpts) {
@@ -28,9 +28,9 @@ func meDrawingSetNameFlags() (*flag.FlagSet, *meDrawingSetNameOpts) {
 
 func init() {
 	registerMeInfo("drawing", "set-name", cmdInfo{
-		Run:      meDrawingSetNameCmd,
-		Flags:    flagsOnly(meDrawingSetNameFlags),
-		Synopsis: "rename a drawing",
+		Run:		meDrawingSetNameCmd,
+		Flags:		flagsOnly(meDrawingSetNameFlags),
+		Synopsis:	"rename a drawing",
 	})
 }
 
@@ -53,7 +53,7 @@ func meDrawingSetNameCmd(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "dcs-sms me drawing set-name: --new-name is required")
 		return 2
 	}
-	luaArgs := fmt.Sprintf("{ name = %q, new_name = %q }", opts.Name, opts.NewName)
+	luaArgs := fmt.Sprintf("{ name = %s, new_name = %s }", luaQuote(opts.Name), luaQuote(opts.NewName))
 
 	resp, exitCode := runMeVerb("drawing_set_name", luaArgs, opts.Timeout, opts.SavedGames, stderr)
 	if exitCode != 0 {

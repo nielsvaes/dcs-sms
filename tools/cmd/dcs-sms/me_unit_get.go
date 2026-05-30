@@ -8,13 +8,13 @@ import (
 )
 
 type meUnitGetOpts struct {
-	Name       string
-	ID         int
-	GroupName  string
-	GroupID    int
-	Timeout    time.Duration
-	Pretty     bool
-	SavedGames string
+	Name		string
+	ID		int
+	GroupName	string
+	GroupID		int
+	Timeout		time.Duration
+	Pretty		bool
+	SavedGames	string
 }
 
 func meUnitGetFlags() (*flag.FlagSet, *meUnitGetOpts) {
@@ -32,9 +32,9 @@ func meUnitGetFlags() (*flag.FlagSet, *meUnitGetOpts) {
 
 func init() {
 	registerMeInfo("unit", "get", cmdInfo{
-		Run:      meUnitGetCmd,
-		Flags:    flagsOnly(meUnitGetFlags),
-		Synopsis: "return full data for a unit (by --name/--id, or first unit of a group via --group-name/--group-id)",
+		Run:		meUnitGetCmd,
+		Flags:		flagsOnly(meUnitGetFlags),
+		Synopsis:	"return full data for a unit (by --name/--id, or first unit of a group via --group-name/--group-id)",
 	})
 }
 
@@ -65,11 +65,11 @@ func meUnitGetCmd(args []string, stdout, stderr io.Writer) int {
 	var luaArgs string
 	switch {
 	case opts.Name != "":
-		luaArgs = fmt.Sprintf("{ name = %q }", opts.Name)
+		luaArgs = fmt.Sprintf("{ name = %s }", luaQuote(opts.Name))
 	case opts.ID != 0:
 		luaArgs = fmt.Sprintf("{ id = %d }", opts.ID)
 	case opts.GroupName != "":
-		luaArgs = fmt.Sprintf("{ group_name = %q }", opts.GroupName)
+		luaArgs = fmt.Sprintf("{ group_name = %s }", luaQuote(opts.GroupName))
 	default:
 		luaArgs = fmt.Sprintf("{ group_id = %d }", opts.GroupID)
 	}

@@ -9,19 +9,19 @@ import (
 )
 
 type meDrawingCreateLineOpts struct {
-	Vertices        string
-	VerticesFile    string
-	Closed          bool
-	LineMode        string
-	Name            string
-	Color           string
-	Thickness       float64
-	Style           string
-	Layer           string
-	HiddenOnPlanner bool
-	Timeout         time.Duration
-	Pretty          bool
-	SavedGames      string
+	Vertices	string
+	VerticesFile	string
+	Closed		bool
+	LineMode	string
+	Name		string
+	Color		string
+	Thickness	float64
+	Style		string
+	Layer		string
+	HiddenOnPlanner	bool
+	Timeout		time.Duration
+	Pretty		bool
+	SavedGames	string
 }
 
 func meDrawingCreateLineFlags() (*flag.FlagSet, *meDrawingCreateLineOpts) {
@@ -47,9 +47,9 @@ func meDrawingCreateLineFlags() (*flag.FlagSet, *meDrawingCreateLineOpts) {
 
 func init() {
 	registerMeInfo("drawing", "create-line", cmdInfo{
-		Run:      meDrawingCreateLineCmd,
-		Flags:    flagsOnly(meDrawingCreateLineFlags),
-		Synopsis: "draw a polyline on the F10 map (segments / segment / free; --closed wraps it)",
+		Run:		meDrawingCreateLineCmd,
+		Flags:		flagsOnly(meDrawingCreateLineFlags),
+		Synopsis:	"draw a polyline on the F10 map (segments / segment / free; --closed wraps it)",
 	})
 }
 
@@ -99,10 +99,10 @@ func meDrawingCreateLineCmd(args []string, stdout, stderr io.Writer) int {
 		parts = append(parts, "closed = true")
 	}
 	if opts.LineMode != "" {
-		parts = append(parts, fmt.Sprintf("line_mode = %q", opts.LineMode))
+		parts = append(parts, fmt.Sprintf("line_mode = %s", luaQuote(opts.LineMode)))
 	}
 	if opts.Name != "" {
-		parts = append(parts, fmt.Sprintf("name = %q", opts.Name))
+		parts = append(parts, fmt.Sprintf("name = %s", luaQuote(opts.Name)))
 	}
 	if colorLua != "" {
 		parts = append(parts, "color = "+colorLua)
@@ -111,10 +111,10 @@ func meDrawingCreateLineCmd(args []string, stdout, stderr io.Writer) int {
 		parts = append(parts, fmt.Sprintf("thickness = %g", opts.Thickness))
 	}
 	if opts.Style != "" {
-		parts = append(parts, fmt.Sprintf("style = %q", opts.Style))
+		parts = append(parts, fmt.Sprintf("style = %s", luaQuote(opts.Style)))
 	}
 	if opts.Layer != "" {
-		parts = append(parts, fmt.Sprintf("layer = %q", opts.Layer))
+		parts = append(parts, fmt.Sprintf("layer = %s", luaQuote(opts.Layer)))
 	}
 	if opts.HiddenOnPlanner {
 		parts = append(parts, "hidden_on_planner = true")

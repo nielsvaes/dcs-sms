@@ -8,14 +8,14 @@ import (
 )
 
 type meZoneSetLinkOpts struct {
-	Name       string
-	ID         int
-	Unit       string
-	UnitID     int
-	Clear      bool
-	Timeout    time.Duration
-	Pretty     bool
-	SavedGames string
+	Name		string
+	ID		int
+	Unit		string
+	UnitID		int
+	Clear		bool
+	Timeout		time.Duration
+	Pretty		bool
+	SavedGames	string
 }
 
 func meZoneSetLinkFlags() (*flag.FlagSet, *meZoneSetLinkOpts) {
@@ -34,9 +34,9 @@ func meZoneSetLinkFlags() (*flag.FlagSet, *meZoneSetLinkOpts) {
 
 func init() {
 	registerMeInfo("zone", "set-link", cmdInfo{
-		Run:      meZoneSetLinkCmd,
-		Flags:    flagsOnly(meZoneSetLinkFlags),
-		Synopsis: "link a zone to a unit so it follows the unit",
+		Run:		meZoneSetLinkCmd,
+		Flags:		flagsOnly(meZoneSetLinkFlags),
+		Synopsis:	"link a zone to a unit so it follows the unit",
 	})
 }
 
@@ -87,7 +87,7 @@ func meZoneSetLinkCmd(args []string, stdout, stderr io.Writer) int {
 
 	var idClause string
 	if hasName {
-		idClause = fmt.Sprintf("name = %q", opts.Name)
+		idClause = fmt.Sprintf("name = %s", luaQuote(opts.Name))
 	} else {
 		idClause = fmt.Sprintf("id = %d", opts.ID)
 	}
@@ -95,7 +95,7 @@ func meZoneSetLinkCmd(args []string, stdout, stderr io.Writer) int {
 	var actionClause string
 	switch {
 	case hasUnit:
-		actionClause = fmt.Sprintf("unit = %q", opts.Unit)
+		actionClause = fmt.Sprintf("unit = %s", luaQuote(opts.Unit))
 	case hasUnitID:
 		actionClause = fmt.Sprintf("unit_id = %d", opts.UnitID)
 	case hasClear:

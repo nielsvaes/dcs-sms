@@ -10,22 +10,22 @@ import (
 
 func init() {
 	registerMeInfo("camera", "focus", cmdInfo{
-		Run:      meCameraFocusCmd,
-		Flags:    flagsOnly(meCameraFocusFlags),
-		Synopsis: "focus the ME camera on a coordinate / lat-lon / airdrome name",
+		Run:		meCameraFocusCmd,
+		Flags:		flagsOnly(meCameraFocusFlags),
+		Synopsis:	"focus the ME camera on a coordinate / lat-lon / airdrome name",
 	})
 }
 
 type meCameraFocusOpts struct {
-	Name       string
-	Lat        float64
-	Lon        float64
-	X          float64
-	Y          float64
-	Scale      float64
-	Timeout    time.Duration
-	Pretty     bool
-	SavedGames string
+	Name		string
+	Lat		float64
+	Lon		float64
+	X		float64
+	Y		float64
+	Scale		float64
+	Timeout		time.Duration
+	Pretty		bool
+	SavedGames	string
 }
 
 func meCameraFocusFlags() (*flag.FlagSet, *meCameraFocusOpts) {
@@ -113,7 +113,7 @@ func meCameraFocusCmd(args []string, stdout, stderr io.Writer) int {
 		first = false
 	}
 	if modeName {
-		add(fmt.Sprintf("name = %q", opts.Name))
+		add(fmt.Sprintf("name = %s", luaQuote(opts.Name)))
 	}
 	if modeLatLon {
 		add(fmt.Sprintf("lat = %g, lon = %g", opts.Lat, opts.Lon))

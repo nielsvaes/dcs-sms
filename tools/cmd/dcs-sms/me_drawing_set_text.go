@@ -8,11 +8,11 @@ import (
 )
 
 type meDrawingSetTextOpts struct {
-	Name       string
-	Text       string
-	Timeout    time.Duration
-	Pretty     bool
-	SavedGames string
+	Name		string
+	Text		string
+	Timeout		time.Duration
+	Pretty		bool
+	SavedGames	string
 }
 
 func meDrawingSetTextFlags() (*flag.FlagSet, *meDrawingSetTextOpts) {
@@ -28,9 +28,9 @@ func meDrawingSetTextFlags() (*flag.FlagSet, *meDrawingSetTextOpts) {
 
 func init() {
 	registerMeInfo("drawing", "set-text", cmdInfo{
-		Run:      meDrawingSetTextCmd,
-		Flags:    flagsOnly(meDrawingSetTextFlags),
-		Synopsis: "change a textbox drawing's text content",
+		Run:		meDrawingSetTextCmd,
+		Flags:		flagsOnly(meDrawingSetTextFlags),
+		Synopsis:	"change a textbox drawing's text content",
 	})
 }
 
@@ -54,7 +54,7 @@ func meDrawingSetTextCmd(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "dcs-sms me drawing set-text: --text is required")
 		return 2
 	}
-	luaArgs := fmt.Sprintf("{ name = %q, text = %q }", opts.Name, opts.Text)
+	luaArgs := fmt.Sprintf("{ name = %s, text = %s }", luaQuote(opts.Name), luaQuote(opts.Text))
 
 	resp, exitCode := runMeVerb("drawing_set_text", luaArgs, opts.Timeout, opts.SavedGames, stderr)
 	if exitCode != 0 {

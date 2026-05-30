@@ -8,15 +8,15 @@ import (
 )
 
 type meWaypointSetEtaLockedOpts struct {
-	GroupName  string
-	GroupID    int
-	Index      int
-	Locked     string
-	Timeout    time.Duration
-	Pretty     bool
-	SavedGames string
+	GroupName	string
+	GroupID		int
+	Index		int
+	Locked		string
+	Timeout		time.Duration
+	Pretty		bool
+	SavedGames	string
 
-	indexSet, lockedSet bool
+	indexSet, lockedSet	bool
 }
 
 func meWaypointSetEtaLockedFlags() (*flag.FlagSet, *meWaypointSetEtaLockedOpts) {
@@ -34,9 +34,9 @@ func meWaypointSetEtaLockedFlags() (*flag.FlagSet, *meWaypointSetEtaLockedOpts) 
 
 func init() {
 	registerMeInfo("waypoint", "set-eta-locked", cmdInfo{
-		Run:      meWaypointSetEtaLockedCmd,
-		Flags:    flagsOnly(meWaypointSetEtaLockedFlags),
-		Synopsis: "set a waypoint's ETA_locked flag",
+		Run:		meWaypointSetEtaLockedCmd,
+		Flags:		flagsOnly(meWaypointSetEtaLockedFlags),
+		Synopsis:	"set a waypoint's ETA_locked flag",
 	})
 }
 
@@ -75,7 +75,7 @@ func meWaypointSetEtaLockedCmd(args []string, stdout, stderr io.Writer) int {
 	}
 	var idClause string
 	if hasName {
-		idClause = fmt.Sprintf("name = %q", opts.GroupName)
+		idClause = fmt.Sprintf("name = %s", luaQuote(opts.GroupName))
 	} else {
 		idClause = fmt.Sprintf("id = %d", opts.GroupID)
 	}

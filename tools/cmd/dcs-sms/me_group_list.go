@@ -9,13 +9,13 @@ import (
 )
 
 type meGroupListOpts struct {
-	Side       string
-	Country    string
-	Category   string
-	Name       string
-	Timeout    time.Duration
-	Pretty     bool
-	SavedGames string
+	Side		string
+	Country		string
+	Category	string
+	Name		string
+	Timeout		time.Duration
+	Pretty		bool
+	SavedGames	string
 }
 
 func meGroupListFlags() (*flag.FlagSet, *meGroupListOpts) {
@@ -33,9 +33,9 @@ func meGroupListFlags() (*flag.FlagSet, *meGroupListOpts) {
 
 func init() {
 	registerMeInfo("group", "list", cmdInfo{
-		Run:      meGroupListCmd,
-		Flags:    flagsOnly(meGroupListFlags),
-		Synopsis: "list all groups in the open mission",
+		Run:		meGroupListCmd,
+		Flags:		flagsOnly(meGroupListFlags),
+		Synopsis:	"list all groups in the open mission",
 	})
 }
 
@@ -52,16 +52,16 @@ func meGroupListCmd(args []string, stdout, stderr io.Writer) int {
 
 	var parts []string
 	if opts.Side != "" {
-		parts = append(parts, fmt.Sprintf("side = %q", strings.ToLower(opts.Side)))
+		parts = append(parts, fmt.Sprintf("side = %s", luaQuote(strings.ToLower(opts.Side))))
 	}
 	if opts.Country != "" {
-		parts = append(parts, fmt.Sprintf("country = %q", opts.Country))
+		parts = append(parts, fmt.Sprintf("country = %s", luaQuote(opts.Country)))
 	}
 	if opts.Category != "" {
-		parts = append(parts, fmt.Sprintf("category = %q", strings.ToLower(opts.Category)))
+		parts = append(parts, fmt.Sprintf("category = %s", luaQuote(strings.ToLower(opts.Category))))
 	}
 	if opts.Name != "" {
-		parts = append(parts, fmt.Sprintf("name = %q", opts.Name))
+		parts = append(parts, fmt.Sprintf("name = %s", luaQuote(opts.Name)))
 	}
 	luaArgs := "{ " + strings.Join(parts, ", ") + " }"
 

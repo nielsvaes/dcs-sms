@@ -8,11 +8,11 @@ import (
 )
 
 type meDrawingSetThicknessOpts struct {
-	Name       string
-	Thickness  float64
-	Timeout    time.Duration
-	Pretty     bool
-	SavedGames string
+	Name		string
+	Thickness	float64
+	Timeout		time.Duration
+	Pretty		bool
+	SavedGames	string
 }
 
 func meDrawingSetThicknessFlags() (*flag.FlagSet, *meDrawingSetThicknessOpts) {
@@ -28,9 +28,9 @@ func meDrawingSetThicknessFlags() (*flag.FlagSet, *meDrawingSetThicknessOpts) {
 
 func init() {
 	registerMeInfo("drawing", "set-thickness", cmdInfo{
-		Run:      meDrawingSetThicknessCmd,
-		Flags:    flagsOnly(meDrawingSetThicknessFlags),
-		Synopsis: "change a line / polygon drawing's outline thickness",
+		Run:		meDrawingSetThicknessCmd,
+		Flags:		flagsOnly(meDrawingSetThicknessFlags),
+		Synopsis:	"change a line / polygon drawing's outline thickness",
 	})
 }
 
@@ -53,7 +53,7 @@ func meDrawingSetThicknessCmd(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "dcs-sms me drawing set-thickness: --thickness is required (> 0)")
 		return 2
 	}
-	luaArgs := fmt.Sprintf("{ name = %q, thickness = %g }", opts.Name, opts.Thickness)
+	luaArgs := fmt.Sprintf("{ name = %s, thickness = %g }", luaQuote(opts.Name), opts.Thickness)
 
 	resp, exitCode := runMeVerb("drawing_set_thickness", luaArgs, opts.Timeout, opts.SavedGames, stderr)
 	if exitCode != 0 {

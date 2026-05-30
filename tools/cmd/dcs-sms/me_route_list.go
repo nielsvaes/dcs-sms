@@ -8,11 +8,11 @@ import (
 )
 
 type meRouteListOpts struct {
-	GroupName  string
-	GroupID    int
-	Timeout    time.Duration
-	Pretty     bool
-	SavedGames string
+	GroupName	string
+	GroupID		int
+	Timeout		time.Duration
+	Pretty		bool
+	SavedGames	string
 }
 
 func meRouteListFlags() (*flag.FlagSet, *meRouteListOpts) {
@@ -28,9 +28,9 @@ func meRouteListFlags() (*flag.FlagSet, *meRouteListOpts) {
 
 func init() {
 	registerMeInfo("route", "list", cmdInfo{
-		Run:      meRouteListCmd,
-		Flags:    flagsOnly(meRouteListFlags),
-		Synopsis: "list waypoints on a group's route (compact summary per WP)",
+		Run:		meRouteListCmd,
+		Flags:		flagsOnly(meRouteListFlags),
+		Synopsis:	"list waypoints on a group's route (compact summary per WP)",
 	})
 }
 
@@ -51,7 +51,7 @@ func meRouteListCmd(args []string, stdout, stderr io.Writer) int {
 	}
 	var idClause string
 	if hasName {
-		idClause = fmt.Sprintf("name = %q", opts.GroupName)
+		idClause = fmt.Sprintf("name = %s", luaQuote(opts.GroupName))
 	} else {
 		idClause = fmt.Sprintf("id = %d", opts.GroupID)
 	}

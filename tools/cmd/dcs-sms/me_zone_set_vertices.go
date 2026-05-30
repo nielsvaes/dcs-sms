@@ -8,12 +8,12 @@ import (
 )
 
 type meZoneSetVerticesOpts struct {
-	Name       string
-	ID         int
-	Vertices   string
-	Timeout    time.Duration
-	Pretty     bool
-	SavedGames string
+	Name		string
+	ID		int
+	Vertices	string
+	Timeout		time.Duration
+	Pretty		bool
+	SavedGames	string
 }
 
 func meZoneSetVerticesFlags() (*flag.FlagSet, *meZoneSetVerticesOpts) {
@@ -31,9 +31,9 @@ func meZoneSetVerticesFlags() (*flag.FlagSet, *meZoneSetVerticesOpts) {
 
 func init() {
 	registerMeInfo("zone", "set-vertices", cmdInfo{
-		Run:      meZoneSetVerticesCmd,
-		Flags:    flagsOnly(meZoneSetVerticesFlags),
-		Synopsis: "replace a quad zone's 4 corners",
+		Run:		meZoneSetVerticesCmd,
+		Flags:		flagsOnly(meZoneSetVerticesFlags),
+		Synopsis:	"replace a quad zone's 4 corners",
 	})
 }
 
@@ -71,7 +71,7 @@ func meZoneSetVerticesCmd(args []string, stdout, stderr io.Writer) int {
 
 	var idClause string
 	if hasName {
-		idClause = fmt.Sprintf("name = %q", opts.Name)
+		idClause = fmt.Sprintf("name = %s", luaQuote(opts.Name))
 	} else {
 		idClause = fmt.Sprintf("id = %d", opts.ID)
 	}

@@ -8,11 +8,11 @@ import (
 )
 
 type meTriggerRemoveConditionOpts struct {
-	Trigger    string
-	Index      int
-	Timeout    time.Duration
-	Pretty     bool
-	SavedGames string
+	Trigger		string
+	Index		int
+	Timeout		time.Duration
+	Pretty		bool
+	SavedGames	string
 }
 
 func meTriggerRemoveConditionFlags() (*flag.FlagSet, *meTriggerRemoveConditionOpts) {
@@ -28,9 +28,9 @@ func meTriggerRemoveConditionFlags() (*flag.FlagSet, *meTriggerRemoveConditionOp
 
 func init() {
 	registerMeInfo("trigger", "remove-condition", cmdInfo{
-		Run:      meTriggerRemoveConditionCmd,
-		Flags:    flagsOnly(meTriggerRemoveConditionFlags),
-		Synopsis: "delete one condition from a trigger by index",
+		Run:		meTriggerRemoveConditionCmd,
+		Flags:		flagsOnly(meTriggerRemoveConditionFlags),
+		Synopsis:	"delete one condition from a trigger by index",
 	})
 }
 
@@ -52,7 +52,7 @@ func meTriggerRemoveConditionCmd(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "dcs-sms me trigger remove-condition: --index (>= 1) is required")
 		return 2
 	}
-	luaArgs := fmt.Sprintf("{ trigger = %q, index = %d }", opts.Trigger, opts.Index)
+	luaArgs := fmt.Sprintf("{ trigger = %s, index = %d }", luaQuote(opts.Trigger), opts.Index)
 	resp, exitCode := runMeVerb("trigger_remove_condition", luaArgs, opts.Timeout, opts.SavedGames, stderr)
 	if exitCode != 0 {
 		return exitCode

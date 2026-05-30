@@ -9,10 +9,10 @@ import (
 )
 
 type meFileOpenOpts struct {
-	Path       string
-	Timeout    time.Duration
-	Pretty     bool
-	SavedGames string
+	Path		string
+	Timeout		time.Duration
+	Pretty		bool
+	SavedGames	string
 }
 
 func meFileOpenFlags() (*flag.FlagSet, *meFileOpenOpts) {
@@ -27,9 +27,9 @@ func meFileOpenFlags() (*flag.FlagSet, *meFileOpenOpts) {
 
 func init() {
 	registerMeInfo("file", "open", cmdInfo{
-		Run:      meFileOpenCmd,
-		Flags:    flagsOnly(meFileOpenFlags),
-		Synopsis: "open a .miz file in the Mission Editor",
+		Run:		meFileOpenCmd,
+		Flags:		flagsOnly(meFileOpenFlags),
+		Synopsis:	"open a .miz file in the Mission Editor",
 	})
 }
 
@@ -54,9 +54,11 @@ func meFileOpenCmd(args []string, stdout, stderr io.Writer) int {
 	// well-documented backslash-escape pain documented in the discovery log.
 	pathLua := strings.ReplaceAll(opts.Path, "\\", "/")
 
-	// Build the Lua args table inline. %q emits a double-quoted Go string
-	// literal which is also valid Lua (both use C-style escapes).
-	luaArgs := fmt.Sprintf("{ path = %q }", pathLua)
+	// Build the Lua args table inline. luaQuote produces a Lua 5.1
+	// string literal — Go's %q is unsafe here because it escapes
+	// non-printable codepoints with Go-syntax \uXXXX that Lua doesn't
+	// understand (see gh#70).
+	luaArgs := fmt.Sprintf("{ path = %s }", luaQuote(pathLua))
 
 	resp, exitCode := runMeVerb("file_open", luaArgs, opts.Timeout, opts.SavedGames, stderr)
 	if exitCode != 0 {

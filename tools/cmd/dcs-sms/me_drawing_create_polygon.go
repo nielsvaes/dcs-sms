@@ -9,18 +9,18 @@ import (
 )
 
 type meDrawingCreatePolygonOpts struct {
-	Vertices        string
-	VerticesFile    string
-	Name            string
-	Color           string
-	FillColor       string
-	Thickness       float64
-	Style           string
-	Layer           string
-	HiddenOnPlanner bool
-	Timeout         time.Duration
-	Pretty          bool
-	SavedGames      string
+	Vertices	string
+	VerticesFile	string
+	Name		string
+	Color		string
+	FillColor	string
+	Thickness	float64
+	Style		string
+	Layer		string
+	HiddenOnPlanner	bool
+	Timeout		time.Duration
+	Pretty		bool
+	SavedGames	string
 }
 
 func meDrawingCreatePolygonFlags() (*flag.FlagSet, *meDrawingCreatePolygonOpts) {
@@ -45,9 +45,9 @@ func meDrawingCreatePolygonFlags() (*flag.FlagSet, *meDrawingCreatePolygonOpts) 
 
 func init() {
 	registerMeInfo("drawing", "create-polygon", cmdInfo{
-		Run:      meDrawingCreatePolygonCmd,
-		Flags:    flagsOnly(meDrawingCreatePolygonFlags),
-		Synopsis: "draw a free-mode polygon on the F10 map",
+		Run:		meDrawingCreatePolygonCmd,
+		Flags:		flagsOnly(meDrawingCreatePolygonFlags),
+		Synopsis:	"draw a free-mode polygon on the F10 map",
 	})
 }
 
@@ -98,7 +98,7 @@ func meDrawingCreatePolygonCmd(args []string, stdout, stderr io.Writer) int {
 		"vertices = " + verticesLua,
 	}
 	if opts.Name != "" {
-		parts = append(parts, fmt.Sprintf("name = %q", opts.Name))
+		parts = append(parts, fmt.Sprintf("name = %s", luaQuote(opts.Name)))
 	}
 	if colorLua != "" {
 		parts = append(parts, "color = "+colorLua)
@@ -110,10 +110,10 @@ func meDrawingCreatePolygonCmd(args []string, stdout, stderr io.Writer) int {
 		parts = append(parts, fmt.Sprintf("thickness = %g", opts.Thickness))
 	}
 	if opts.Style != "" {
-		parts = append(parts, fmt.Sprintf("style = %q", opts.Style))
+		parts = append(parts, fmt.Sprintf("style = %s", luaQuote(opts.Style)))
 	}
 	if opts.Layer != "" {
-		parts = append(parts, fmt.Sprintf("layer = %q", opts.Layer))
+		parts = append(parts, fmt.Sprintf("layer = %s", luaQuote(opts.Layer)))
 	}
 	if opts.HiddenOnPlanner {
 		parts = append(parts, "hidden_on_planner = true")

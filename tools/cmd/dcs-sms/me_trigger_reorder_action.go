@@ -10,23 +10,23 @@ import (
 
 func init() {
 	registerMeInfo("trigger", "reorder-action", cmdInfo{
-		Run:      meTriggerReorderActionCmd,
-		Flags:    flagsOnly(meTriggerReorderActionFlags),
-		Synopsis: "move an action to a new index in a trigger's action list",
+		Run:		meTriggerReorderActionCmd,
+		Flags:		flagsOnly(meTriggerReorderActionFlags),
+		Synopsis:	"move an action to a new index in a trigger's action list",
 	})
 }
 
 type meTriggerReorderActionOpts struct {
-	Trigger    string
-	Index      int
-	Before     int
-	After      int
-	ToIndex    int
-	ToStart    bool
-	ToEnd      bool
-	Timeout    time.Duration
-	Pretty     bool
-	SavedGames string
+	Trigger		string
+	Index		int
+	Before		int
+	After		int
+	ToIndex		int
+	ToStart		bool
+	ToEnd		bool
+	Timeout		time.Duration
+	Pretty		bool
+	SavedGames	string
 }
 
 func meTriggerReorderActionFlags() (*flag.FlagSet, *meTriggerReorderActionOpts) {
@@ -91,7 +91,7 @@ func meTriggerReorderActionCmd(args []string, stdout, stderr io.Writer) int {
 	}
 
 	var b strings.Builder
-	fmt.Fprintf(&b, "{ trigger = %q, index = %d", opts.Trigger, opts.Index)
+	fmt.Fprintf(&b, "{ trigger = %s, index = %d", luaQuote(opts.Trigger), opts.Index)
 	if opts.Before != 0 {
 		fmt.Fprintf(&b, ", before = %d", opts.Before)
 	}

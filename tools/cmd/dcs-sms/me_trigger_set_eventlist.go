@@ -8,11 +8,11 @@ import (
 )
 
 type meTriggerSetEventlistOpts struct {
-	Name       string
-	Event      string
-	Timeout    time.Duration
-	Pretty     bool
-	SavedGames string
+	Name		string
+	Event		string
+	Timeout		time.Duration
+	Pretty		bool
+	SavedGames	string
 }
 
 func meTriggerSetEventlistFlags() (*flag.FlagSet, *meTriggerSetEventlistOpts) {
@@ -28,9 +28,9 @@ func meTriggerSetEventlistFlags() (*flag.FlagSet, *meTriggerSetEventlistOpts) {
 
 func init() {
 	registerMeInfo("trigger", "set-eventlist", cmdInfo{
-		Run:      meTriggerSetEventlistCmd,
-		Flags:    flagsOnly(meTriggerSetEventlistFlags),
-		Synopsis: "set the event filter list for an event-driven trigger",
+		Run:		meTriggerSetEventlistCmd,
+		Flags:		flagsOnly(meTriggerSetEventlistFlags),
+		Synopsis:	"set the event filter list for an event-driven trigger",
 	})
 }
 
@@ -48,7 +48,7 @@ func meTriggerSetEventlistCmd(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "dcs-sms me trigger set-eventlist: --name is required")
 		return 2
 	}
-	luaArgs := fmt.Sprintf("{ name = %q, event = %q }", opts.Name, opts.Event)
+	luaArgs := fmt.Sprintf("{ name = %s, event = %s }", luaQuote(opts.Name), luaQuote(opts.Event))
 	resp, exitCode := runMeVerb("trigger_set_eventlist", luaArgs, opts.Timeout, opts.SavedGames, stderr)
 	if exitCode != 0 {
 		return exitCode

@@ -8,12 +8,12 @@ import (
 )
 
 type meUnitSetFuelOpts struct {
-	Name       string
-	ID         int
-	Fuel       float64
-	Timeout    time.Duration
-	Pretty     bool
-	SavedGames string
+	Name		string
+	ID		int
+	Fuel		float64
+	Timeout		time.Duration
+	Pretty		bool
+	SavedGames	string
 }
 
 func meUnitSetFuelFlags() (*flag.FlagSet, *meUnitSetFuelOpts) {
@@ -30,9 +30,9 @@ func meUnitSetFuelFlags() (*flag.FlagSet, *meUnitSetFuelOpts) {
 
 func init() {
 	registerMeInfo("unit", "set-fuel", cmdInfo{
-		Run:      meUnitSetFuelCmd,
-		Flags:    flagsOnly(meUnitSetFuelFlags),
-		Synopsis: "set a unit's fuel level (0..1 or absolute kg)",
+		Run:		meUnitSetFuelCmd,
+		Flags:		flagsOnly(meUnitSetFuelFlags),
+		Synopsis:	"set a unit's fuel level (0..1 or absolute kg)",
 	})
 }
 
@@ -61,7 +61,7 @@ func meUnitSetFuelCmd(args []string, stdout, stderr io.Writer) int {
 
 	var idClause string
 	if hasName {
-		idClause = fmt.Sprintf("name = %q", opts.Name)
+		idClause = fmt.Sprintf("name = %s", luaQuote(opts.Name))
 	} else {
 		idClause = fmt.Sprintf("id = %d", opts.ID)
 	}

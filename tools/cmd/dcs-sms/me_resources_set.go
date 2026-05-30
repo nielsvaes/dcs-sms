@@ -10,38 +10,38 @@ import (
 
 func init() {
 	registerMeInfo("resources", "set", cmdInfo{
-		Run:      meResourcesSetCmd,
-		Flags:    flagsOnly(meResourcesSetFlags),
-		Synopsis: "mutate an airbase or ship/structure warehouse — toggle unlimited, clear categories, set per-fuel / per-aircraft / per-weapon counts",
+		Run:		meResourcesSetCmd,
+		Flags:		flagsOnly(meResourcesSetFlags),
+		Synopsis:	"mutate an airbase or ship/structure warehouse — toggle unlimited, clear categories, set per-fuel / per-aircraft / per-weapon counts",
 	})
 }
 
 type meResourcesSetOpts struct {
-	Airbase string
-	Unit    string
+	Airbase	string
+	Unit	string
 
-	Clear     bool
-	Unlimited bool
+	Clear		bool
+	Unlimited	bool
 
-	ClearAircrafts bool
-	ClearFuel      bool
-	ClearMunitions bool
+	ClearAircrafts	bool
+	ClearFuel	bool
+	ClearMunitions	bool
 
-	UnlimitedAircrafts bool
-	UnlimitedFuel      bool
-	UnlimitedMunitions bool
+	UnlimitedAircrafts	bool
+	UnlimitedFuel		bool
+	UnlimitedMunitions	bool
 
-	OperatingLevelAir  int
-	OperatingLevelFuel int
-	OperatingLevelEqp  int
+	OperatingLevelAir	int
+	OperatingLevelFuel	int
+	OperatingLevelEqp	int
 
-	Fuels     []string // raw "TYPE=N"
-	Aircrafts []string // raw "NAME=N"
-	Weapons   []string // raw "FRAGMENT=N"
+	Fuels		[]string	// raw "TYPE=N"
+	Aircrafts	[]string	// raw "NAME=N"
+	Weapons		[]string	// raw "FRAGMENT=N"
 
-	Timeout    time.Duration
-	Pretty     bool
-	SavedGames string
+	Timeout		time.Duration
+	Pretty		bool
+	SavedGames	string
 }
 
 func meResourcesSetFlags() (*flag.FlagSet, *meResourcesSetOpts) {
@@ -105,8 +105,8 @@ func meResourcesSetCmd(args []string, stdout, stderr io.Writer) int {
 
 	// Range-check operating levels (0..100).
 	for _, p := range []struct {
-		name string
-		val  int
+		name	string
+		val	int
 	}{
 		{"operating-level-air", opts.OperatingLevelAir},
 		{"operating-level-fuel", opts.OperatingLevelFuel},
@@ -164,9 +164,9 @@ func buildResourcesSetLuaArgs(
 	}
 
 	if opts.Airbase != "" {
-		add(fmt.Sprintf("airbase = %q", opts.Airbase))
+		add(fmt.Sprintf("airbase = %s", luaQuote(opts.Airbase)))
 	} else {
-		add(fmt.Sprintf("unit = %q", opts.Unit))
+		add(fmt.Sprintf("unit = %s", luaQuote(opts.Unit)))
 	}
 
 	if opts.Clear {
@@ -222,7 +222,7 @@ func buildResourcesSetLuaArgs(
 			if !innerFirst {
 				inner.WriteString(", ")
 			}
-			fmt.Fprintf(&inner, "[%q] = %d", k, v)
+			fmt.Fprintf(&inner, "[%s] = %d", luaQuote(k), v)
 			innerFirst = false
 		}
 		add(fmt.Sprintf("aircraft_overrides = { %s }", inner.String()))
@@ -233,7 +233,7 @@ func buildResourcesSetLuaArgs(
 			if i > 0 {
 				inner.WriteString(", ")
 			}
-			fmt.Fprintf(&inner, "{ name = %q, count = %d }", w.Name, w.Count)
+			fmt.Fprintf(&inner, "{ name = %s, count = %d }", luaQuote(w.Name), w.Count)
 		}
 		add(fmt.Sprintf("weapon_overrides = { %s }", inner.String()))
 	}

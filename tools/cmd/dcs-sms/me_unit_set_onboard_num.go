@@ -8,12 +8,12 @@ import (
 )
 
 type meUnitSetOnboardNumOpts struct {
-	Name       string
-	ID         int
-	OnboardNum string
-	Timeout    time.Duration
-	Pretty     bool
-	SavedGames string
+	Name		string
+	ID		int
+	OnboardNum	string
+	Timeout		time.Duration
+	Pretty		bool
+	SavedGames	string
 }
 
 func meUnitSetOnboardNumFlags() (*flag.FlagSet, *meUnitSetOnboardNumOpts) {
@@ -30,9 +30,9 @@ func meUnitSetOnboardNumFlags() (*flag.FlagSet, *meUnitSetOnboardNumOpts) {
 
 func init() {
 	registerMeInfo("unit", "set-onboard-num", cmdInfo{
-		Run:      meUnitSetOnboardNumCmd,
-		Flags:    flagsOnly(meUnitSetOnboardNumFlags),
-		Synopsis: "set a unit's display onboard number",
+		Run:		meUnitSetOnboardNumCmd,
+		Flags:		flagsOnly(meUnitSetOnboardNumFlags),
+		Synopsis:	"set a unit's display onboard number",
 	})
 }
 
@@ -60,11 +60,11 @@ func meUnitSetOnboardNumCmd(args []string, stdout, stderr io.Writer) int {
 
 	var idClause string
 	if hasName {
-		idClause = fmt.Sprintf("name = %q", opts.Name)
+		idClause = fmt.Sprintf("name = %s", luaQuote(opts.Name))
 	} else {
 		idClause = fmt.Sprintf("id = %d", opts.ID)
 	}
-	luaArgs := fmt.Sprintf("{ %s, onboard_num = %q }", idClause, opts.OnboardNum)
+	luaArgs := fmt.Sprintf("{ %s, onboard_num = %s }", idClause, luaQuote(opts.OnboardNum))
 
 	resp, exitCode := runMeVerb("unit_set_onboard_num", luaArgs, opts.Timeout, opts.SavedGames, stderr)
 	if exitCode != 0 {

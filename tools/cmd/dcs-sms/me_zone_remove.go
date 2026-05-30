@@ -8,11 +8,11 @@ import (
 )
 
 type meZoneRemoveOpts struct {
-	Name       string
-	ID         int
-	Timeout    time.Duration
-	Pretty     bool
-	SavedGames string
+	Name		string
+	ID		int
+	Timeout		time.Duration
+	Pretty		bool
+	SavedGames	string
 }
 
 func meZoneRemoveFlags() (*flag.FlagSet, *meZoneRemoveOpts) {
@@ -28,9 +28,9 @@ func meZoneRemoveFlags() (*flag.FlagSet, *meZoneRemoveOpts) {
 
 func init() {
 	registerMeInfo("zone", "remove", cmdInfo{
-		Run:      meZoneRemoveCmd,
-		Flags:    flagsOnly(meZoneRemoveFlags),
-		Synopsis: "delete a zone from the open mission",
+		Run:		meZoneRemoveCmd,
+		Flags:		flagsOnly(meZoneRemoveFlags),
+		Synopsis:	"delete a zone from the open mission",
 	})
 }
 
@@ -46,14 +46,14 @@ func meZoneRemoveCmd(args []string, stdout, stderr io.Writer) int {
 	}
 	hasName := opts.Name != ""
 	hasID := opts.ID != 0
-	if hasName == hasID { // both or neither
+	if hasName == hasID {	// both or neither
 		fmt.Fprintln(stderr, "dcs-sms me zone remove: pass exactly one of --name or --id")
 		return 2
 	}
 
 	var luaArgs string
 	if hasName {
-		luaArgs = fmt.Sprintf("{ name = %q }", opts.Name)
+		luaArgs = fmt.Sprintf("{ name = %s }", luaQuote(opts.Name))
 	} else {
 		luaArgs = fmt.Sprintf("{ id = %d }", opts.ID)
 	}

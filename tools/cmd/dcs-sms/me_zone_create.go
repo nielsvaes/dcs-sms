@@ -11,17 +11,17 @@ import (
 )
 
 type meZoneCreateOpts struct {
-	Type       string
-	Name       string
-	North      float64
-	East       float64
-	Radius     float64
-	Vertices   string
-	Color      string
-	Hidden     bool
-	Timeout    time.Duration
-	Pretty     bool
-	SavedGames string
+	Type		string
+	Name		string
+	North		float64
+	East		float64
+	Radius		float64
+	Vertices	string
+	Color		string
+	Hidden		bool
+	Timeout		time.Duration
+	Pretty		bool
+	SavedGames	string
 }
 
 func meZoneCreateFlags() (*flag.FlagSet, *meZoneCreateOpts) {
@@ -46,9 +46,9 @@ func meZoneCreateFlags() (*flag.FlagSet, *meZoneCreateOpts) {
 
 func init() {
 	registerMeInfo("zone", "create", cmdInfo{
-		Run:      meZoneCreateCmd,
-		Flags:    flagsOnly(meZoneCreateFlags),
-		Synopsis: "create a circular or quadrilateral zone in the open mission",
+		Run:		meZoneCreateCmd,
+		Flags:		flagsOnly(meZoneCreateFlags),
+		Synopsis:	"create a circular or quadrilateral zone in the open mission",
 	})
 }
 
@@ -89,8 +89,7 @@ func meZoneCreateCmd(args []string, stdout, stderr io.Writer) int {
 			return 2
 		}
 		luaArgs := fmt.Sprintf(
-			"{ name = %q, north = %g, east = %g, radius = %g, hidden = %t%s }",
-			opts.Name, opts.North, opts.East, opts.Radius, opts.Hidden, colorClause,
+			"{ name = %s, north = %g, east = %g, radius = %g, hidden = %t%s }", luaQuote(opts.Name), opts.North, opts.East, opts.Radius, opts.Hidden, colorClause,
 		)
 		resp, exitCode := runMeVerb("zone_create_circle", luaArgs, opts.Timeout, opts.SavedGames, stderr)
 		if exitCode != 0 {
@@ -110,8 +109,7 @@ func meZoneCreateCmd(args []string, stdout, stderr io.Writer) int {
 		}
 		// --radius is optional for quad; pass 0 → verb computes default.
 		luaArgs := fmt.Sprintf(
-			"{ name = %q, vertices = %s, radius = %g, hidden = %t%s }",
-			opts.Name, verticesLua, opts.Radius, opts.Hidden, colorClause,
+			"{ name = %s, vertices = %s, radius = %g, hidden = %t%s }", luaQuote(opts.Name), verticesLua, opts.Radius, opts.Hidden, colorClause,
 		)
 		resp, exitCode := runMeVerb("zone_create_quad", luaArgs, opts.Timeout, opts.SavedGames, stderr)
 		if exitCode != 0 {

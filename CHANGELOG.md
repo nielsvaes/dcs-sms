@@ -105,6 +105,101 @@ This is the first tag after a long quiet period — `sms.version` had been froze
 
 ## ME-mod
 
+### [0.15.1] — 2026-05-30
+
+**Fixed**
+- `me-mod` CLI now emits Lua-syntax string literals for non-printable
+  codepoints when shelling commands into the Mission Editor. Go's
+  `%q` (via `strconv.Quote`) uses `\uXXXX` escapes that Lua 5.1
+  silently drops, corrupting the C1 control range (U+0080..U+009F),
+  ZWJ/ZWNJ, BOM, and bidi marks on round-trip — a group rename that
+  fed in `U+008F` came back with literal `u008F` baked into the
+  mission. New `luaQuote()` helper escapes only the necessary bytes
+  (`\`, `"`, ASCII control 0x00-0x1F + 0x7F) using Lua's `\ddd`
+  decimal form; bytes 0x80-0xFF pass through verbatim so UTF-8
+  sequences (CJK, emoji, accented Latin, Cyrillic) survive intact.
+  Sweep-rewrote 208 `fmt.Sprintf`/`Fprintf` call sites across 118
+  `me_*.go` verb files (`fmt.Errorf`, stderr writes, and tests left
+  alone). Closes #70.
+- `me file save` and `me file save-as` now surface DCS's per-group
+  validation errors instead of the useless generic `save failed
+  (mission validation or I/O); enable showError to see details`
+  message. DCS's `check_mission` builds the per-group error string
+  in a chunk-local `showErrorMessageBox` closure that can't be
+  intercepted from outside the `me_mission` chunk (the bare-name
+  call resolves through upvalues and `debug.setupvalue` is sandboxed
+  in the ME env). New `_verify_mission` helper re-implements the
+  loop using the globally-accessible `panel_route.verify` and
+  `panel_aircraft.verify` (the latter only for Player/Client skill
+  strings, matching `check_mission`). E.g. a route with no
+  locked-time waypoints now returns `save failed (mission validation):
+  26JG:\nRoute has no waypoints with locked time!` instead of the
+  generic message. Closes part of #68.
+
+### [0.15.0] — 2026-05-28
+
+**Added**
+- `me waypoint add-task`, `remove-task`, `clear-tasks` and the enroute
+  trio (`add-enroute-task`, `remove-enroute-task`, `clear-enroute-tasks`)
+  for managing per-waypoint ComboTask payloads from the CLI (gh #69).
+- `me waypoint list-tasks` and `me waypoint describe-task` to introspect
+  legal task ids and their parameter schemas from ED's `me_action_db`.
+- `me group focus --name <X>` (or `--id <N>`) — raises the AIRPLANE /
+  HELICOPTER GROUP panel and the route panel for a programmatically
+  created group, mirroring what ED's `MapWindow` click handler does
+  when the user clicks a group on the F10 map. No-op (returns
+  `focused=false`) for vehicle / ship / static groups.
+- `me waypoint describe-task` now returns a `variants` field for
+  pattern-conditional tasks (currently Orbit, where `pattern` controls
+  which of `altitude` / `speed` / `point` / `point2` are meaningful).
+  Backed by a new `tools/me-mod/lua/dcs_sms_me/task_extras.lua`
+  supplementary descriptor file that holds the variant data
+  `actionsData` doesn't carry — hand-curated against ED's runtime.
+- `me waypoint add-task` / `add-enroute-task` k=v field args now
+  coerce to typed Lua values: numeric strings become numbers, `"true"`
+  / `"false"` become booleans. Descriptor type (from `actionsData` /
+  `task_extras`) wins when known; heuristic fallback (clean number
+  parse, literal `"true"`/`"false"`) covers descriptor-less fields.
+  Without coercion ED silently substitutes defaults at run time for
+  string-typed numeric fields.
+
+**Changed**
+- `me waypoint list-tasks` re-accepts `--group-name` / `--group-id` and
+  filters returned task ids to those legal per
+  `me_action_db.availableActions[group_type][<kind>][group_task]`. The
+  initial /write-it pass dropped this on the (incorrect) assumption
+  that no static index existed; a follow-up probe found
+  `availableActions` is exactly that index. `--all` continues to dump
+  the full unfiltered matrix.
+- Task entries copy `task.key` when the descriptor carries one — this
+  covers the CAS / CAP / SEAD / FighterSweep / AntiShip variants of
+  `EngageTargets`, which share an action id but differ by `key`.
+  Without copying `key`, ED silently filters the entry from the
+  group's task listbox.
+
+**Fixed**
+- `me waypoint add-task` / `add-enroute-task` now gate against
+  `me_action_db.availableActions[group_type][<kind>][group_task]` and
+  refuse `--task <id>` if the id isn't legal for the group's main
+  task. The error names the offending combo and points the caller at
+  `me waypoint list-tasks --group-name <X>` for the legal set. The
+  initial /write-it pass left this gate open and relied on ED to
+  reject at save / run time — which it does silently for some
+  combinations, so the bad assignment looked successful from the CLI.
+
+**Internal**
+- New `H.new_combo_task()` helper in `verb_helpers.lua`. Collapses
+  9 sites of the `{ id = 'ComboTask', params = { tasks = {} } }`
+  literal across `verbs/group_verbs.lua` (5 create-* paths) and
+  `verbs/route_verbs.lua` (4 waypoint paths). Future schema changes
+  to the ComboTask block land in one place.
+- TODO marker next to `H.new_combo_task()` flagging a future
+  consolidation: `_coerce_field_value` (route_verbs) and
+  `_trigger_coerce_value` (trigger_verbs) share the same
+  `'true'/'false'/tonumber/fallback` ladder and could become a
+  shared `H.coerce_scalar(v, descr_default)` next time either site
+  is changed.
+
 ### [0.14.3] — 2026-05-26
 
 **Fixed**

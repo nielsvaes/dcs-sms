@@ -9,19 +9,19 @@ import (
 )
 
 type meDrawingCreateCircleOpts struct {
-	North           float64
-	East            float64
-	Radius          float64
-	Name            string
-	Color           string
-	FillColor       string
-	Thickness       float64
-	Style           string
-	Layer           string
-	HiddenOnPlanner bool
-	Timeout         time.Duration
-	Pretty          bool
-	SavedGames      string
+	North		float64
+	East		float64
+	Radius		float64
+	Name		string
+	Color		string
+	FillColor	string
+	Thickness	float64
+	Style		string
+	Layer		string
+	HiddenOnPlanner	bool
+	Timeout		time.Duration
+	Pretty		bool
+	SavedGames	string
 }
 
 func meDrawingCreateCircleFlags() (*flag.FlagSet, *meDrawingCreateCircleOpts) {
@@ -45,9 +45,9 @@ func meDrawingCreateCircleFlags() (*flag.FlagSet, *meDrawingCreateCircleOpts) {
 
 func init() {
 	registerMeInfo("drawing", "create-circle", cmdInfo{
-		Run:      meDrawingCreateCircleCmd,
-		Flags:    flagsOnly(meDrawingCreateCircleFlags),
-		Synopsis: "draw a circle on the F10 map",
+		Run:		meDrawingCreateCircleCmd,
+		Flags:		flagsOnly(meDrawingCreateCircleFlags),
+		Synopsis:	"draw a circle on the F10 map",
 	})
 }
 
@@ -87,7 +87,7 @@ func meDrawingCreateCircleCmd(args []string, stdout, stderr io.Writer) int {
 		fmt.Sprintf("radius = %g", opts.Radius),
 	}
 	if opts.Name != "" {
-		parts = append(parts, fmt.Sprintf("name = %q", opts.Name))
+		parts = append(parts, fmt.Sprintf("name = %s", luaQuote(opts.Name)))
 	}
 	if colorLua != "" {
 		parts = append(parts, "color = "+colorLua)
@@ -99,10 +99,10 @@ func meDrawingCreateCircleCmd(args []string, stdout, stderr io.Writer) int {
 		parts = append(parts, fmt.Sprintf("thickness = %g", opts.Thickness))
 	}
 	if opts.Style != "" {
-		parts = append(parts, fmt.Sprintf("style = %q", opts.Style))
+		parts = append(parts, fmt.Sprintf("style = %s", luaQuote(opts.Style)))
 	}
 	if opts.Layer != "" {
-		parts = append(parts, fmt.Sprintf("layer = %q", opts.Layer))
+		parts = append(parts, fmt.Sprintf("layer = %s", luaQuote(opts.Layer)))
 	}
 	if opts.HiddenOnPlanner {
 		parts = append(parts, "hidden_on_planner = true")

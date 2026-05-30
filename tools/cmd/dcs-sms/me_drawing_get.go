@@ -8,10 +8,10 @@ import (
 )
 
 type meDrawingGetOpts struct {
-	Name       string
-	Timeout    time.Duration
-	Pretty     bool
-	SavedGames string
+	Name		string
+	Timeout		time.Duration
+	Pretty		bool
+	SavedGames	string
 }
 
 func meDrawingGetFlags() (*flag.FlagSet, *meDrawingGetOpts) {
@@ -26,9 +26,9 @@ func meDrawingGetFlags() (*flag.FlagSet, *meDrawingGetOpts) {
 
 func init() {
 	registerMeInfo("drawing", "get", cmdInfo{
-		Run:      meDrawingGetCmd,
-		Flags:    flagsOnly(meDrawingGetFlags),
-		Synopsis: "return full data for a drawing by name",
+		Run:		meDrawingGetCmd,
+		Flags:		flagsOnly(meDrawingGetFlags),
+		Synopsis:	"return full data for a drawing by name",
 	})
 }
 
@@ -49,7 +49,7 @@ func meDrawingGetCmd(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "dcs-sms me drawing get: --name is required")
 		return 2
 	}
-	luaArgs := fmt.Sprintf("{ name = %q }", opts.Name)
+	luaArgs := fmt.Sprintf("{ name = %s }", luaQuote(opts.Name))
 
 	resp, exitCode := runMeVerb("drawing_get", luaArgs, opts.Timeout, opts.SavedGames, stderr)
 	if exitCode != 0 {

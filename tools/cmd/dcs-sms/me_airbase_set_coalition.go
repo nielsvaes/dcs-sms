@@ -10,18 +10,18 @@ import (
 
 func init() {
 	registerMeInfo("airbase", "set-coalition", cmdInfo{
-		Run:      meAirbaseSetCoalitionCmd,
-		Flags:    flagsOnly(meAirbaseSetCoalitionFlags),
-		Synopsis: "set an airbase's coalition (red, blue, neutral) and refresh the map display",
+		Run:		meAirbaseSetCoalitionCmd,
+		Flags:		flagsOnly(meAirbaseSetCoalitionFlags),
+		Synopsis:	"set an airbase's coalition (red, blue, neutral) and refresh the map display",
 	})
 }
 
 type meAirbaseSetCoalitionOpts struct {
-	Name       string
-	Coalition  string
-	Timeout    time.Duration
-	Pretty     bool
-	SavedGames string
+	Name		string
+	Coalition	string
+	Timeout		time.Duration
+	Pretty		bool
+	SavedGames	string
 }
 
 func meAirbaseSetCoalitionFlags() (*flag.FlagSet, *meAirbaseSetCoalitionOpts) {
@@ -58,7 +58,7 @@ func meAirbaseSetCoalitionCmd(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 
-	luaArgs := fmt.Sprintf("{ name = %q, coalition = %q }", opts.Name, strings.ToLower(opts.Coalition))
+	luaArgs := fmt.Sprintf("{ name = %s, coalition = %s }", luaQuote(opts.Name), luaQuote(strings.ToLower(opts.Coalition)))
 	resp, exitCode := runMeVerb("airbase_set_coalition", luaArgs, opts.Timeout, opts.SavedGames, stderr)
 	if exitCode != 0 {
 		return exitCode

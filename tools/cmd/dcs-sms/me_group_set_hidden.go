@@ -8,12 +8,12 @@ import (
 )
 
 type meGroupSetHiddenOpts struct {
-	Name       string
-	ID         int
-	Hidden     bool
-	Timeout    time.Duration
-	Pretty     bool
-	SavedGames string
+	Name		string
+	ID		int
+	Hidden		bool
+	Timeout		time.Duration
+	Pretty		bool
+	SavedGames	string
 }
 
 func meGroupSetHiddenFlags() (*flag.FlagSet, *meGroupSetHiddenOpts) {
@@ -30,9 +30,9 @@ func meGroupSetHiddenFlags() (*flag.FlagSet, *meGroupSetHiddenOpts) {
 
 func init() {
 	registerMeInfo("group", "set-hidden", cmdInfo{
-		Run:      meGroupSetHiddenCmd,
-		Flags:    flagsOnly(meGroupSetHiddenFlags),
-		Synopsis: "toggle whether a group is hidden in the ME view",
+		Run:		meGroupSetHiddenCmd,
+		Flags:		flagsOnly(meGroupSetHiddenFlags),
+		Synopsis:	"toggle whether a group is hidden in the ME view",
 	})
 }
 
@@ -72,7 +72,7 @@ func meGroupSetHiddenCmd(args []string, stdout, stderr io.Writer) int {
 
 	var idClause string
 	if hasName {
-		idClause = fmt.Sprintf("name = %q", opts.Name)
+		idClause = fmt.Sprintf("name = %s", luaQuote(opts.Name))
 	} else {
 		idClause = fmt.Sprintf("id = %d", opts.ID)
 	}

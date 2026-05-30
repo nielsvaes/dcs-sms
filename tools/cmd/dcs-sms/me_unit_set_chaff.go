@@ -8,12 +8,12 @@ import (
 )
 
 type meUnitSetChaffOpts struct {
-	Name       string
-	ID         int
-	Count      int
-	Timeout    time.Duration
-	Pretty     bool
-	SavedGames string
+	Name		string
+	ID		int
+	Count		int
+	Timeout		time.Duration
+	Pretty		bool
+	SavedGames	string
 }
 
 func meUnitSetChaffFlags() (*flag.FlagSet, *meUnitSetChaffOpts) {
@@ -30,9 +30,9 @@ func meUnitSetChaffFlags() (*flag.FlagSet, *meUnitSetChaffOpts) {
 
 func init() {
 	registerMeInfo("unit", "set-chaff", cmdInfo{
-		Run:      meUnitSetChaffCmd,
-		Flags:    flagsOnly(meUnitSetChaffFlags),
-		Synopsis: "set a unit's chaff count",
+		Run:		meUnitSetChaffCmd,
+		Flags:		flagsOnly(meUnitSetChaffFlags),
+		Synopsis:	"set a unit's chaff count",
 	})
 }
 
@@ -59,7 +59,7 @@ func meUnitSetChaffCmd(args []string, stdout, stderr io.Writer) int {
 
 	var idClause string
 	if hasName {
-		idClause = fmt.Sprintf("name = %q", opts.Name)
+		idClause = fmt.Sprintf("name = %s", luaQuote(opts.Name))
 	} else {
 		idClause = fmt.Sprintf("id = %d", opts.ID)
 	}

@@ -8,12 +8,12 @@ import (
 )
 
 type meGroupSetTaskOpts struct {
-	Name       string
-	ID         int
-	Task       string
-	Timeout    time.Duration
-	Pretty     bool
-	SavedGames string
+	Name		string
+	ID		int
+	Task		string
+	Timeout		time.Duration
+	Pretty		bool
+	SavedGames	string
 }
 
 func meGroupSetTaskFlags() (*flag.FlagSet, *meGroupSetTaskOpts) {
@@ -30,9 +30,9 @@ func meGroupSetTaskFlags() (*flag.FlagSet, *meGroupSetTaskOpts) {
 
 func init() {
 	registerMeInfo("group", "set-task", cmdInfo{
-		Run:      meGroupSetTaskCmd,
-		Flags:    flagsOnly(meGroupSetTaskFlags),
-		Synopsis: "set a group's role/task (e.g. CAP, CAS, Escort)",
+		Run:		meGroupSetTaskCmd,
+		Flags:		flagsOnly(meGroupSetTaskFlags),
+		Synopsis:	"set a group's role/task (e.g. CAP, CAS, Escort)",
 	})
 }
 
@@ -66,11 +66,11 @@ func meGroupSetTaskCmd(args []string, stdout, stderr io.Writer) int {
 
 	var idClause string
 	if hasName {
-		idClause = fmt.Sprintf("name = %q", opts.Name)
+		idClause = fmt.Sprintf("name = %s", luaQuote(opts.Name))
 	} else {
 		idClause = fmt.Sprintf("id = %d", opts.ID)
 	}
-	luaArgs := fmt.Sprintf("{ %s, task = %q }", idClause, opts.Task)
+	luaArgs := fmt.Sprintf("{ %s, task = %s }", idClause, luaQuote(opts.Task))
 
 	resp, exitCode := runMeVerb("group_set_task", luaArgs, opts.Timeout, opts.SavedGames, stderr)
 	if exitCode != 0 {

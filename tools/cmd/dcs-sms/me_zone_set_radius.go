@@ -8,12 +8,12 @@ import (
 )
 
 type meZoneSetRadiusOpts struct {
-	Name       string
-	ID         int
-	Radius     float64
-	Timeout    time.Duration
-	Pretty     bool
-	SavedGames string
+	Name		string
+	ID		int
+	Radius		float64
+	Timeout		time.Duration
+	Pretty		bool
+	SavedGames	string
 }
 
 func meZoneSetRadiusFlags() (*flag.FlagSet, *meZoneSetRadiusOpts) {
@@ -30,9 +30,9 @@ func meZoneSetRadiusFlags() (*flag.FlagSet, *meZoneSetRadiusOpts) {
 
 func init() {
 	registerMeInfo("zone", "set-radius", cmdInfo{
-		Run:      meZoneSetRadiusCmd,
-		Flags:    flagsOnly(meZoneSetRadiusFlags),
-		Synopsis: "change a zone's radius in meters",
+		Run:		meZoneSetRadiusCmd,
+		Flags:		flagsOnly(meZoneSetRadiusFlags),
+		Synopsis:	"change a zone's radius in meters",
 	})
 }
 
@@ -61,7 +61,7 @@ func meZoneSetRadiusCmd(args []string, stdout, stderr io.Writer) int {
 
 	var idClause string
 	if hasName {
-		idClause = fmt.Sprintf("name = %q", opts.Name)
+		idClause = fmt.Sprintf("name = %s", luaQuote(opts.Name))
 	} else {
 		idClause = fmt.Sprintf("id = %d", opts.ID)
 	}

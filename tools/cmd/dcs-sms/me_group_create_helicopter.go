@@ -8,22 +8,22 @@ import (
 )
 
 type meGroupCreateHelicopterOpts struct {
-	Country    string
-	Type       string
-	North      float64
-	East       float64
-	Name       string
-	Alt        float64
-	AltType    string
-	Speed      float64
-	Heading    float64
-	Skill      string
-	Livery     string
-	Frequency  float64
-	OnboardNum string
-	Timeout    time.Duration
-	Pretty     bool
-	SavedGames string
+	Country		string
+	Type		string
+	North		float64
+	East		float64
+	Name		string
+	Alt		float64
+	AltType		string
+	Speed		float64
+	Heading		float64
+	Skill		string
+	Livery		string
+	Frequency	float64
+	OnboardNum	string
+	Timeout		time.Duration
+	Pretty		bool
+	SavedGames	string
 }
 
 func meGroupCreateHelicopterFlags() (*flag.FlagSet, *meGroupCreateHelicopterOpts) {
@@ -50,9 +50,9 @@ func meGroupCreateHelicopterFlags() (*flag.FlagSet, *meGroupCreateHelicopterOpts
 
 func init() {
 	registerMeInfo("group", "create-helicopter", cmdInfo{
-		Run:      meGroupCreateHelicopterCmd,
-		Flags:    flagsOnly(meGroupCreateHelicopterFlags),
-		Synopsis: "spawn a new helicopter group at the given coordinates",
+		Run:		meGroupCreateHelicopterCmd,
+		Flags:		flagsOnly(meGroupCreateHelicopterFlags),
+		Synopsis:	"spawn a new helicopter group at the given coordinates",
 	})
 }
 
@@ -78,12 +78,9 @@ func meGroupCreateHelicopterCmd(args []string, stdout, stderr io.Writer) int {
 	}
 
 	luaArgs := fmt.Sprintf(
-		"{ country = %q, type = %q, north = %g, east = %g, name = %q, "+
-			"alt = %g, alt_type = %q, speed = %g, heading_deg = %g, "+
-			"skill = %q, livery = %q, frequency = %g, onboard_num = %q }",
-		opts.Country, opts.Type, opts.North, opts.East, opts.Name,
-		opts.Alt, opts.AltType, opts.Speed, opts.Heading,
-		opts.Skill, opts.Livery, opts.Frequency, opts.OnboardNum,
+		"{ country = %s, type = %s, north = %g, east = %g, name = %s, "+
+			"alt = %g, alt_type = %s, speed = %g, heading_deg = %g, "+
+			"skill = %s, livery = %s, frequency = %g, onboard_num = %s }", luaQuote(opts.Country), luaQuote(opts.Type), opts.North, opts.East, luaQuote(opts.Name), opts.Alt, luaQuote(opts.AltType), opts.Speed, opts.Heading, luaQuote(opts.Skill), luaQuote(opts.Livery), opts.Frequency, luaQuote(opts.OnboardNum),
 	)
 
 	resp, exitCode := runMeVerb("group_create_helicopter", luaArgs, opts.Timeout, opts.SavedGames, stderr)

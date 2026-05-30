@@ -8,13 +8,13 @@ import (
 )
 
 type meGroupSetFormationOpts struct {
-	Name       string
-	ID         int
-	Formation  string
-	Waypoint   int
-	Timeout    time.Duration
-	Pretty     bool
-	SavedGames string
+	Name		string
+	ID		int
+	Formation	string
+	Waypoint	int
+	Timeout		time.Duration
+	Pretty		bool
+	SavedGames	string
 }
 
 func meGroupSetFormationFlags() (*flag.FlagSet, *meGroupSetFormationOpts) {
@@ -32,9 +32,9 @@ func meGroupSetFormationFlags() (*flag.FlagSet, *meGroupSetFormationOpts) {
 
 func init() {
 	registerMeInfo("group", "set-formation", cmdInfo{
-		Run:      meGroupSetFormationCmd,
-		Flags:    flagsOnly(meGroupSetFormationFlags),
-		Synopsis: "set a group's formation",
+		Run:		meGroupSetFormationCmd,
+		Flags:		flagsOnly(meGroupSetFormationFlags),
+		Synopsis:	"set a group's formation",
 	})
 }
 
@@ -72,12 +72,12 @@ func meGroupSetFormationCmd(args []string, stdout, stderr io.Writer) int {
 
 	var idClause string
 	if hasName {
-		idClause = fmt.Sprintf("name = %q", opts.Name)
+		idClause = fmt.Sprintf("name = %s", luaQuote(opts.Name))
 	} else {
 		idClause = fmt.Sprintf("id = %d", opts.ID)
 	}
-	luaArgs := fmt.Sprintf("{ %s, formation = %q, waypoint = %d }",
-		idClause, opts.Formation, opts.Waypoint)
+	luaArgs := fmt.Sprintf("{ %s, formation = %s, waypoint = %d }",
+		idClause, luaQuote(opts.Formation), opts.Waypoint)
 
 	resp, exitCode := runMeVerb("group_set_formation", luaArgs, opts.Timeout, opts.SavedGames, stderr)
 	if exitCode != 0 {

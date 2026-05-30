@@ -8,12 +8,12 @@ import (
 )
 
 type meZoneSetHiddenOpts struct {
-	Name       string
-	ID         int
-	Hidden     bool
-	Timeout    time.Duration
-	Pretty     bool
-	SavedGames string
+	Name		string
+	ID		int
+	Hidden		bool
+	Timeout		time.Duration
+	Pretty		bool
+	SavedGames	string
 }
 
 func meZoneSetHiddenFlags() (*flag.FlagSet, *meZoneSetHiddenOpts) {
@@ -30,9 +30,9 @@ func meZoneSetHiddenFlags() (*flag.FlagSet, *meZoneSetHiddenOpts) {
 
 func init() {
 	registerMeInfo("zone", "set-hidden", cmdInfo{
-		Run:      meZoneSetHiddenCmd,
-		Flags:    flagsOnly(meZoneSetHiddenFlags),
-		Synopsis: "toggle whether a zone is hidden in the ME view",
+		Run:		meZoneSetHiddenCmd,
+		Flags:		flagsOnly(meZoneSetHiddenFlags),
+		Synopsis:	"toggle whether a zone is hidden in the ME view",
 	})
 }
 
@@ -66,7 +66,7 @@ func meZoneSetHiddenCmd(args []string, stdout, stderr io.Writer) int {
 
 	var idClause string
 	if hasName {
-		idClause = fmt.Sprintf("name = %q", opts.Name)
+		idClause = fmt.Sprintf("name = %s", luaQuote(opts.Name))
 	} else {
 		idClause = fmt.Sprintf("id = %d", opts.ID)
 	}
