@@ -16,6 +16,7 @@ local find_group_in_mission = H.find_group_in_mission
 local find_country_by_name  = H.find_country_by_name
 local inject_group          = H.inject_group
 local compute_lat_lon       = H.compute_lat_lon
+local new_combo_task        = H.new_combo_task
 
 -- _check_unit_type — guard against bad type strings reaching the .miz.
 -- DCS's save serializer (me_mission.lua:setRequiredModules) derefs
@@ -206,7 +207,7 @@ function M.group_create_plane(args)
                     type = 'Turning Point',
                     ETA = 0, ETA_locked = true,
                     formation_template = '',
-                    task = { id = 'ComboTask', params = { tasks = {} } },
+                    task = new_combo_task(),
                 },
             },
             routeRelativeTOT = false,
@@ -317,7 +318,7 @@ function M.group_create_helicopter(args)
                     type = 'Turning Point',
                     ETA = 0, ETA_locked = true,
                     formation_template = '',
-                    task = { id = 'ComboTask', params = { tasks = {} } },
+                    task = new_combo_task(),
                 },
             },
             routeRelativeTOT = false,
@@ -406,7 +407,7 @@ function M.group_create_vehicle(args)
                     type = 'Turning Point',
                     ETA = 0, ETA_locked = true,
                     formation_template = '',
-                    task = { id = 'ComboTask', params = { tasks = {} } },
+                    task = new_combo_task(),
                 },
             },
             routeRelativeTOT = false,
@@ -516,7 +517,7 @@ function M.group_create_ship(args)
                     type = 'Turning Point',
                     ETA = 0, ETA_locked = true,
                     formation_template = '',
-                    task = { id = 'ComboTask', params = { tasks = {} } },
+                    task = new_combo_task(),
                 },
             },
             routeRelativeTOT = false,
@@ -612,7 +613,7 @@ function M.group_create_static(args)
                     ETA = 0, ETA_locked = true,
                     formation_template = '',
                     speed = 0, speed_locked = true,
-                    task = { id = 'ComboTask', params = { tasks = {} } },
+                    task = new_combo_task(),
                 },
             },
             routeRelativeTOT = false,

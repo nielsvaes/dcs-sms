@@ -314,4 +314,30 @@ function H.inject_group(g, country, group_type)
     return g, nil
 end
 
+-- H.new_combo_task: return a fresh empty ComboTask block of the shape
+--   { id = 'ComboTask', params = { tasks = {} } }
+--
+-- Used everywhere a waypoint or a freshly-created group's start point
+-- needs an empty task slot. Centralized here because (a) the literal
+-- repeats across every group-create verb and every waypoint-add path,
+-- and (b) it's the canonical empty value that mirrors what ED itself
+-- writes when a new waypoint is added through the GUI — keeping it in
+-- one place means a future schema change (e.g. an extra ComboTask
+-- field) only has to land here.
+function H.new_combo_task()
+    return { id = 'ComboTask', params = { tasks = {} } }
+end
+
+-- TODO(cleanup): pull `_coerce_field_value` (verbs/route_verbs.lua) and
+-- `_trigger_coerce_value` (verbs/trigger_verbs.lua) into a shared
+-- `H.coerce_scalar(v, descr_default)` once a third caller needs it, or
+-- next time either site is changed for unrelated reasons. The two share
+-- a 4-line 'true'/'false'/tonumber/fallback ladder; the wrappers differ
+-- (the route side is type-hint-driven, the trigger side is descriptor-
+-- field-driven with array-of-int special cases) so a clean unification
+-- needs a 2-arg signature plus a descriptor-aware overload. Not blocking
+-- — flagged here so the next agent touching either coercion path doesn't
+-- miss the consolidation opportunity. See the gh #69 code-review report
+-- (2026-05-30) for the original finding.
+
 return H

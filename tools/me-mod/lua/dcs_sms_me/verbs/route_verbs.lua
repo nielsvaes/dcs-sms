@@ -22,6 +22,7 @@ local refresh_group_view    = H.refresh_group_view
 local find_unit_in_mission  = H.find_unit_in_mission
 local find_group_in_mission = H.find_group_in_mission
 local find_airbase_by_name  = H.find_airbase_by_name
+local new_combo_task        = H.new_combo_task
 
 local task_db = require('dcs_sms_me.task_db')
 
@@ -43,7 +44,7 @@ local task_db = require('dcs_sms_me.task_db')
 --
 -- Task preservation: every write verb leaves per-WP `task` tables
 -- untouched. Inheritance never copies tasks — new WPs always get
--- { id = 'ComboTask', params = { tasks = {} } }.
+-- new_combo_task().
 --
 -- Spec: docs/superpowers/specs/2026-05-11-me-route-geometry.md
 
@@ -262,7 +263,7 @@ local function inherit_waypoint(source, overrides, category)
         formation_template = '',
         ETA = 0,
         name = '',
-        task = { id = 'ComboTask', params = { tasks = {} } },
+        task = new_combo_task(),
     }
     if source then
         local inherit_fields = { 'alt', 'alt_type', 'speed', 'type', 'action',
@@ -277,7 +278,7 @@ local function inherit_waypoint(source, overrides, category)
         end
     end
     -- Always-empty task, regardless of overrides.
-    wp.task = { id = 'ComboTask', params = { tasks = {} } }
+    wp.task = new_combo_task()
     return wp
 end
 
@@ -390,7 +391,7 @@ function M.waypoint_add(args)
     elseif new_wp.ETA == nil then new_wp.ETA = 0 end
     if args.speed_locked ~= nil then new_wp.speed_locked = args.speed_locked end
     if args.eta_locked ~= nil then new_wp.ETA_locked = args.eta_locked end
-    new_wp.task = { id = 'ComboTask', params = { tasks = {} } }
+    new_wp.task = new_combo_task()
     refresh_route_panel()
     refresh_group_view(g)
     return { ok = true, group = g.name, index = new_wp.index - 1,
@@ -468,7 +469,7 @@ function M.waypoint_insert(args)
     elseif new_wp.ETA == nil then new_wp.ETA = 0 end
     if args.speed_locked ~= nil then new_wp.speed_locked = args.speed_locked end
     if args.eta_locked ~= nil then new_wp.ETA_locked = args.eta_locked end
-    new_wp.task = { id = 'ComboTask', params = { tasks = {} } }
+    new_wp.task = new_combo_task()
     refresh_route_panel()
     refresh_group_view(g)
     return { ok = true, group = g.name, index = args.before,
@@ -1114,7 +1115,7 @@ end
 -- Returns the tasks array.
 local function _ensure_combo(wp)
     if type(wp.task) ~= 'table' then
-        wp.task = { id = 'ComboTask', params = { tasks = {} } }
+        wp.task = new_combo_task()
     end
     if type(wp.task.params) ~= 'table' then wp.task.params = {} end
     if type(wp.task.params.tasks) ~= 'table' then wp.task.params.tasks = {} end
