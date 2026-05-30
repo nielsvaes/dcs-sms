@@ -1148,6 +1148,37 @@ local function _classify_slot(tasks, slot)
     return d.kind, d.canonical, nil
 end
 
+-- _coerce_field_value: heuristic string → typed conversion for k=v args.
+-- The Go CLI ships every field as a string (parseTriggerFieldArgs returns
+-- map[string]string and buildLuaFieldsExpr quotes everything). DCS often
+-- tolerates string-valued params at runtime but boolean comparisons like
+-- `if altitudeEnabled == true then` fail when the value is "true". For
+-- fields whose descriptor default exists, coerce to that type. Otherwise
+-- fall back to:
+--   "true" / "false"            → boolean
+--   pure numeric (incl. "-1.5") → number
+--   everything else             → string
+-- Anything that's already a non-string (table, number, boolean) passes
+-- through unchanged.
+local function _coerce_field_value(v, descr_default)
+    if type(v) ~= 'string' then return v end
+    if descr_default ~= nil then
+        local dt = type(descr_default)
+        if dt == 'number' then
+            local n = tonumber(v); if n ~= nil then return n end
+        elseif dt == 'boolean' then
+            if v == 'true'  then return true  end
+            if v == 'false' then return false end
+        end
+        -- descr says string (or table/other) — fall through to heuristic
+    end
+    if v == 'true'  then return true  end
+    if v == 'false' then return false end
+    local n = tonumber(v)
+    if n ~= nil then return n end
+    return v
+end
+
 -- _compose_task_entry: build a fresh task entry from a task_db descriptor
 -- + caller-overridden fields. Returns (entry, err).
 --
@@ -1162,24 +1193,29 @@ local function _compose_task_entry(descr, fields, tasks_len)
     local params = task_db.descr_default_params(descr)
     local enabled, auto, number = true, false, tasks_len + 1
     if type(fields) == 'table' then
-        for k, v in pairs(fields) do
+        for k, raw in pairs(fields) do
+            -- Structural keys keep their boolean/number contract — coerce
+            -- once via the simple branch then assert the final type.
             if k == 'enabled' then
+                local v = _coerce_field_value(raw, true)
                 if type(v) ~= 'boolean' then
                     return nil, 'enabled must be boolean (got ' .. type(v) .. ')'
                 end
                 enabled = v
             elseif k == 'auto' then
+                local v = _coerce_field_value(raw, true)
                 if type(v) ~= 'boolean' then
                     return nil, 'auto must be boolean (got ' .. type(v) .. ')'
                 end
                 auto = v
             elseif k == 'number' then
+                local v = _coerce_field_value(raw, 0)
                 if type(v) ~= 'number' then
                     return nil, 'number must be a number (got ' .. type(v) .. ')'
                 end
                 number = v
             else
-                params[k] = v
+                params[k] = _coerce_field_value(raw, params[k])
             end
         end
     end
