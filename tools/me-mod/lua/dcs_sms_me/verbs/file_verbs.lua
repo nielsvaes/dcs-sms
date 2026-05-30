@@ -135,6 +135,91 @@ local function refresh_menubar_title(path)
     end)
 end
 
+-- _verify_mission — re-implementation of DCS's check_mission validation loop
+-- (me_mission.lua:4735). Walks the coalition tree, calls panel_route.verify
+-- for every group and panel_aircraft.verify for Player/Client aircraft, and
+-- composes a per-group `<name>:\n<errors>` string. Returns nil when the
+-- mission is valid, the truncated (30-line max) error string otherwise.
+--
+-- We re-implement rather than reuse DCS's check_mission because the latter
+-- emits the validation string via a module-local `showErrorMessageBox`
+-- closure that can't be intercepted from outside without `debug.setupvalue`
+-- (the ME env sandboxes the debug library). Calling check_mission(true)
+-- directly would pop DCS's modal and block the bridge tick.
+--
+-- The skill strings "Player" / "Client" are hard-coded to mirror what
+-- DCS's me_mission.crutches helpers return; if ED renames them in a
+-- future build, aircraft verify silently degrades to a skip — same
+-- failure mode as the pre-fix bridge (returning the generic "save
+-- failed" without per-group detail), not worse.
+local function _verify_mission(mission_table)
+    if type(mission_table) ~= 'table' or type(mission_table.coalition) ~= 'table' then
+        return nil
+    end
+    if type(_G.panel_route) ~= 'table' or type(_G.panel_route.verify) ~= 'function' then
+        return nil
+    end
+
+    local summary = nil
+    for _, coalition in pairs(mission_table.coalition) do
+        if type(coalition) == 'table' and type(coalition.country) == 'table' then
+            for _, country in pairs(coalition.country) do
+                for cat_name, cat in pairs(country) do
+                    if type(cat) == 'table' and type(cat.group) == 'table' then
+                        for _, group in pairs(cat.group) do
+                            -- DCS's check_mission unconditionally dereferences
+                            -- group.route.points[1].ETA; we guard to avoid
+                            -- crashing on a malformed group.
+                            if group.route and group.route.points
+                                and group.route.points[1] and group.route.points[1].ETA then
+                                group.start_time = group.route.points[1].ETA
+                            end
+
+                            local route_err
+                            local ok_pr = pcall(function()
+                                route_err = _G.panel_route.verify(group.route, group.lateActivation)
+                            end)
+                            if not ok_pr then route_err = nil end
+
+                            local group_err = false
+                            if cat_name == 'plane' or cat_name == 'helicopter' then
+                                local skill = group.units and group.units[1] and group.units[1].skill
+                                if skill == 'Player' or skill == 'Client' then
+                                    if type(_G.panel_aircraft) == 'table'
+                                        and type(_G.panel_aircraft.verify) == 'function' then
+                                        local ok_pa = pcall(function()
+                                            group_err = _G.panel_aircraft.verify(group)
+                                        end)
+                                        if not ok_pa then group_err = false end
+                                    end
+                                end
+                            end
+
+                            local combined = (route_err or group_err) and
+                                ((route_err and route_err .. '\n' or '') .. (group_err or ''))
+                            if combined then
+                                summary = (summary or '') .. tostring(group.name) .. ':\n' .. combined
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    if summary then
+        local lines_max, lines, crPos = 30, 0, 0
+        while lines < lines_max and crPos ~= nil do
+            crPos = string.find(summary, '\n', crPos + 1)
+            lines = lines + 1
+        end
+        if lines >= lines_max and crPos then
+            summary = string.sub(summary, 1, crPos) .. '...'
+        end
+    end
+    return summary
+end
+
 -- _save_mission_with_reopen_dance — shared body for file_save / file_save_as.
 --
 -- module_mission.save_mission_safe(path, false, noLoad=false) writes the .miz
@@ -176,6 +261,23 @@ local function _save_mission_with_reopen_dance(verb, path, reopen)
         end
     end
 
+    -- Pre-save validation. DCS's check_mission (me_mission.lua:4735) builds
+    -- a per-group error string in `verifySummResult` and routes it to a
+    -- module-local `showErrorMessageBox` when showError=true. The bare-name
+    -- call resolves via the me_mission chunk's upvalues, not _G — so we
+    -- can't intercept it from outside without `debug.setupvalue`, which is
+    -- sandboxed out in the ME env. Instead we re-implement check_mission's
+    -- loop directly, calling the globally-accessible `panel_route.verify`
+    -- and `panel_aircraft.verify`. The result is structurally identical to
+    -- what DCS would have displayed in its modal. If we find any errors,
+    -- we surface them as the bridge error and skip the save entirely;
+    -- otherwise we delegate to save_mission_safe with showError=false
+    -- (matching the prior no-modal contract).
+    local validation_error = _verify_mission(module_mission.mission)
+    if validation_error then
+        return { ok = false, error = 'save failed (mission validation): ' .. validation_error }
+    end
+
     local noLoad = not reopen
     local ok_call, ok_or_err = pcall(module_mission.save_mission_safe, path, false, noLoad)
     if not ok_call then
@@ -184,7 +286,7 @@ local function _save_mission_with_reopen_dance(verb, path, reopen)
                          .. ' (file written; post-save reload crashed — try --reopen=false)' }
     end
     if ok_or_err ~= true then
-        return { ok = false, error = 'save failed (mission validation or I/O); enable showError to see details' }
+        return { ok = false, error = 'save failed (I/O); verify disk space + write permission to ' .. tostring(path) }
     end
 
     -- Post-save: refresh the map view against the rebuilt tables. Mirrors
