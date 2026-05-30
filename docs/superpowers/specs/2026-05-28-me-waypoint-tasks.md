@@ -293,3 +293,98 @@ hypothesized. The actual layout is:
   task's `params` defaults (each entry: `{id, type, default}` —
   no `options` arrays because the real descriptors don't carry them
   in `actionsData`).
+
+## Follow-up revisions (2026-05-30)
+
+Implementation work after the initial /write-it pass surfaced three
+changes that the spec needs to reflect. The 2026-05-28 "Deviations"
+section above is kept intact so readers can see the design's evolution
+from initial probe → revised v1.
+
+### D6 reinstated — `availableActions` IS the static index
+
+The 2026-05-28 deviation dropped D6 group-task gating on the assumption
+that ED only enforced legality via the runtime `isGroupCapableOfAction`
+predicate. A second probe found this was wrong: `me_action_db.lua`
+also exposes a static three-level lookup
+`me_action_db.availableActions[group_type][action_type][group_task]`
+that returns the list of legal action ids for that combination — where
+`group_type` is `"plane" | "helicopter" | "vehicle" | "ship"`,
+`action_type` is `"waypoint" | "enroute"` (matching the kind discriminator
+already used by `task_db`), and `group_task` is the group's main task
+string (`"CAS"`, `"CAP"`, `"Ground Attack"`, `"Nothing"`, …). The lookup
+is pure data, no live group reference needed, so gating can be enforced
+entirely at verb time from the editable mission table.
+
+Consequence: D6 is back. `add-task` / `add-enroute-task` resolve the
+group's `(group_type, group_task)` pair and refuse `--task <id>` if it
+isn't in
+`availableActions[group_type][<kind>][group_task]`. The rejection error
+points the caller at `me waypoint list-tasks --group-name <X>` for the
+legal set.
+
+### D7 updated — `--group-name` / `--group-id` re-enabled on `list-tasks`
+
+With `availableActions` available, `list-tasks` regains its original
+group-scoped filtering: when `--group-name` or `--group-id` is passed
+(without `--all`), the verb intersects the discovered task lists with
+`availableActions[group_type][<kind>][group_task]` and returns only the
+ids that the ME GUI would also accept. `--all` continues to dump the
+full (group_type × kind × group_task) matrix.
+
+### D8 updated — `describe-task` carries a `variants` array
+
+`describe-task` now optionally returns a `variants` field for tasks
+whose runtime parameters depend on a pattern selector. The first such
+task is Orbit, where the `pattern` field controls which of the
+`altitude` / `speed` / `point` / `point2` sub-params are meaningful
+(`"Race-Track"` uses both points; `"Circle"` ignores `point2`).
+The variants array surfaces the pattern-conditional sub-params so a
+caller doesn't have to know the pattern-to-fields mapping out of band.
+
+The variants data comes from a new supplementary descriptor file —
+see D12.
+
+### D11. `me group focus` verb
+
+A new verb `me group focus --name <X>` (or `--id <N>`) was added to
+programmatically raise the AIRPLANE GROUP / HELICOPTER GROUP panel and
+its route panel for the named group, mirroring what ED's `MapWindow`
+click handler does when the user clicks a group on the F10 map. The
+verb is the natural follow-up after `me group create-{plane,helicopter}`
+— without it the freshly-created group has no panel surfaced and the
+next `me waypoint *` call has nothing wired up GUI-side to refresh.
+
+The verb is a no-op for vehicle / ship / static groups (no group panel
+to raise) and returns `{ok=true, focused=false, reason="..."}` rather
+than erroring.
+
+### D12. `task_extras.lua` supplementary descriptor file
+
+`me_action_db.actionsData` carries the field-level defaults but doesn't
+encode pattern-conditional sub-params or other run-time-shaped variants.
+A new file `tools/me-mod/lua/dcs_sms_me/task_extras.lua` holds the
+supplementary descriptor data — currently the Orbit pattern → sub-params
+map referenced by D8. `task_db` consults `task_extras` when assembling
+the `describe-task` response and surfaces the data as the `variants`
+field. New entries get added to `task_extras` as they're discovered;
+the file is hand-curated against ED's runtime, not auto-generated.
+
+### D13. k=v field args type-coerce to typed Lua values
+
+`add-task` / `add-enroute-task` accept positional `k=v` arg pairs for
+task parameters. The verb side now coerces these strings to typed Lua
+values before they reach the editable mission table:
+
+- If the field's descriptor (from `actionsData` or `task_extras`) says
+  the field is numeric → `tonumber(v)` ; if boolean → `v == "true"`.
+  Descriptor type wins when known.
+- Heuristic fallback for fields the descriptor doesn't cover: a value
+  that parses cleanly as a number becomes a number; the literal strings
+  `"true"` / `"false"` become booleans; everything else stays a string.
+
+Without this coercion, ED reads e.g. `altitude="2000"` (a string) where
+it expects a number and silently substitutes a default at run time —
+the field appears written in `me waypoint get` but doesn't take effect
+in the mission. Coercion makes round-trips via the verb match what the
+ME GUI would have written.

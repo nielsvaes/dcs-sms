@@ -113,6 +113,48 @@ This is the first tag after a long quiet period — `sms.version` had been froze
   for managing per-waypoint ComboTask payloads from the CLI (gh #69).
 - `me waypoint list-tasks` and `me waypoint describe-task` to introspect
   legal task ids and their parameter schemas from ED's `me_action_db`.
+- `me group focus --name <X>` (or `--id <N>`) — raises the AIRPLANE /
+  HELICOPTER GROUP panel and the route panel for a programmatically
+  created group, mirroring what ED's `MapWindow` click handler does
+  when the user clicks a group on the F10 map. No-op (returns
+  `focused=false`) for vehicle / ship / static groups.
+- `me waypoint describe-task` now returns a `variants` field for
+  pattern-conditional tasks (currently Orbit, where `pattern` controls
+  which of `altitude` / `speed` / `point` / `point2` are meaningful).
+  Backed by a new `tools/me-mod/lua/dcs_sms_me/task_extras.lua`
+  supplementary descriptor file that holds the variant data
+  `actionsData` doesn't carry — hand-curated against ED's runtime.
+- `me waypoint add-task` / `add-enroute-task` k=v field args now
+  coerce to typed Lua values: numeric strings become numbers, `"true"`
+  / `"false"` become booleans. Descriptor type (from `actionsData` /
+  `task_extras`) wins when known; heuristic fallback (clean number
+  parse, literal `"true"`/`"false"`) covers descriptor-less fields.
+  Without coercion ED silently substitutes defaults at run time for
+  string-typed numeric fields.
+
+**Changed**
+- `me waypoint list-tasks` re-accepts `--group-name` / `--group-id` and
+  filters returned task ids to those legal per
+  `me_action_db.availableActions[group_type][<kind>][group_task]`. The
+  initial /write-it pass dropped this on the (incorrect) assumption
+  that no static index existed; a follow-up probe found
+  `availableActions` is exactly that index. `--all` continues to dump
+  the full unfiltered matrix.
+- Task entries copy `task.key` when the descriptor carries one — this
+  covers the CAS / CAP / SEAD / FighterSweep / AntiShip variants of
+  `EngageTargets`, which share an action id but differ by `key`.
+  Without copying `key`, ED silently filters the entry from the
+  group's task listbox.
+
+**Fixed**
+- `me waypoint add-task` / `add-enroute-task` now gate against
+  `me_action_db.availableActions[group_type][<kind>][group_task]` and
+  refuse `--task <id>` if the id isn't legal for the group's main
+  task. The error names the offending combo and points the caller at
+  `me waypoint list-tasks --group-name <X>` for the legal set. The
+  initial /write-it pass left this gate open and relied on ED to
+  reject at save / run time — which it does silently for some
+  combinations, so the bad assignment looked successful from the CLI.
 
 ### [0.14.3] — 2026-05-26
 
