@@ -156,6 +156,19 @@ This is the first tag after a long quiet period — `sms.version` had been froze
   reject at save / run time — which it does silently for some
   combinations, so the bad assignment looked successful from the CLI.
 
+**Internal**
+- New `H.new_combo_task()` helper in `verb_helpers.lua`. Collapses
+  9 sites of the `{ id = 'ComboTask', params = { tasks = {} } }`
+  literal across `verbs/group_verbs.lua` (5 create-* paths) and
+  `verbs/route_verbs.lua` (4 waypoint paths). Future schema changes
+  to the ComboTask block land in one place.
+- TODO marker next to `H.new_combo_task()` flagging a future
+  consolidation: `_coerce_field_value` (route_verbs) and
+  `_trigger_coerce_value` (trigger_verbs) share the same
+  `'true'/'false'/tonumber/fallback` ladder and could become a
+  shared `H.coerce_scalar(v, descr_default)` next time either site
+  is changed.
+
 ### [0.14.3] — 2026-05-26
 
 **Fixed**
