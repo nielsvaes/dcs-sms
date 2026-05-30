@@ -313,17 +313,81 @@ function M.describe_by_stored(stored_task)
     return M.describe(canonical, nil)
 end
 
+-- _load_extras: lazy-require task_extras.lua. Optional; missing module
+-- is treated as "no supplementary descriptors" and never blocks
+-- describe_fields. Re-evaluated each call so tests / dev-reload pick up
+-- edits.
+local function _load_extras()
+    local ok, extras = pcall(require, 'dcs_sms_me.task_extras')
+    if not ok or type(extras) ~= 'table' then return nil end
+    return extras
+end
+
+-- _copy_field_spec: shallow-copy one entry from task_extras to avoid
+-- exposing the cached table to caller mutation.
+local function _copy_field_spec(f)
+    local out = {}
+    for k, v in pairs(f) do
+        if type(v) == 'table' then
+            local sub = {}
+            for i, vv in ipairs(v) do sub[i] = vv end
+            out[k] = sub
+        else
+            out[k] = v
+        end
+    end
+    return out
+end
+
 -- M.descr_fields: flatten the entry.params defaults table into a sorted
 -- list of {id, type, default} rows for JSON-friendly describe output.
+-- When task_extras carries a richer schema for this task's canonical id,
+-- the `always` fields replace the actionsData defaults and `variants`
+-- are returned via a separate selector entry on each field.
 function M.descr_fields(entry)
     local out = {}
-    if type(entry) ~= 'table' or type(entry.params) ~= 'table' then
+    if type(entry) ~= 'table' then return out end
+
+    local extras = _load_extras()
+    local task_extras = extras and entry.canonical and extras[entry.canonical]
+
+    if task_extras then
+        -- "always" fields take precedence over actionsData defaults.
+        for _, f in ipairs(task_extras.always or {}) do
+            table.insert(out, _copy_field_spec(f))
+        end
+        if task_extras.selector then
+            table.insert(out, _copy_field_spec(task_extras.selector))
+        end
+        table.sort(out, function(a, b) return tostring(a.id) < tostring(b.id) end)
         return out
     end
+
+    if type(entry.params) ~= 'table' then return out end
     for k, v in pairs(entry.params) do
         table.insert(out, { id = k, type = type(v), default = v })
     end
     table.sort(out, function(a, b) return tostring(a.id) < tostring(b.id) end)
+    return out
+end
+
+-- M.descr_variants: return the array of pattern-conditional variants
+-- (each { value=..., fields={...} }) for the entry, or nil if the task
+-- has no task_extras entry. Used by waypoint_describe_task to surface
+-- per-pattern extra fields alongside the always-on schema.
+function M.descr_variants(entry)
+    if type(entry) ~= 'table' or not entry.canonical then return nil end
+    local extras = _load_extras()
+    local task_extras = extras and extras[entry.canonical]
+    if not task_extras or type(task_extras.variants) ~= 'table' then return nil end
+    local out = {}
+    for _, v in ipairs(task_extras.variants) do
+        local copy = { value = v.value, fields = {} }
+        for i, f in ipairs(v.fields or {}) do
+            copy.fields[i] = _copy_field_spec(f)
+        end
+        table.insert(out, copy)
+    end
     return out
 end
 

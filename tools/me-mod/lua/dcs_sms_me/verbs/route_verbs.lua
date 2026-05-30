@@ -1408,9 +1408,14 @@ function M.waypoint_describe_task(args)
     -- display_name/desc/params. group_tasks is gone (no static gating
     -- index — see spec "Deviations" section).
     local fields = task_db.descr_fields(entry)
-    return { ok = true, task = entry.canonical, kind = entry.kind,
-             display_name = entry.display_name, desc = entry.desc,
-             fields = fields }
+    local resp = { ok = true, task = entry.canonical, kind = entry.kind,
+                   display_name = entry.display_name, desc = entry.desc,
+                   fields = fields }
+    -- For pattern-conditional tasks (Orbit etc.), surface the variants
+    -- so callers can see which extra fields apply per selector value.
+    local variants = task_db.descr_variants(entry)
+    if variants then resp.variants = variants end
+    return resp
 end
 
 return M
