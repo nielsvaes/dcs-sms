@@ -8,13 +8,13 @@ import (
 )
 
 type meZoneSetPosOpts struct {
-	Name       string
-	ID         int
-	North      float64
-	East       float64
-	Timeout    time.Duration
-	Pretty     bool
-	SavedGames string
+	Name		string
+	ID		int
+	North		float64
+	East		float64
+	Timeout		time.Duration
+	Pretty		bool
+	SavedGames	string
 }
 
 func meZoneSetPosFlags() (*flag.FlagSet, *meZoneSetPosOpts) {
@@ -32,9 +32,9 @@ func meZoneSetPosFlags() (*flag.FlagSet, *meZoneSetPosOpts) {
 
 func init() {
 	registerMeInfo("zone", "set-pos", cmdInfo{
-		Run:      meZoneSetPosCmd,
-		Flags:    flagsOnly(meZoneSetPosFlags),
-		Synopsis: "move a zone to a new north/east coordinate",
+		Run:		meZoneSetPosCmd,
+		Flags:		flagsOnly(meZoneSetPosFlags),
+		Synopsis:	"move a zone to a new north/east coordinate",
 	})
 }
 
@@ -75,7 +75,7 @@ func meZoneSetPosCmd(args []string, stdout, stderr io.Writer) int {
 
 	var idClause string
 	if hasName {
-		idClause = fmt.Sprintf("name = %q", opts.Name)
+		idClause = fmt.Sprintf("name = %s", luaQuote(opts.Name))
 	} else {
 		idClause = fmt.Sprintf("id = %d", opts.ID)
 	}

@@ -8,12 +8,12 @@ import (
 )
 
 type meGroupSetFrequencyOpts struct {
-	Name       string
-	ID         int
-	Frequency  float64
-	Timeout    time.Duration
-	Pretty     bool
-	SavedGames string
+	Name		string
+	ID		int
+	Frequency	float64
+	Timeout		time.Duration
+	Pretty		bool
+	SavedGames	string
 }
 
 func meGroupSetFrequencyFlags() (*flag.FlagSet, *meGroupSetFrequencyOpts) {
@@ -30,9 +30,9 @@ func meGroupSetFrequencyFlags() (*flag.FlagSet, *meGroupSetFrequencyOpts) {
 
 func init() {
 	registerMeInfo("group", "set-frequency", cmdInfo{
-		Run:      meGroupSetFrequencyCmd,
-		Flags:    flagsOnly(meGroupSetFrequencyFlags),
-		Synopsis: "set a group's radio frequency in MHz",
+		Run:		meGroupSetFrequencyCmd,
+		Flags:		flagsOnly(meGroupSetFrequencyFlags),
+		Synopsis:	"set a group's radio frequency in MHz",
 	})
 }
 
@@ -60,7 +60,7 @@ func meGroupSetFrequencyCmd(args []string, stdout, stderr io.Writer) int {
 
 	var idClause string
 	if hasName {
-		idClause = fmt.Sprintf("name = %q", opts.Name)
+		idClause = fmt.Sprintf("name = %s", luaQuote(opts.Name))
 	} else {
 		idClause = fmt.Sprintf("id = %d", opts.ID)
 	}

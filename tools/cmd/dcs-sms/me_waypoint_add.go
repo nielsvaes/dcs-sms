@@ -9,29 +9,29 @@ import (
 )
 
 type meWaypointAddOpts struct {
-	GroupName         string
-	GroupID           int
-	North             float64
-	East              float64
-	Alt               float64
-	AltType           string
-	Speed             float64
-	WpType            string
-	Action            string
-	NameText          string
-	ETA               float64
-	SpeedLocked       string // tri-state via string: "" / "true" / "false"
-	ETALocked         string
-	FormationTemplate string
-	Timeout           time.Duration
-	Pretty            bool
-	SavedGames        string
+	GroupName		string
+	GroupID			int
+	North			float64
+	East			float64
+	Alt			float64
+	AltType			string
+	Speed			float64
+	WpType			string
+	Action			string
+	NameText		string
+	ETA			float64
+	SpeedLocked		string	// tri-state via string: "" / "true" / "false"
+	ETALocked		string
+	FormationTemplate	string
+	Timeout			time.Duration
+	Pretty			bool
+	SavedGames		string
 
-	northSet, eastSet      bool
-	altSet, altTypeSet     bool
-	speedSet, wpTypeSet    bool
-	actionSet, nameTextSet bool
-	etaSet, formationSet   bool
+	northSet, eastSet	bool
+	altSet, altTypeSet	bool
+	speedSet, wpTypeSet	bool
+	actionSet, nameTextSet	bool
+	etaSet, formationSet	bool
 }
 
 func meWaypointAddFlags() (*flag.FlagSet, *meWaypointAddOpts) {
@@ -59,9 +59,9 @@ func meWaypointAddFlags() (*flag.FlagSet, *meWaypointAddOpts) {
 
 func init() {
 	registerMeInfo("waypoint", "add", cmdInfo{
-		Run:      meWaypointAddCmd,
-		Flags:    flagsOnly(meWaypointAddFlags),
-		Synopsis: "append a waypoint to a group's route (inherits unset fields from previous WP)",
+		Run:		meWaypointAddCmd,
+		Flags:		flagsOnly(meWaypointAddFlags),
+		Synopsis:	"append a waypoint to a group's route (inherits unset fields from previous WP)",
 	})
 }
 
@@ -112,7 +112,7 @@ func meWaypointAddCmd(args []string, stdout, stderr io.Writer) int {
 	var b strings.Builder
 	b.WriteString("{ ")
 	if hasName {
-		fmt.Fprintf(&b, "name = %q, ", opts.GroupName)
+		fmt.Fprintf(&b, "name = %s, ", luaQuote(opts.GroupName))
 	} else {
 		fmt.Fprintf(&b, "id = %d, ", opts.GroupID)
 	}
@@ -121,25 +121,25 @@ func meWaypointAddCmd(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(&b, ", alt = %g", opts.Alt)
 	}
 	if opts.altTypeSet {
-		fmt.Fprintf(&b, ", alt_type = %q", opts.AltType)
+		fmt.Fprintf(&b, ", alt_type = %s", luaQuote(opts.AltType))
 	}
 	if opts.speedSet {
 		fmt.Fprintf(&b, ", speed = %g", opts.Speed)
 	}
 	if opts.wpTypeSet {
-		fmt.Fprintf(&b, ", type = %q", opts.WpType)
+		fmt.Fprintf(&b, ", type = %s", luaQuote(opts.WpType))
 	}
 	if opts.actionSet {
-		fmt.Fprintf(&b, ", action = %q", opts.Action)
+		fmt.Fprintf(&b, ", action = %s", luaQuote(opts.Action))
 	}
 	if opts.nameTextSet {
-		fmt.Fprintf(&b, ", name_text = %q", opts.NameText)
+		fmt.Fprintf(&b, ", name_text = %s", luaQuote(opts.NameText))
 	}
 	if opts.etaSet {
 		fmt.Fprintf(&b, ", eta = %g", opts.ETA)
 	}
 	if opts.formationSet {
-		fmt.Fprintf(&b, ", formation_template = %q", opts.FormationTemplate)
+		fmt.Fprintf(&b, ", formation_template = %s", luaQuote(opts.FormationTemplate))
 	}
 	if opts.SpeedLocked != "" {
 		v, ok := parseBoolFlag(opts.SpeedLocked)

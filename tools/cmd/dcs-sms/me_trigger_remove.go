@@ -8,10 +8,10 @@ import (
 )
 
 type meTriggerRemoveOpts struct {
-	Name       string
-	Timeout    time.Duration
-	Pretty     bool
-	SavedGames string
+	Name		string
+	Timeout		time.Duration
+	Pretty		bool
+	SavedGames	string
 }
 
 func meTriggerRemoveFlags() (*flag.FlagSet, *meTriggerRemoveOpts) {
@@ -26,9 +26,9 @@ func meTriggerRemoveFlags() (*flag.FlagSet, *meTriggerRemoveOpts) {
 
 func init() {
 	registerMeInfo("trigger", "remove", cmdInfo{
-		Run:      meTriggerRemoveCmd,
-		Flags:    flagsOnly(meTriggerRemoveFlags),
-		Synopsis: "delete a trigger from the open mission",
+		Run:		meTriggerRemoveCmd,
+		Flags:		flagsOnly(meTriggerRemoveFlags),
+		Synopsis:	"delete a trigger from the open mission",
 	})
 }
 
@@ -46,7 +46,7 @@ func meTriggerRemoveCmd(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "dcs-sms me trigger remove: --name is required")
 		return 2
 	}
-	luaArgs := fmt.Sprintf("{ name = %q }", opts.Name)
+	luaArgs := fmt.Sprintf("{ name = %s }", luaQuote(opts.Name))
 	resp, exitCode := runMeVerb("trigger_remove", luaArgs, opts.Timeout, opts.SavedGames, stderr)
 	if exitCode != 0 {
 		return exitCode

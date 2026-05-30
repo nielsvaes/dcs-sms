@@ -8,15 +8,15 @@ import (
 )
 
 type meWaypointSetSpeedLockedOpts struct {
-	GroupName  string
-	GroupID    int
-	Index      int
-	Locked     string
-	Timeout    time.Duration
-	Pretty     bool
-	SavedGames string
+	GroupName	string
+	GroupID		int
+	Index		int
+	Locked		string
+	Timeout		time.Duration
+	Pretty		bool
+	SavedGames	string
 
-	indexSet, lockedSet bool
+	indexSet, lockedSet	bool
 }
 
 func meWaypointSetSpeedLockedFlags() (*flag.FlagSet, *meWaypointSetSpeedLockedOpts) {
@@ -34,9 +34,9 @@ func meWaypointSetSpeedLockedFlags() (*flag.FlagSet, *meWaypointSetSpeedLockedOp
 
 func init() {
 	registerMeInfo("waypoint", "set-speed-locked", cmdInfo{
-		Run:      meWaypointSetSpeedLockedCmd,
-		Flags:    flagsOnly(meWaypointSetSpeedLockedFlags),
-		Synopsis: "set a waypoint's speed_locked flag",
+		Run:		meWaypointSetSpeedLockedCmd,
+		Flags:		flagsOnly(meWaypointSetSpeedLockedFlags),
+		Synopsis:	"set a waypoint's speed_locked flag",
 	})
 }
 
@@ -75,7 +75,7 @@ func meWaypointSetSpeedLockedCmd(args []string, stdout, stderr io.Writer) int {
 	}
 	var idClause string
 	if hasName {
-		idClause = fmt.Sprintf("name = %q", opts.GroupName)
+		idClause = fmt.Sprintf("name = %s", luaQuote(opts.GroupName))
 	} else {
 		idClause = fmt.Sprintf("id = %d", opts.GroupID)
 	}

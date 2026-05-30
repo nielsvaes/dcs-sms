@@ -9,13 +9,13 @@ import (
 )
 
 type meUnitSetAltOpts struct {
-	Name       string
-	ID         int
-	Alt        float64
-	AltType    string
-	Timeout    time.Duration
-	Pretty     bool
-	SavedGames string
+	Name		string
+	ID		int
+	Alt		float64
+	AltType		string
+	Timeout		time.Duration
+	Pretty		bool
+	SavedGames	string
 }
 
 func meUnitSetAltFlags() (*flag.FlagSet, *meUnitSetAltOpts) {
@@ -33,9 +33,9 @@ func meUnitSetAltFlags() (*flag.FlagSet, *meUnitSetAltOpts) {
 
 func init() {
 	registerMeInfo("unit", "set-alt", cmdInfo{
-		Run:      meUnitSetAltCmd,
-		Flags:    flagsOnly(meUnitSetAltFlags),
-		Synopsis: "set a unit's altitude in meters",
+		Run:		meUnitSetAltCmd,
+		Flags:		flagsOnly(meUnitSetAltFlags),
+		Synopsis:	"set a unit's altitude in meters",
 	})
 }
 
@@ -79,11 +79,11 @@ func meUnitSetAltCmd(args []string, stdout, stderr io.Writer) int {
 
 	var idClause string
 	if hasName {
-		idClause = fmt.Sprintf("name = %q", opts.Name)
+		idClause = fmt.Sprintf("name = %s", luaQuote(opts.Name))
 	} else {
 		idClause = fmt.Sprintf("id = %d", opts.ID)
 	}
-	luaArgs := fmt.Sprintf("{ %s, alt = %g, alt_type = %q }", idClause, opts.Alt, altType)
+	luaArgs := fmt.Sprintf("{ %s, alt = %g, alt_type = %s }", idClause, opts.Alt, luaQuote(altType))
 
 	resp, exitCode := runMeVerb("unit_set_alt", luaArgs, opts.Timeout, opts.SavedGames, stderr)
 	if exitCode != 0 {

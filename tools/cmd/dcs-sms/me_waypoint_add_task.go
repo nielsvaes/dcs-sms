@@ -8,15 +8,15 @@ import (
 )
 
 type meWaypointAddTaskOpts struct {
-	GroupName  string
-	GroupID    int
-	Index      int
-	Task       string
-	Timeout    time.Duration
-	Pretty     bool
-	SavedGames string
+	GroupName	string
+	GroupID		int
+	Index		int
+	Task		string
+	Timeout		time.Duration
+	Pretty		bool
+	SavedGames	string
 
-	indexSet bool
+	indexSet	bool
 }
 
 func meWaypointAddTaskFlags() (*flag.FlagSet, *meWaypointAddTaskOpts) {
@@ -35,9 +35,9 @@ func meWaypointAddTaskFlags() (*flag.FlagSet, *meWaypointAddTaskOpts) {
 
 func init() {
 	registerMeInfo("waypoint", "add-task", cmdInfo{
-		Run:      meWaypointAddTaskCmd,
-		Flags:    flagsOnly(meWaypointAddTaskFlags),
-		Synopsis: "append a waypoint-kind task to a waypoint's ComboTask",
+		Run:		meWaypointAddTaskCmd,
+		Flags:		flagsOnly(meWaypointAddTaskFlags),
+		Synopsis:	"append a waypoint-kind task to a waypoint's ComboTask",
 	})
 }
 
@@ -73,12 +73,12 @@ func meWaypointAddTaskCmd(args []string, stdout, stderr io.Writer) int {
 	}
 	var idClause string
 	if hasName {
-		idClause = fmt.Sprintf("name = %q", opts.GroupName)
+		idClause = fmt.Sprintf("name = %s", luaQuote(opts.GroupName))
 	} else {
 		idClause = fmt.Sprintf("id = %d", opts.GroupID)
 	}
-	luaArgs := fmt.Sprintf("{ %s, index = %d, task = %q, fields = %s }",
-		idClause, opts.Index, opts.Task, buildLuaFieldsExpr(fields))
+	luaArgs := fmt.Sprintf("{ %s, index = %d, task = %s, fields = %s }",
+		idClause, opts.Index, luaQuote(opts.Task), buildLuaFieldsExpr(fields))
 	resp, exitCode := runMeVerb("waypoint_add_task", luaArgs, opts.Timeout, opts.SavedGames, stderr)
 	if exitCode != 0 {
 		return exitCode

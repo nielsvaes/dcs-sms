@@ -9,15 +9,15 @@ import (
 )
 
 type meUnitListOpts struct {
-	Side       string
-	Country    string
-	Category   string
-	Group      string
-	Name       string
-	Type       string
-	Timeout    time.Duration
-	Pretty     bool
-	SavedGames string
+	Side		string
+	Country		string
+	Category	string
+	Group		string
+	Name		string
+	Type		string
+	Timeout		time.Duration
+	Pretty		bool
+	SavedGames	string
 }
 
 func meUnitListFlags() (*flag.FlagSet, *meUnitListOpts) {
@@ -37,9 +37,9 @@ func meUnitListFlags() (*flag.FlagSet, *meUnitListOpts) {
 
 func init() {
 	registerMeInfo("unit", "list", cmdInfo{
-		Run:      meUnitListCmd,
-		Flags:    flagsOnly(meUnitListFlags),
-		Synopsis: "list all units in the open mission",
+		Run:		meUnitListCmd,
+		Flags:		flagsOnly(meUnitListFlags),
+		Synopsis:	"list all units in the open mission",
 	})
 }
 
@@ -53,19 +53,19 @@ func meUnitListCmd(args []string, stdout, stderr io.Writer) int {
 
 	var parts []string
 	if opts.Side != "" {
-		parts = append(parts, fmt.Sprintf("side = %q", strings.ToLower(opts.Side)))
+		parts = append(parts, fmt.Sprintf("side = %s", luaQuote(strings.ToLower(opts.Side))))
 	}
 	if opts.Country != "" {
-		parts = append(parts, fmt.Sprintf("country = %q", opts.Country))
+		parts = append(parts, fmt.Sprintf("country = %s", luaQuote(opts.Country)))
 	}
 	if opts.Category != "" {
-		parts = append(parts, fmt.Sprintf("category = %q", strings.ToLower(opts.Category)))
+		parts = append(parts, fmt.Sprintf("category = %s", luaQuote(strings.ToLower(opts.Category))))
 	}
 	if opts.Group != "" {
-		parts = append(parts, fmt.Sprintf("group = %q", opts.Group))
+		parts = append(parts, fmt.Sprintf("group = %s", luaQuote(opts.Group)))
 	}
 	if opts.Name != "" {
-		parts = append(parts, fmt.Sprintf("name = %q", opts.Name))
+		parts = append(parts, fmt.Sprintf("name = %s", luaQuote(opts.Name)))
 	}
 	if opts.Type != "" {
 		// Split comma-list into a Lua list; the verb tests inclusion against
@@ -76,7 +76,7 @@ func meUnitListCmd(args []string, stdout, stderr io.Writer) int {
 		for _, t := range strings.Split(opts.Type, ",") {
 			t = strings.TrimSpace(t)
 			if t != "" {
-				quoted = append(quoted, fmt.Sprintf("%q", t))
+				quoted = append(quoted, fmt.Sprintf("%s", luaQuote(t)))
 			}
 		}
 		if len(quoted) > 0 {

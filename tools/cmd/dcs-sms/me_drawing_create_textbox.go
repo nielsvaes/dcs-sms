@@ -9,21 +9,21 @@ import (
 )
 
 type meDrawingCreateTextboxOpts struct {
-	North           float64
-	East            float64
-	Text            string
-	FontSize        int
-	BorderThickness int
-	Angle           float64
-	Font            string
-	Name            string
-	Color           string
-	FillColor       string
-	Layer           string
-	HiddenOnPlanner bool
-	Timeout         time.Duration
-	Pretty          bool
-	SavedGames      string
+	North		float64
+	East		float64
+	Text		string
+	FontSize	int
+	BorderThickness	int
+	Angle		float64
+	Font		string
+	Name		string
+	Color		string
+	FillColor	string
+	Layer		string
+	HiddenOnPlanner	bool
+	Timeout		time.Duration
+	Pretty		bool
+	SavedGames	string
 }
 
 func meDrawingCreateTextboxFlags() (*flag.FlagSet, *meDrawingCreateTextboxOpts) {
@@ -49,9 +49,9 @@ func meDrawingCreateTextboxFlags() (*flag.FlagSet, *meDrawingCreateTextboxOpts) 
 
 func init() {
 	registerMeInfo("drawing", "create-textbox", cmdInfo{
-		Run:      meDrawingCreateTextboxCmd,
-		Flags:    flagsOnly(meDrawingCreateTextboxFlags),
-		Synopsis: "place a text label on the F10 map",
+		Run:		meDrawingCreateTextboxCmd,
+		Flags:		flagsOnly(meDrawingCreateTextboxFlags),
+		Synopsis:	"place a text label on the F10 map",
 	})
 }
 
@@ -88,7 +88,7 @@ func meDrawingCreateTextboxCmd(args []string, stdout, stderr io.Writer) int {
 	parts := []string{
 		fmt.Sprintf("north = %g", opts.North),
 		fmt.Sprintf("east = %g", opts.East),
-		fmt.Sprintf("text = %q", opts.Text),
+		fmt.Sprintf("text = %s", luaQuote(opts.Text)),
 		fmt.Sprintf("angle_deg = %g", opts.Angle),
 	}
 	if opts.FontSize > 0 {
@@ -98,10 +98,10 @@ func meDrawingCreateTextboxCmd(args []string, stdout, stderr io.Writer) int {
 		parts = append(parts, fmt.Sprintf("border_thickness = %d", opts.BorderThickness))
 	}
 	if opts.Font != "" {
-		parts = append(parts, fmt.Sprintf("font = %q", opts.Font))
+		parts = append(parts, fmt.Sprintf("font = %s", luaQuote(opts.Font)))
 	}
 	if opts.Name != "" {
-		parts = append(parts, fmt.Sprintf("name = %q", opts.Name))
+		parts = append(parts, fmt.Sprintf("name = %s", luaQuote(opts.Name)))
 	}
 	if colorLua != "" {
 		parts = append(parts, "color = "+colorLua)
@@ -110,7 +110,7 @@ func meDrawingCreateTextboxCmd(args []string, stdout, stderr io.Writer) int {
 		parts = append(parts, "fill_color = "+fillLua)
 	}
 	if opts.Layer != "" {
-		parts = append(parts, fmt.Sprintf("layer = %q", opts.Layer))
+		parts = append(parts, fmt.Sprintf("layer = %s", luaQuote(opts.Layer)))
 	}
 	if opts.HiddenOnPlanner {
 		parts = append(parts, "hidden_on_planner = true")

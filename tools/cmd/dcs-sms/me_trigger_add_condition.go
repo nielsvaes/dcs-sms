@@ -8,11 +8,11 @@ import (
 )
 
 type meTriggerAddConditionOpts struct {
-	Trigger    string
-	Predicate  string
-	Timeout    time.Duration
-	Pretty     bool
-	SavedGames string
+	Trigger		string
+	Predicate	string
+	Timeout		time.Duration
+	Pretty		bool
+	SavedGames	string
 }
 
 func meTriggerAddConditionFlags() (*flag.FlagSet, *meTriggerAddConditionOpts) {
@@ -28,9 +28,9 @@ func meTriggerAddConditionFlags() (*flag.FlagSet, *meTriggerAddConditionOpts) {
 
 func init() {
 	registerMeInfo("trigger", "add-condition", cmdInfo{
-		Run:      meTriggerAddConditionCmd,
-		Flags:    flagsOnly(meTriggerAddConditionFlags),
-		Synopsis: "append a condition to an existing trigger",
+		Run:		meTriggerAddConditionCmd,
+		Flags:		flagsOnly(meTriggerAddConditionFlags),
+		Synopsis:	"append a condition to an existing trigger",
 	})
 }
 
@@ -60,8 +60,7 @@ func meTriggerAddConditionCmd(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 	luaArgs := fmt.Sprintf(
-		"{ trigger = %q, predicate = %q, fields = %s }",
-		opts.Trigger, opts.Predicate, buildLuaFieldsExpr(fields))
+		"{ trigger = %s, predicate = %s, fields = %s }", luaQuote(opts.Trigger), luaQuote(opts.Predicate), buildLuaFieldsExpr(fields))
 	resp, exitCode := runMeVerb("trigger_add_condition", luaArgs, opts.Timeout, opts.SavedGames, stderr)
 	if exitCode != 0 {
 		return exitCode

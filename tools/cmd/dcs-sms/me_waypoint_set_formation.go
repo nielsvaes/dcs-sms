@@ -8,15 +8,15 @@ import (
 )
 
 type meWaypointSetFormationOpts struct {
-	GroupName         string
-	GroupID           int
-	Index             int
-	FormationTemplate string
-	Timeout           time.Duration
-	Pretty            bool
-	SavedGames        string
+	GroupName		string
+	GroupID			int
+	Index			int
+	FormationTemplate	string
+	Timeout			time.Duration
+	Pretty			bool
+	SavedGames		string
 
-	indexSet, formationSet bool
+	indexSet, formationSet	bool
 }
 
 func meWaypointSetFormationFlags() (*flag.FlagSet, *meWaypointSetFormationOpts) {
@@ -39,9 +39,9 @@ func meWaypointSetFormationFlags() (*flag.FlagSet, *meWaypointSetFormationOpts) 
 
 func init() {
 	registerMeInfo("waypoint", "set-formation", cmdInfo{
-		Run:      meWaypointSetFormationCmd,
-		Flags:    flagsOnly(meWaypointSetFormationFlags),
-		Synopsis: "set a waypoint's formation_template (name of saved Custom formation; preset formations use --action)",
+		Run:		meWaypointSetFormationCmd,
+		Flags:		flagsOnly(meWaypointSetFormationFlags),
+		Synopsis:	"set a waypoint's formation_template (name of saved Custom formation; preset formations use --action)",
 	})
 }
 
@@ -75,11 +75,11 @@ func meWaypointSetFormationCmd(args []string, stdout, stderr io.Writer) int {
 	}
 	var idClause string
 	if hasName {
-		idClause = fmt.Sprintf("name = %q", opts.GroupName)
+		idClause = fmt.Sprintf("name = %s", luaQuote(opts.GroupName))
 	} else {
 		idClause = fmt.Sprintf("id = %d", opts.GroupID)
 	}
-	luaArgs := fmt.Sprintf("{ %s, index = %d, formation_template = %q }", idClause, opts.Index, opts.FormationTemplate)
+	luaArgs := fmt.Sprintf("{ %s, index = %d, formation_template = %s }", idClause, opts.Index, luaQuote(opts.FormationTemplate))
 	resp, exitCode := runMeVerb("waypoint_set_formation", luaArgs, opts.Timeout, opts.SavedGames, stderr)
 	if exitCode != 0 {
 		return exitCode

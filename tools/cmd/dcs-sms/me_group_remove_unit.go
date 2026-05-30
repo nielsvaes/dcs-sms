@@ -8,11 +8,11 @@ import (
 )
 
 type meGroupRemoveUnitOpts struct {
-	Name       string
-	ID         int
-	Timeout    time.Duration
-	Pretty     bool
-	SavedGames string
+	Name		string
+	ID		int
+	Timeout		time.Duration
+	Pretty		bool
+	SavedGames	string
 }
 
 func meGroupRemoveUnitFlags() (*flag.FlagSet, *meGroupRemoveUnitOpts) {
@@ -28,9 +28,9 @@ func meGroupRemoveUnitFlags() (*flag.FlagSet, *meGroupRemoveUnitOpts) {
 
 func init() {
 	registerMeInfo("group", "remove-unit", cmdInfo{
-		Run:      meGroupRemoveUnitCmd,
-		Flags:    flagsOnly(meGroupRemoveUnitFlags),
-		Synopsis: "delete a unit from its group",
+		Run:		meGroupRemoveUnitCmd,
+		Flags:		flagsOnly(meGroupRemoveUnitFlags),
+		Synopsis:	"delete a unit from its group",
 	})
 }
 
@@ -61,7 +61,7 @@ func meGroupRemoveUnitCmd(args []string, stdout, stderr io.Writer) int {
 
 	var idClause string
 	if hasName {
-		idClause = fmt.Sprintf("name = %q", opts.Name)
+		idClause = fmt.Sprintf("name = %s", luaQuote(opts.Name))
 	} else {
 		idClause = fmt.Sprintf("id = %d", opts.ID)
 	}

@@ -36,18 +36,20 @@ func parseTriggerFieldArgs(args []string) (map[string]string, error) {
 // to embed the user's field set in the runMeVerb args expression. The Lua
 // side then coerces strings to typed values per descriptor.
 //
-// Bracket form `[%q] = %q` is used (rather than bare `key = %q`) so a
-// field id that happens to collide with a Lua reserved word (`end`,
-// `function`, `local`, ...) still parses. Field ids are normally
-// alphanumeric/underscore but we don't want a future descriptor adding
-// such a key to silently break trigger writes.
+// Bracket form `[<quoted>] = <quoted>` is used (rather than bare
+// `key = <quoted>`) so a field id that happens to collide with a Lua
+// reserved word (`end`, `function`, `local`, ...) still parses. Field
+// ids are normally alphanumeric/underscore but we don't want a future
+// descriptor adding such a key to silently break trigger writes.
+// Values are wrapped via luaQuote (see gh#70 — Go's %q escapes
+// non-printable codepoints in a form Lua doesn't decode).
 func buildLuaFieldsExpr(fields map[string]string) string {
 	if len(fields) == 0 {
 		return "{}"
 	}
 	parts := make([]string, 0, len(fields))
 	for k, v := range fields {
-		parts = append(parts, fmt.Sprintf("[%q] = %q", k, v))
+		parts = append(parts, fmt.Sprintf("[%s] = %s", luaQuote(k), luaQuote(v)))
 	}
 	return "{ " + strings.Join(parts, ", ") + " }"
 }

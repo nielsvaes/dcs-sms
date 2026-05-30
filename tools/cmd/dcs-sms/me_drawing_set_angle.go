@@ -8,11 +8,11 @@ import (
 )
 
 type meDrawingSetAngleOpts struct {
-	Name       string
-	Angle      float64
-	Timeout    time.Duration
-	Pretty     bool
-	SavedGames string
+	Name		string
+	Angle		float64
+	Timeout		time.Duration
+	Pretty		bool
+	SavedGames	string
 }
 
 func meDrawingSetAngleFlags() (*flag.FlagSet, *meDrawingSetAngleOpts) {
@@ -28,9 +28,9 @@ func meDrawingSetAngleFlags() (*flag.FlagSet, *meDrawingSetAngleOpts) {
 
 func init() {
 	registerMeInfo("drawing", "set-angle", cmdInfo{
-		Run:      meDrawingSetAngleCmd,
-		Flags:    flagsOnly(meDrawingSetAngleFlags),
-		Synopsis: "set a drawing's rotation in degrees (CW positive)",
+		Run:		meDrawingSetAngleCmd,
+		Flags:		flagsOnly(meDrawingSetAngleFlags),
+		Synopsis:	"set a drawing's rotation in degrees (CW positive)",
 	})
 }
 
@@ -65,7 +65,7 @@ func meDrawingSetAngleCmd(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "dcs-sms me drawing set-angle: --angle is required (degrees)")
 		return 2
 	}
-	luaArgs := fmt.Sprintf("{ name = %q, angle_deg = %g }", opts.Name, opts.Angle)
+	luaArgs := fmt.Sprintf("{ name = %s, angle_deg = %g }", luaQuote(opts.Name), opts.Angle)
 
 	resp, exitCode := runMeVerb("drawing_set_angle", luaArgs, opts.Timeout, opts.SavedGames, stderr)
 	if exitCode != 0 {

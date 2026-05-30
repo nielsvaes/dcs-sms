@@ -9,22 +9,22 @@ import (
 )
 
 type meGroupAddUnitOpts struct {
-	Group       string
-	GroupID     int
-	Type        string
-	OffsetNorth float64
-	OffsetEast  float64
-	Skill       string
-	Livery      string
-	Heading     float64
-	Alt         float64
-	AltType     string
-	OnboardNum  string
-	Callsign    string
-	Frequency   float64
-	Timeout     time.Duration
-	Pretty      bool
-	SavedGames  string
+	Group		string
+	GroupID		int
+	Type		string
+	OffsetNorth	float64
+	OffsetEast	float64
+	Skill		string
+	Livery		string
+	Heading		float64
+	Alt		float64
+	AltType		string
+	OnboardNum	string
+	Callsign	string
+	Frequency	float64
+	Timeout		time.Duration
+	Pretty		bool
+	SavedGames	string
 }
 
 func meGroupAddUnitFlags() (*flag.FlagSet, *meGroupAddUnitOpts) {
@@ -51,9 +51,9 @@ func meGroupAddUnitFlags() (*flag.FlagSet, *meGroupAddUnitOpts) {
 
 func init() {
 	registerMeInfo("group", "add-unit", cmdInfo{
-		Run:      meGroupAddUnitCmd,
-		Flags:    flagsOnly(meGroupAddUnitFlags),
-		Synopsis: "add a unit to an existing group",
+		Run:		meGroupAddUnitCmd,
+		Flags:		flagsOnly(meGroupAddUnitFlags),
+		Synopsis:	"add a unit to an existing group",
 	})
 }
 
@@ -98,7 +98,7 @@ func meGroupAddUnitCmd(args []string, stdout, stderr io.Writer) int {
 	// Selector clause for the group target.
 	var groupClause string
 	if hasGroup {
-		groupClause = fmt.Sprintf("name = %q", opts.Group)
+		groupClause = fmt.Sprintf("name = %s", luaQuote(opts.Group))
 	} else {
 		groupClause = fmt.Sprintf("id = %d", opts.GroupID)
 	}
@@ -111,7 +111,7 @@ func meGroupAddUnitCmd(args []string, stdout, stderr io.Writer) int {
 	fs.Visit(func(f *flag.Flag) { visited[f.Name] = true })
 
 	if opts.Type != "" {
-		parts = append(parts, fmt.Sprintf("type = %q", opts.Type))
+		parts = append(parts, fmt.Sprintf("type = %s", luaQuote(opts.Type)))
 	}
 	if visited["offset-north"] {
 		parts = append(parts, fmt.Sprintf("offset_north = %g", opts.OffsetNorth))
@@ -120,11 +120,11 @@ func meGroupAddUnitCmd(args []string, stdout, stderr io.Writer) int {
 		parts = append(parts, fmt.Sprintf("offset_east = %g", opts.OffsetEast))
 	}
 	if opts.Skill != "" {
-		parts = append(parts, fmt.Sprintf("skill = %q", opts.Skill))
+		parts = append(parts, fmt.Sprintf("skill = %s", luaQuote(opts.Skill)))
 	}
 	if visited["livery"] {
 		// Allow explicit empty string (= "default") via --livery="".
-		parts = append(parts, fmt.Sprintf("livery = %q", opts.Livery))
+		parts = append(parts, fmt.Sprintf("livery = %s", luaQuote(opts.Livery)))
 	}
 	if visited["heading"] {
 		parts = append(parts, fmt.Sprintf("heading_deg = %g", opts.Heading))
@@ -138,13 +138,13 @@ func meGroupAddUnitCmd(args []string, stdout, stderr io.Writer) int {
 			fmt.Fprintln(stderr, "dcs-sms me group add-unit: --alt-type must be BARO or RADIO")
 			return 2
 		}
-		parts = append(parts, fmt.Sprintf("alt_type = %q", altType))
+		parts = append(parts, fmt.Sprintf("alt_type = %s", luaQuote(altType)))
 	}
 	if opts.OnboardNum != "" {
-		parts = append(parts, fmt.Sprintf("onboard_num = %q", opts.OnboardNum))
+		parts = append(parts, fmt.Sprintf("onboard_num = %s", luaQuote(opts.OnboardNum)))
 	}
 	if opts.Callsign != "" {
-		parts = append(parts, fmt.Sprintf("callsign = %q", opts.Callsign))
+		parts = append(parts, fmt.Sprintf("callsign = %s", luaQuote(opts.Callsign)))
 	}
 	if visited["frequency"] {
 		parts = append(parts, fmt.Sprintf("frequency = %g", opts.Frequency))

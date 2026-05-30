@@ -8,17 +8,17 @@ import (
 )
 
 type meGroupCreateShipOpts struct {
-	Country    string
-	Type       string
-	North      float64
-	East       float64
-	Name       string
-	Heading    float64
-	Skill      string
-	Force      bool
-	Timeout    time.Duration
-	Pretty     bool
-	SavedGames string
+	Country		string
+	Type		string
+	North		float64
+	East		float64
+	Name		string
+	Heading		float64
+	Skill		string
+	Force		bool
+	Timeout		time.Duration
+	Pretty		bool
+	SavedGames	string
 }
 
 func meGroupCreateShipFlags() (*flag.FlagSet, *meGroupCreateShipOpts) {
@@ -40,9 +40,9 @@ func meGroupCreateShipFlags() (*flag.FlagSet, *meGroupCreateShipOpts) {
 
 func init() {
 	registerMeInfo("group", "create-ship", cmdInfo{
-		Run:      meGroupCreateShipCmd,
-		Flags:    flagsOnly(meGroupCreateShipFlags),
-		Synopsis: "spawn a new ship group at the given coordinates",
+		Run:		meGroupCreateShipCmd,
+		Flags:		flagsOnly(meGroupCreateShipFlags),
+		Synopsis:	"spawn a new ship group at the given coordinates",
 	})
 }
 
@@ -69,10 +69,8 @@ func meGroupCreateShipCmd(args []string, stdout, stderr io.Writer) int {
 	}
 
 	luaArgs := fmt.Sprintf(
-		"{ country = %q, type = %q, north = %g, east = %g, name = %q, "+
-			"heading_deg = %g, skill = %q, force = %t }",
-		opts.Country, opts.Type, opts.North, opts.East, opts.Name,
-		opts.Heading, opts.Skill, opts.Force,
+		"{ country = %s, type = %s, north = %g, east = %g, name = %s, "+
+			"heading_deg = %g, skill = %s, force = %t }", luaQuote(opts.Country), luaQuote(opts.Type), opts.North, opts.East, luaQuote(opts.Name), opts.Heading, luaQuote(opts.Skill), opts.Force,
 	)
 
 	resp, exitCode := runMeVerb("group_create_ship", luaArgs, opts.Timeout, opts.SavedGames, stderr)

@@ -8,14 +8,14 @@ import (
 )
 
 type meWaypointGetOpts struct {
-	GroupName  string
-	GroupID    int
-	Index      int
-	Timeout    time.Duration
-	Pretty     bool
-	SavedGames string
+	GroupName	string
+	GroupID		int
+	Index		int
+	Timeout		time.Duration
+	Pretty		bool
+	SavedGames	string
 
-	indexSet bool
+	indexSet	bool
 }
 
 func meWaypointGetFlags() (*flag.FlagSet, *meWaypointGetOpts) {
@@ -32,9 +32,9 @@ func meWaypointGetFlags() (*flag.FlagSet, *meWaypointGetOpts) {
 
 func init() {
 	registerMeInfo("waypoint", "get", cmdInfo{
-		Run:      meWaypointGetCmd,
-		Flags:    flagsOnly(meWaypointGetFlags),
-		Synopsis: "get a single waypoint's full field set",
+		Run:		meWaypointGetCmd,
+		Flags:		flagsOnly(meWaypointGetFlags),
+		Synopsis:	"get a single waypoint's full field set",
 	})
 }
 
@@ -61,7 +61,7 @@ func meWaypointGetCmd(args []string, stdout, stderr io.Writer) int {
 	}
 	var idClause string
 	if hasName {
-		idClause = fmt.Sprintf("name = %q", opts.GroupName)
+		idClause = fmt.Sprintf("name = %s", luaQuote(opts.GroupName))
 	} else {
 		idClause = fmt.Sprintf("id = %d", opts.GroupID)
 	}

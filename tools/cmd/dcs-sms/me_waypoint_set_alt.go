@@ -8,16 +8,16 @@ import (
 )
 
 type meWaypointSetAltOpts struct {
-	GroupName  string
-	GroupID    int
-	Index      int
-	Alt        float64
-	AltType    string
-	Timeout    time.Duration
-	Pretty     bool
-	SavedGames string
+	GroupName	string
+	GroupID		int
+	Index		int
+	Alt		float64
+	AltType		string
+	Timeout		time.Duration
+	Pretty		bool
+	SavedGames	string
 
-	indexSet, altSet, altTypeSet bool
+	indexSet, altSet, altTypeSet	bool
 }
 
 func meWaypointSetAltFlags() (*flag.FlagSet, *meWaypointSetAltOpts) {
@@ -36,9 +36,9 @@ func meWaypointSetAltFlags() (*flag.FlagSet, *meWaypointSetAltOpts) {
 
 func init() {
 	registerMeInfo("waypoint", "set-alt", cmdInfo{
-		Run:      meWaypointSetAltCmd,
-		Flags:    flagsOnly(meWaypointSetAltFlags),
-		Synopsis: "set a waypoint's altitude (optionally also its alt-type)",
+		Run:		meWaypointSetAltCmd,
+		Flags:		flagsOnly(meWaypointSetAltFlags),
+		Synopsis:	"set a waypoint's altitude (optionally also its alt-type)",
 	})
 }
 
@@ -78,13 +78,13 @@ func meWaypointSetAltCmd(args []string, stdout, stderr io.Writer) int {
 	}
 	var idClause string
 	if hasName {
-		idClause = fmt.Sprintf("name = %q", opts.GroupName)
+		idClause = fmt.Sprintf("name = %s", luaQuote(opts.GroupName))
 	} else {
 		idClause = fmt.Sprintf("id = %d", opts.GroupID)
 	}
 	luaArgs := fmt.Sprintf("{ %s, index = %d, alt = %g", idClause, opts.Index, opts.Alt)
 	if opts.altTypeSet {
-		luaArgs += fmt.Sprintf(", alt_type = %q", opts.AltType)
+		luaArgs += fmt.Sprintf(", alt_type = %s", luaQuote(opts.AltType))
 	}
 	luaArgs += " }"
 	resp, exitCode := runMeVerb("waypoint_set_alt", luaArgs, opts.Timeout, opts.SavedGames, stderr)

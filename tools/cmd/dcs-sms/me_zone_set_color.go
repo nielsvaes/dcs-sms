@@ -8,12 +8,12 @@ import (
 )
 
 type meZoneSetColorOpts struct {
-	Name       string
-	ID         int
-	Color      string
-	Timeout    time.Duration
-	Pretty     bool
-	SavedGames string
+	Name		string
+	ID		int
+	Color		string
+	Timeout		time.Duration
+	Pretty		bool
+	SavedGames	string
 }
 
 func meZoneSetColorFlags() (*flag.FlagSet, *meZoneSetColorOpts) {
@@ -32,9 +32,9 @@ func meZoneSetColorFlags() (*flag.FlagSet, *meZoneSetColorOpts) {
 
 func init() {
 	registerMeInfo("zone", "set-color", cmdInfo{
-		Run:      meZoneSetColorCmd,
-		Flags:    flagsOnly(meZoneSetColorFlags),
-		Synopsis: "change a zone's outline / fill color",
+		Run:		meZoneSetColorCmd,
+		Flags:		flagsOnly(meZoneSetColorFlags),
+		Synopsis:	"change a zone's outline / fill color",
 	})
 }
 
@@ -67,7 +67,7 @@ func meZoneSetColorCmd(args []string, stdout, stderr io.Writer) int {
 
 	var idClause string
 	if hasName {
-		idClause = fmt.Sprintf("name = %q", opts.Name)
+		idClause = fmt.Sprintf("name = %s", luaQuote(opts.Name))
 	} else {
 		idClause = fmt.Sprintf("id = %d", opts.ID)
 	}

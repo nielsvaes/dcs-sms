@@ -8,13 +8,13 @@ import (
 )
 
 type meUnitSetParkingOpts struct {
-	Name       string
-	ID         int
-	Airbase    string
-	Stand      string
-	Timeout    time.Duration
-	Pretty     bool
-	SavedGames string
+	Name		string
+	ID		int
+	Airbase		string
+	Stand		string
+	Timeout		time.Duration
+	Pretty		bool
+	SavedGames	string
 }
 
 func meUnitSetParkingFlags() (*flag.FlagSet, *meUnitSetParkingOpts) {
@@ -38,9 +38,9 @@ func meUnitSetParkingFlags() (*flag.FlagSet, *meUnitSetParkingOpts) {
 
 func init() {
 	registerMeInfo("unit", "set-parking", cmdInfo{
-		Run:      meUnitSetParkingCmd,
-		Flags:    flagsOnly(meUnitSetParkingFlags),
-		Synopsis: "pin a unit to a specific named parking stand at an airbase (sets parking + parking_id, moves the unit to the stand)",
+		Run:		meUnitSetParkingCmd,
+		Flags:		flagsOnly(meUnitSetParkingFlags),
+		Synopsis:	"pin a unit to a specific named parking stand at an airbase (sets parking + parking_id, moves the unit to the stand)",
 	})
 }
 
@@ -67,12 +67,12 @@ func meUnitSetParkingCmd(args []string, stdout, stderr io.Writer) int {
 
 	var idClause string
 	if hasName {
-		idClause = fmt.Sprintf("name = %q", opts.Name)
+		idClause = fmt.Sprintf("name = %s", luaQuote(opts.Name))
 	} else {
 		idClause = fmt.Sprintf("id = %d", opts.ID)
 	}
-	luaArgs := fmt.Sprintf("{ %s, airbase = %q, stand = %q }",
-		idClause, opts.Airbase, opts.Stand)
+	luaArgs := fmt.Sprintf("{ %s, airbase = %s, stand = %s }",
+		idClause, luaQuote(opts.Airbase), luaQuote(opts.Stand))
 
 	resp, exitCode := runMeVerb("unit_set_parking", luaArgs, opts.Timeout, opts.SavedGames, stderr)
 	if exitCode != 0 {

@@ -9,13 +9,13 @@ import (
 )
 
 type meTriggerCreateOpts struct {
-	Type       string
-	Name       string
-	Timeout    time.Duration
-	Pretty     bool
-	SavedGames string
-	Conditions stringSliceFlag
-	Actions    stringSliceFlag
+	Type		string
+	Name		string
+	Timeout		time.Duration
+	Pretty		bool
+	SavedGames	string
+	Conditions	stringSliceFlag
+	Actions		stringSliceFlag
 }
 
 func meTriggerCreateFlags() (*flag.FlagSet, *meTriggerCreateOpts) {
@@ -33,9 +33,9 @@ func meTriggerCreateFlags() (*flag.FlagSet, *meTriggerCreateOpts) {
 
 func init() {
 	registerMeInfo("trigger", "create", cmdInfo{
-		Run:      meTriggerCreateCmd,
-		Flags:    flagsOnly(meTriggerCreateFlags),
-		Synopsis: "create a new trigger (start / once / continuous / front)",
+		Run:		meTriggerCreateCmd,
+		Flags:		flagsOnly(meTriggerCreateFlags),
+		Synopsis:	"create a new trigger (start / once / continuous / front)",
 	})
 }
 
@@ -62,8 +62,8 @@ func meTriggerCreateCmd(args []string, stdout, stderr io.Writer) int {
 	// Pre-validate every bundled rule string so we fail BEFORE creating the
 	// trigger if any rule is malformed.
 	type parsedRule struct {
-		pred   string
-		fields map[string]string
+		pred	string
+		fields	map[string]string
 	}
 	cond := make([]parsedRule, 0, len(opts.Conditions))
 	for _, s := range opts.Conditions {
@@ -85,7 +85,7 @@ func meTriggerCreateCmd(args []string, stdout, stderr io.Writer) int {
 	}
 
 	// 1) Create the empty trigger.
-	luaArgs := fmt.Sprintf("{ [\"type\"] = %q, name = %q }", opts.Type, opts.Name)
+	luaArgs := fmt.Sprintf("{ [\"type\"] = %s, name = %s }", luaQuote(opts.Type), luaQuote(opts.Name))
 	resp, exitCode := runMeVerb("trigger_create", luaArgs, opts.Timeout, opts.SavedGames, stderr)
 	if exitCode != 0 {
 		return exitCode
@@ -111,8 +111,7 @@ func meTriggerCreateCmd(args []string, stdout, stderr io.Writer) int {
 	// 2) Apply each bundled condition.
 	for _, r := range cond {
 		condArgs := fmt.Sprintf(
-			"{ trigger = %q, predicate = %q, fields = %s }",
-			resolvedName, r.pred, buildLuaFieldsExpr(r.fields))
+			"{ trigger = %s, predicate = %s, fields = %s }", luaQuote(resolvedName), luaQuote(r.pred), buildLuaFieldsExpr(r.fields))
 		condResp, ec := runMeVerb("trigger_add_condition", condArgs, opts.Timeout, opts.SavedGames, stderr)
 		if ec != 0 {
 			return ec
@@ -137,8 +136,7 @@ func meTriggerCreateCmd(args []string, stdout, stderr io.Writer) int {
 	// 3) Apply each bundled action.
 	for _, r := range act {
 		actArgs := fmt.Sprintf(
-			"{ trigger = %q, predicate = %q, fields = %s }",
-			resolvedName, r.pred, buildLuaFieldsExpr(r.fields))
+			"{ trigger = %s, predicate = %s, fields = %s }", luaQuote(resolvedName), luaQuote(r.pred), buildLuaFieldsExpr(r.fields))
 		actResp, ec := runMeVerb("trigger_add_action", actArgs, opts.Timeout, opts.SavedGames, stderr)
 		if ec != 0 {
 			return ec

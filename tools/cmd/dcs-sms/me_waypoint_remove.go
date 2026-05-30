@@ -8,14 +8,14 @@ import (
 )
 
 type meWaypointRemoveOpts struct {
-	GroupName  string
-	GroupID    int
-	Index      int
-	Timeout    time.Duration
-	Pretty     bool
-	SavedGames string
+	GroupName	string
+	GroupID		int
+	Index		int
+	Timeout		time.Duration
+	Pretty		bool
+	SavedGames	string
 
-	indexSet bool
+	indexSet	bool
 }
 
 func meWaypointRemoveFlags() (*flag.FlagSet, *meWaypointRemoveOpts) {
@@ -32,9 +32,9 @@ func meWaypointRemoveFlags() (*flag.FlagSet, *meWaypointRemoveOpts) {
 
 func init() {
 	registerMeInfo("waypoint", "remove", cmdInfo{
-		Run:      meWaypointRemoveCmd,
-		Flags:    flagsOnly(meWaypointRemoveFlags),
-		Synopsis: "remove a waypoint from a group's route (air groups: refused if it'd leave 0 WPs)",
+		Run:		meWaypointRemoveCmd,
+		Flags:		flagsOnly(meWaypointRemoveFlags),
+		Synopsis:	"remove a waypoint from a group's route (air groups: refused if it'd leave 0 WPs)",
 	})
 }
 
@@ -61,7 +61,7 @@ func meWaypointRemoveCmd(args []string, stdout, stderr io.Writer) int {
 	}
 	var idClause string
 	if hasName {
-		idClause = fmt.Sprintf("name = %q", opts.GroupName)
+		idClause = fmt.Sprintf("name = %s", luaQuote(opts.GroupName))
 	} else {
 		idClause = fmt.Sprintf("id = %d", opts.GroupID)
 	}

@@ -8,11 +8,11 @@ import (
 )
 
 type meTriggerGetOpts struct {
-	Name       string
-	Raw        bool
-	Timeout    time.Duration
-	Pretty     bool
-	SavedGames string
+	Name		string
+	Raw		bool
+	Timeout		time.Duration
+	Pretty		bool
+	SavedGames	string
 }
 
 func meTriggerGetFlags() (*flag.FlagSet, *meTriggerGetOpts) {
@@ -28,9 +28,9 @@ func meTriggerGetFlags() (*flag.FlagSet, *meTriggerGetOpts) {
 
 func init() {
 	registerMeInfo("trigger", "get", cmdInfo{
-		Run:      meTriggerGetCmd,
-		Flags:    flagsOnly(meTriggerGetFlags),
-		Synopsis: "return full data for a trigger by name",
+		Run:		meTriggerGetCmd,
+		Flags:		flagsOnly(meTriggerGetFlags),
+		Synopsis:	"return full data for a trigger by name",
 	})
 }
 
@@ -50,7 +50,7 @@ func meTriggerGetCmd(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "dcs-sms me trigger get: --name is required")
 		return 2
 	}
-	luaArgs := fmt.Sprintf("{ name = %q, raw = %t }", opts.Name, opts.Raw)
+	luaArgs := fmt.Sprintf("{ name = %s, raw = %t }", luaQuote(opts.Name), opts.Raw)
 	resp, exitCode := runMeVerb("trigger_get", luaArgs, opts.Timeout, opts.SavedGames, stderr)
 	if exitCode != 0 {
 		return exitCode

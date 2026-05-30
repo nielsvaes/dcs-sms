@@ -8,12 +8,12 @@ import (
 )
 
 type meWaypointListTasksOpts struct {
-	GroupName  string
-	GroupID    int
-	Kind       string
-	Timeout    time.Duration
-	Pretty     bool
-	SavedGames string
+	GroupName	string
+	GroupID		int
+	Kind		string
+	Timeout		time.Duration
+	Pretty		bool
+	SavedGames	string
 }
 
 func meWaypointListTasksFlags() (*flag.FlagSet, *meWaypointListTasksOpts) {
@@ -30,9 +30,9 @@ func meWaypointListTasksFlags() (*flag.FlagSet, *meWaypointListTasksOpts) {
 
 func init() {
 	registerMeInfo("waypoint", "list-tasks", cmdInfo{
-		Run:      meWaypointListTasksCmd,
-		Flags:    flagsOnly(meWaypointListTasksFlags),
-		Synopsis: "list legal task ids from ED's me_action_db, optionally filtered by group and/or --kind",
+		Run:		meWaypointListTasksCmd,
+		Flags:		flagsOnly(meWaypointListTasksFlags),
+		Synopsis:	"list legal task ids from ED's me_action_db, optionally filtered by group and/or --kind",
 	})
 }
 
@@ -55,15 +55,15 @@ func meWaypointListTasksCmd(args []string, stdout, stderr io.Writer) int {
 	var luaArgs string
 	switch {
 	case hasName && opts.Kind != "":
-		luaArgs = fmt.Sprintf("{ name = %q, kind = %q }", opts.GroupName, opts.Kind)
+		luaArgs = fmt.Sprintf("{ name = %s, kind = %s }", luaQuote(opts.GroupName), luaQuote(opts.Kind))
 	case hasID && opts.Kind != "":
-		luaArgs = fmt.Sprintf("{ id = %d, kind = %q }", opts.GroupID, opts.Kind)
+		luaArgs = fmt.Sprintf("{ id = %d, kind = %s }", opts.GroupID, luaQuote(opts.Kind))
 	case hasName:
-		luaArgs = fmt.Sprintf("{ name = %q }", opts.GroupName)
+		luaArgs = fmt.Sprintf("{ name = %s }", luaQuote(opts.GroupName))
 	case hasID:
 		luaArgs = fmt.Sprintf("{ id = %d }", opts.GroupID)
 	case opts.Kind != "":
-		luaArgs = fmt.Sprintf("{ kind = %q }", opts.Kind)
+		luaArgs = fmt.Sprintf("{ kind = %s }", luaQuote(opts.Kind))
 	default:
 		luaArgs = "{}"
 	}

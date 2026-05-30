@@ -8,10 +8,10 @@ import (
 )
 
 type meTriggerDescribePredicateOpts struct {
-	Name       string
-	Timeout    time.Duration
-	Pretty     bool
-	SavedGames string
+	Name		string
+	Timeout		time.Duration
+	Pretty		bool
+	SavedGames	string
 }
 
 func meTriggerDescribePredicateFlags() (*flag.FlagSet, *meTriggerDescribePredicateOpts) {
@@ -26,9 +26,9 @@ func meTriggerDescribePredicateFlags() (*flag.FlagSet, *meTriggerDescribePredica
 
 func init() {
 	registerMeInfo("trigger", "describe-predicate", cmdInfo{
-		Run:      meTriggerDescribePredicateCmd,
-		Flags:    flagsOnly(meTriggerDescribePredicateFlags),
-		Synopsis: "print the field schema for one trigger predicate",
+		Run:		meTriggerDescribePredicateCmd,
+		Flags:		flagsOnly(meTriggerDescribePredicateFlags),
+		Synopsis:	"print the field schema for one trigger predicate",
 	})
 }
 
@@ -48,7 +48,7 @@ func meTriggerDescribePredicateCmd(args []string, stdout, stderr io.Writer) int 
 		fmt.Fprintln(stderr, "dcs-sms me trigger describe-predicate: --name is required")
 		return 2
 	}
-	luaArgs := fmt.Sprintf("{ name = %q }", opts.Name)
+	luaArgs := fmt.Sprintf("{ name = %s }", luaQuote(opts.Name))
 	resp, exitCode := runMeVerb("trigger_describe_predicate", luaArgs, opts.Timeout, opts.SavedGames, stderr)
 	if exitCode != 0 {
 		return exitCode

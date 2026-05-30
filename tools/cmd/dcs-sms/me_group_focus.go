@@ -8,11 +8,11 @@ import (
 )
 
 type meGroupFocusOpts struct {
-	Name       string
-	ID         int
-	Timeout    time.Duration
-	Pretty     bool
-	SavedGames string
+	Name		string
+	ID		int
+	Timeout		time.Duration
+	Pretty		bool
+	SavedGames	string
 }
 
 func meGroupFocusFlags() (*flag.FlagSet, *meGroupFocusOpts) {
@@ -28,9 +28,9 @@ func meGroupFocusFlags() (*flag.FlagSet, *meGroupFocusOpts) {
 
 func init() {
 	registerMeInfo("group", "focus", cmdInfo{
-		Run:      meGroupFocusCmd,
-		Flags:    flagsOnly(meGroupFocusFlags),
-		Synopsis: "raise the AIRPLANE/HELICOPTER GROUP and route panels for a group (same UI state as a map click)",
+		Run:		meGroupFocusCmd,
+		Flags:		flagsOnly(meGroupFocusFlags),
+		Synopsis:	"raise the AIRPLANE/HELICOPTER GROUP and route panels for a group (same UI state as a map click)",
 	})
 }
 
@@ -57,7 +57,7 @@ func meGroupFocusCmd(args []string, stdout, stderr io.Writer) int {
 	}
 	var idClause string
 	if hasName {
-		idClause = fmt.Sprintf("name = %q", opts.Name)
+		idClause = fmt.Sprintf("name = %s", luaQuote(opts.Name))
 	} else {
 		idClause = fmt.Sprintf("id = %d", opts.ID)
 	}

@@ -8,11 +8,11 @@ import (
 )
 
 type meWaypointDescribeTaskOpts struct {
-	Task       string
-	Kind       string
-	Timeout    time.Duration
-	Pretty     bool
-	SavedGames string
+	Task		string
+	Kind		string
+	Timeout		time.Duration
+	Pretty		bool
+	SavedGames	string
 }
 
 func meWaypointDescribeTaskFlags() (*flag.FlagSet, *meWaypointDescribeTaskOpts) {
@@ -28,9 +28,9 @@ func meWaypointDescribeTaskFlags() (*flag.FlagSet, *meWaypointDescribeTaskOpts) 
 
 func init() {
 	registerMeInfo("waypoint", "describe-task", cmdInfo{
-		Run:      meWaypointDescribeTaskCmd,
-		Flags:    flagsOnly(meWaypointDescribeTaskFlags),
-		Synopsis: "print the parameter schema (fields, defaults, allowed values) of one task id",
+		Run:		meWaypointDescribeTaskCmd,
+		Flags:		flagsOnly(meWaypointDescribeTaskFlags),
+		Synopsis:	"print the parameter schema (fields, defaults, allowed values) of one task id",
 	})
 }
 
@@ -50,9 +50,9 @@ func meWaypointDescribeTaskCmd(args []string, stdout, stderr io.Writer) int {
 	}
 	var luaArgs string
 	if opts.Kind == "" {
-		luaArgs = fmt.Sprintf("{ task = %q }", opts.Task)
+		luaArgs = fmt.Sprintf("{ task = %s }", luaQuote(opts.Task))
 	} else {
-		luaArgs = fmt.Sprintf("{ task = %q, kind = %q }", opts.Task, opts.Kind)
+		luaArgs = fmt.Sprintf("{ task = %s, kind = %s }", luaQuote(opts.Task), luaQuote(opts.Kind))
 	}
 	resp, exitCode := runMeVerb("waypoint_describe_task", luaArgs, opts.Timeout, opts.SavedGames, stderr)
 	if exitCode != 0 {

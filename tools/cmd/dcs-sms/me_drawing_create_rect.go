@@ -9,21 +9,21 @@ import (
 )
 
 type meDrawingCreateRectOpts struct {
-	North           float64
-	East            float64
-	Width           float64
-	Height          float64
-	Angle           float64
-	Name            string
-	Color           string
-	FillColor       string
-	Thickness       float64
-	Style           string
-	Layer           string
-	HiddenOnPlanner bool
-	Timeout         time.Duration
-	Pretty          bool
-	SavedGames      string
+	North		float64
+	East		float64
+	Width		float64
+	Height		float64
+	Angle		float64
+	Name		string
+	Color		string
+	FillColor	string
+	Thickness	float64
+	Style		string
+	Layer		string
+	HiddenOnPlanner	bool
+	Timeout		time.Duration
+	Pretty		bool
+	SavedGames	string
 }
 
 func meDrawingCreateRectFlags() (*flag.FlagSet, *meDrawingCreateRectOpts) {
@@ -49,9 +49,9 @@ func meDrawingCreateRectFlags() (*flag.FlagSet, *meDrawingCreateRectOpts) {
 
 func init() {
 	registerMeInfo("drawing", "create-rect", cmdInfo{
-		Run:      meDrawingCreateRectCmd,
-		Flags:    flagsOnly(meDrawingCreateRectFlags),
-		Synopsis: "draw a rectangle on the F10 map",
+		Run:		meDrawingCreateRectCmd,
+		Flags:		flagsOnly(meDrawingCreateRectFlags),
+		Synopsis:	"draw a rectangle on the F10 map",
 	})
 }
 
@@ -90,7 +90,7 @@ func meDrawingCreateRectCmd(args []string, stdout, stderr io.Writer) int {
 		fmt.Sprintf("angle_deg = %g", opts.Angle),
 	}
 	if opts.Name != "" {
-		parts = append(parts, fmt.Sprintf("name = %q", opts.Name))
+		parts = append(parts, fmt.Sprintf("name = %s", luaQuote(opts.Name)))
 	}
 	if colorLua != "" {
 		parts = append(parts, "color = "+colorLua)
@@ -102,10 +102,10 @@ func meDrawingCreateRectCmd(args []string, stdout, stderr io.Writer) int {
 		parts = append(parts, fmt.Sprintf("thickness = %g", opts.Thickness))
 	}
 	if opts.Style != "" {
-		parts = append(parts, fmt.Sprintf("style = %q", opts.Style))
+		parts = append(parts, fmt.Sprintf("style = %s", luaQuote(opts.Style)))
 	}
 	if opts.Layer != "" {
-		parts = append(parts, fmt.Sprintf("layer = %q", opts.Layer))
+		parts = append(parts, fmt.Sprintf("layer = %s", luaQuote(opts.Layer)))
 	}
 	if opts.HiddenOnPlanner {
 		parts = append(parts, "hidden_on_planner = true")

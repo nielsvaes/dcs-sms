@@ -8,12 +8,12 @@ import (
 )
 
 type meUnitSetHeadingOpts struct {
-	Name       string
-	ID         int
-	Heading    float64
-	Timeout    time.Duration
-	Pretty     bool
-	SavedGames string
+	Name		string
+	ID		int
+	Heading		float64
+	Timeout		time.Duration
+	Pretty		bool
+	SavedGames	string
 }
 
 func meUnitSetHeadingFlags() (*flag.FlagSet, *meUnitSetHeadingOpts) {
@@ -31,9 +31,9 @@ func meUnitSetHeadingFlags() (*flag.FlagSet, *meUnitSetHeadingOpts) {
 
 func init() {
 	registerMeInfo("unit", "set-heading", cmdInfo{
-		Run:      meUnitSetHeadingCmd,
-		Flags:    flagsOnly(meUnitSetHeadingFlags),
-		Synopsis: "set a unit's heading in degrees",
+		Run:		meUnitSetHeadingCmd,
+		Flags:		flagsOnly(meUnitSetHeadingFlags),
+		Synopsis:	"set a unit's heading in degrees",
 	})
 }
 
@@ -71,7 +71,7 @@ func meUnitSetHeadingCmd(args []string, stdout, stderr io.Writer) int {
 
 	var idClause string
 	if hasName {
-		idClause = fmt.Sprintf("name = %q", opts.Name)
+		idClause = fmt.Sprintf("name = %s", luaQuote(opts.Name))
 	} else {
 		idClause = fmt.Sprintf("id = %d", opts.ID)
 	}

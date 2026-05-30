@@ -8,11 +8,11 @@ import (
 )
 
 type meGroupRemoveOpts struct {
-	Name       string
-	ID         int
-	Timeout    time.Duration
-	Pretty     bool
-	SavedGames string
+	Name		string
+	ID		int
+	Timeout		time.Duration
+	Pretty		bool
+	SavedGames	string
 }
 
 func meGroupRemoveFlags() (*flag.FlagSet, *meGroupRemoveOpts) {
@@ -28,9 +28,9 @@ func meGroupRemoveFlags() (*flag.FlagSet, *meGroupRemoveOpts) {
 
 func init() {
 	registerMeInfo("group", "remove", cmdInfo{
-		Run:      meGroupRemoveCmd,
-		Flags:    flagsOnly(meGroupRemoveFlags),
-		Synopsis: "delete a group from the open mission",
+		Run:		meGroupRemoveCmd,
+		Flags:		flagsOnly(meGroupRemoveFlags),
+		Synopsis:	"delete a group from the open mission",
 	})
 }
 
@@ -48,14 +48,14 @@ func meGroupRemoveCmd(args []string, stdout, stderr io.Writer) int {
 	}
 	hasName := opts.Name != ""
 	hasID := opts.ID != 0
-	if hasName == hasID { // both or neither
+	if hasName == hasID {	// both or neither
 		fmt.Fprintln(stderr, "dcs-sms me group remove: pass exactly one of --name or --id")
 		return 2
 	}
 
 	var luaArgs string
 	if hasName {
-		luaArgs = fmt.Sprintf("{ name = %q }", opts.Name)
+		luaArgs = fmt.Sprintf("{ name = %s }", luaQuote(opts.Name))
 	} else {
 		luaArgs = fmt.Sprintf("{ id = %d }", opts.ID)
 	}

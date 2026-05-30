@@ -9,20 +9,20 @@ import (
 )
 
 type meDrawingCreateChevronOpts struct {
-	North           float64
-	East            float64
-	Bearing         float64
-	Size            float64
-	ArmAngle        float64
-	Name            string
-	Color           string
-	Thickness       float64
-	Style           string
-	Layer           string
-	HiddenOnPlanner bool
-	Timeout         time.Duration
-	Pretty          bool
-	SavedGames      string
+	North		float64
+	East		float64
+	Bearing		float64
+	Size		float64
+	ArmAngle	float64
+	Name		string
+	Color		string
+	Thickness	float64
+	Style		string
+	Layer		string
+	HiddenOnPlanner	bool
+	Timeout		time.Duration
+	Pretty		bool
+	SavedGames	string
 }
 
 func meDrawingCreateChevronFlags() (*flag.FlagSet, *meDrawingCreateChevronOpts) {
@@ -48,9 +48,9 @@ func meDrawingCreateChevronFlags() (*flag.FlagSet, *meDrawingCreateChevronOpts) 
 
 func init() {
 	registerMeInfo("drawing", "create-chevron", cmdInfo{
-		Run:      meDrawingCreateChevronCmd,
-		Flags:    flagsOnly(meDrawingCreateChevronFlags),
-		Synopsis: "draw a V-shape chevron / directional tick mark on the F10 map",
+		Run:		meDrawingCreateChevronCmd,
+		Flags:		flagsOnly(meDrawingCreateChevronFlags),
+		Synopsis:	"draw a V-shape chevron / directional tick mark on the F10 map",
 	})
 }
 
@@ -92,7 +92,7 @@ func meDrawingCreateChevronCmd(args []string, stdout, stderr io.Writer) int {
 		fmt.Sprintf("arm_angle = %g", opts.ArmAngle),
 	}
 	if opts.Name != "" {
-		parts = append(parts, fmt.Sprintf("name = %q", opts.Name))
+		parts = append(parts, fmt.Sprintf("name = %s", luaQuote(opts.Name)))
 	}
 	if colorLua != "" {
 		parts = append(parts, "color = "+colorLua)
@@ -101,10 +101,10 @@ func meDrawingCreateChevronCmd(args []string, stdout, stderr io.Writer) int {
 		parts = append(parts, fmt.Sprintf("thickness = %g", opts.Thickness))
 	}
 	if opts.Style != "" {
-		parts = append(parts, fmt.Sprintf("style = %q", opts.Style))
+		parts = append(parts, fmt.Sprintf("style = %s", luaQuote(opts.Style)))
 	}
 	if opts.Layer != "" {
-		parts = append(parts, fmt.Sprintf("layer = %q", opts.Layer))
+		parts = append(parts, fmt.Sprintf("layer = %s", luaQuote(opts.Layer)))
 	}
 	if opts.HiddenOnPlanner {
 		parts = append(parts, "hidden_on_planner = true")

@@ -8,15 +8,15 @@ import (
 )
 
 type meWaypointSetEtaOpts struct {
-	GroupName  string
-	GroupID    int
-	Index      int
-	ETA        float64
-	Timeout    time.Duration
-	Pretty     bool
-	SavedGames string
+	GroupName	string
+	GroupID		int
+	Index		int
+	ETA		float64
+	Timeout		time.Duration
+	Pretty		bool
+	SavedGames	string
 
-	indexSet, etaSet bool
+	indexSet, etaSet	bool
 }
 
 func meWaypointSetEtaFlags() (*flag.FlagSet, *meWaypointSetEtaOpts) {
@@ -34,9 +34,9 @@ func meWaypointSetEtaFlags() (*flag.FlagSet, *meWaypointSetEtaOpts) {
 
 func init() {
 	registerMeInfo("waypoint", "set-eta", cmdInfo{
-		Run:      meWaypointSetEtaCmd,
-		Flags:    flagsOnly(meWaypointSetEtaFlags),
-		Synopsis: "set a waypoint's ETA in seconds (mission-relative)",
+		Run:		meWaypointSetEtaCmd,
+		Flags:		flagsOnly(meWaypointSetEtaFlags),
+		Synopsis:	"set a waypoint's ETA in seconds (mission-relative)",
 	})
 }
 
@@ -74,7 +74,7 @@ func meWaypointSetEtaCmd(args []string, stdout, stderr io.Writer) int {
 	}
 	var idClause string
 	if hasName {
-		idClause = fmt.Sprintf("name = %q", opts.GroupName)
+		idClause = fmt.Sprintf("name = %s", luaQuote(opts.GroupName))
 	} else {
 		idClause = fmt.Sprintf("id = %d", opts.GroupID)
 	}

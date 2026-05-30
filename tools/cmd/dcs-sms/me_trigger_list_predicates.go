@@ -8,11 +8,11 @@ import (
 )
 
 type meTriggerListPredicatesOpts struct {
-	Kind       string
-	Search     string
-	Timeout    time.Duration
-	Pretty     bool
-	SavedGames string
+	Kind		string
+	Search		string
+	Timeout		time.Duration
+	Pretty		bool
+	SavedGames	string
 }
 
 func meTriggerListPredicatesFlags() (*flag.FlagSet, *meTriggerListPredicatesOpts) {
@@ -28,9 +28,9 @@ func meTriggerListPredicatesFlags() (*flag.FlagSet, *meTriggerListPredicatesOpts
 
 func init() {
 	registerMeInfo("trigger", "list-predicates", cmdInfo{
-		Run:      meTriggerListPredicatesCmd,
-		Flags:    flagsOnly(meTriggerListPredicatesFlags),
-		Synopsis: "list available trigger predicates (filter by kind / search)",
+		Run:		meTriggerListPredicatesCmd,
+		Flags:		flagsOnly(meTriggerListPredicatesFlags),
+		Synopsis:	"list available trigger predicates (filter by kind / search)",
 	})
 }
 
@@ -53,7 +53,7 @@ func meTriggerListPredicatesCmd(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, `dcs-sms me trigger list-predicates: --kind must be condition|action|trigger`)
 		return 2
 	}
-	luaArgs := fmt.Sprintf("{ kind = %q, search = %q }", opts.Kind, opts.Search)
+	luaArgs := fmt.Sprintf("{ kind = %s, search = %s }", luaQuote(opts.Kind), luaQuote(opts.Search))
 	resp, exitCode := runMeVerb("trigger_list_predicates", luaArgs, opts.Timeout, opts.SavedGames, stderr)
 	if exitCode != 0 {
 		return exitCode

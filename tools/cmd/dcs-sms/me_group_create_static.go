@@ -8,20 +8,20 @@ import (
 )
 
 type meGroupCreateStaticOpts struct {
-	Country    string
-	Type       string
-	North      float64
-	East       float64
-	Name       string
-	Heading    float64
-	Category   string
-	ShapeName  string
-	Dead       bool
-	CanCargo   bool
-	Mass       float64
-	Timeout    time.Duration
-	Pretty     bool
-	SavedGames string
+	Country		string
+	Type		string
+	North		float64
+	East		float64
+	Name		string
+	Heading		float64
+	Category	string
+	ShapeName	string
+	Dead		bool
+	CanCargo	bool
+	Mass		float64
+	Timeout		time.Duration
+	Pretty		bool
+	SavedGames	string
 }
 
 func meGroupCreateStaticFlags() (*flag.FlagSet, *meGroupCreateStaticOpts) {
@@ -47,9 +47,9 @@ func meGroupCreateStaticFlags() (*flag.FlagSet, *meGroupCreateStaticOpts) {
 
 func init() {
 	registerMeInfo("group", "create-static", cmdInfo{
-		Run:      meGroupCreateStaticCmd,
-		Flags:    flagsOnly(meGroupCreateStaticFlags),
-		Synopsis: "spawn a new static object group at the given coordinates",
+		Run:		meGroupCreateStaticCmd,
+		Flags:		flagsOnly(meGroupCreateStaticFlags),
+		Synopsis:	"spawn a new static object group at the given coordinates",
 	})
 }
 
@@ -78,11 +78,9 @@ func meGroupCreateStaticCmd(args []string, stdout, stderr io.Writer) int {
 	}
 
 	luaArgs := fmt.Sprintf(
-		"{ country = %q, type = %q, north = %g, east = %g, name = %q, "+
-			"heading_deg = %g, category = %q, shape_name = %q, dead = %t, "+
-			"can_cargo = %t, mass = %g }",
-		opts.Country, opts.Type, opts.North, opts.East, opts.Name,
-		opts.Heading, opts.Category, opts.ShapeName, opts.Dead,
+		"{ country = %s, type = %s, north = %g, east = %g, name = %s, "+
+			"heading_deg = %g, category = %s, shape_name = %s, dead = %t, "+
+			"can_cargo = %t, mass = %g }", luaQuote(opts.Country), luaQuote(opts.Type), opts.North, opts.East, luaQuote(opts.Name), opts.Heading, luaQuote(opts.Category), luaQuote(opts.ShapeName), opts.Dead,
 		opts.CanCargo, opts.Mass,
 	)
 

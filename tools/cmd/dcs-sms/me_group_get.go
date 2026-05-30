@@ -8,11 +8,11 @@ import (
 )
 
 type meGroupGetOpts struct {
-	Name       string
-	ID         int
-	Timeout    time.Duration
-	Pretty     bool
-	SavedGames string
+	Name		string
+	ID		int
+	Timeout		time.Duration
+	Pretty		bool
+	SavedGames	string
 }
 
 func meGroupGetFlags() (*flag.FlagSet, *meGroupGetOpts) {
@@ -28,9 +28,9 @@ func meGroupGetFlags() (*flag.FlagSet, *meGroupGetOpts) {
 
 func init() {
 	registerMeInfo("group", "get", cmdInfo{
-		Run:      meGroupGetCmd,
-		Flags:    flagsOnly(meGroupGetFlags),
-		Synopsis: "return full data for a group by name or id",
+		Run:		meGroupGetCmd,
+		Flags:		flagsOnly(meGroupGetFlags),
+		Synopsis:	"return full data for a group by name or id",
 	})
 }
 
@@ -52,7 +52,7 @@ func meGroupGetCmd(args []string, stdout, stderr io.Writer) int {
 	}
 	var luaArgs string
 	if hasName {
-		luaArgs = fmt.Sprintf("{ name = %q }", opts.Name)
+		luaArgs = fmt.Sprintf("{ name = %s }", luaQuote(opts.Name))
 	} else {
 		luaArgs = fmt.Sprintf("{ id = %d }", opts.ID)
 	}

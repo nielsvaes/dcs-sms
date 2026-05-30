@@ -8,12 +8,12 @@ import (
 )
 
 type meZoneSetNameOpts struct {
-	Name       string
-	ID         int
-	NewName    string
-	Timeout    time.Duration
-	Pretty     bool
-	SavedGames string
+	Name		string
+	ID		int
+	NewName		string
+	Timeout		time.Duration
+	Pretty		bool
+	SavedGames	string
 }
 
 func meZoneSetNameFlags() (*flag.FlagSet, *meZoneSetNameOpts) {
@@ -30,9 +30,9 @@ func meZoneSetNameFlags() (*flag.FlagSet, *meZoneSetNameOpts) {
 
 func init() {
 	registerMeInfo("zone", "set-name", cmdInfo{
-		Run:      meZoneSetNameCmd,
-		Flags:    flagsOnly(meZoneSetNameFlags),
-		Synopsis: "rename a zone",
+		Run:		meZoneSetNameCmd,
+		Flags:		flagsOnly(meZoneSetNameFlags),
+		Synopsis:	"rename a zone",
 	})
 }
 
@@ -65,11 +65,11 @@ func meZoneSetNameCmd(args []string, stdout, stderr io.Writer) int {
 
 	var idClause string
 	if hasName {
-		idClause = fmt.Sprintf("name = %q", opts.Name)
+		idClause = fmt.Sprintf("name = %s", luaQuote(opts.Name))
 	} else {
 		idClause = fmt.Sprintf("id = %d", opts.ID)
 	}
-	luaArgs := fmt.Sprintf("{ %s, new_name = %q }", idClause, opts.NewName)
+	luaArgs := fmt.Sprintf("{ %s, new_name = %s }", idClause, luaQuote(opts.NewName))
 
 	resp, exitCode := runMeVerb("zone_set_name", luaArgs, opts.Timeout, opts.SavedGames, stderr)
 	if exitCode != 0 {

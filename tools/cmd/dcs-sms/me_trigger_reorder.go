@@ -9,15 +9,15 @@ import (
 )
 
 type meTriggerReorderOpts struct {
-	Name       string
-	Before     string
-	After      string
-	ToIndex    int
-	ToStart    bool
-	ToEnd      bool
-	Timeout    time.Duration
-	Pretty     bool
-	SavedGames string
+	Name		string
+	Before		string
+	After		string
+	ToIndex		int
+	ToStart		bool
+	ToEnd		bool
+	Timeout		time.Duration
+	Pretty		bool
+	SavedGames	string
 }
 
 func meTriggerReorderFlags() (*flag.FlagSet, *meTriggerReorderOpts) {
@@ -37,9 +37,9 @@ func meTriggerReorderFlags() (*flag.FlagSet, *meTriggerReorderOpts) {
 
 func init() {
 	registerMeInfo("trigger", "reorder", cmdInfo{
-		Run:      meTriggerReorderCmd,
-		Flags:    flagsOnly(meTriggerReorderFlags),
-		Synopsis: "reorder triggers in the open mission",
+		Run:		meTriggerReorderCmd,
+		Flags:		flagsOnly(meTriggerReorderFlags),
+		Synopsis:	"reorder triggers in the open mission",
 	})
 }
 
@@ -87,12 +87,12 @@ func meTriggerReorderCmd(args []string, stdout, stderr io.Writer) int {
 
 	// Build the Lua args literal.
 	var b strings.Builder
-	fmt.Fprintf(&b, "{ name = %q", opts.Name)
+	fmt.Fprintf(&b, "{ name = %s", luaQuote(opts.Name))
 	if opts.Before != "" {
-		fmt.Fprintf(&b, ", before = %q", opts.Before)
+		fmt.Fprintf(&b, ", before = %s", luaQuote(opts.Before))
 	}
 	if opts.After != "" {
-		fmt.Fprintf(&b, ", after = %q", opts.After)
+		fmt.Fprintf(&b, ", after = %s", luaQuote(opts.After))
 	}
 	if opts.ToIndex != 0 {
 		fmt.Fprintf(&b, ", to_index = %d", opts.ToIndex)

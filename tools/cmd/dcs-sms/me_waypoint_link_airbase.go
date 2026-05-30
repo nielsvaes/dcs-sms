@@ -8,15 +8,15 @@ import (
 )
 
 type meWaypointLinkAirbaseOpts struct {
-	GroupName  string
-	GroupID    int
-	Index      int
-	Airbase    string
-	Timeout    time.Duration
-	Pretty     bool
-	SavedGames string
+	GroupName	string
+	GroupID		int
+	Index		int
+	Airbase		string
+	Timeout		time.Duration
+	Pretty		bool
+	SavedGames	string
 
-	indexSet bool
+	indexSet	bool
 }
 
 func meWaypointLinkAirbaseFlags() (*flag.FlagSet, *meWaypointLinkAirbaseOpts) {
@@ -42,9 +42,9 @@ func meWaypointLinkAirbaseFlags() (*flag.FlagSet, *meWaypointLinkAirbaseOpts) {
 
 func init() {
 	registerMeInfo("waypoint", "link-airbase", cmdInfo{
-		Run:      meWaypointLinkAirbaseCmd,
-		Flags:    flagsOnly(meWaypointLinkAirbaseFlags),
-		Synopsis: "link a waypoint to a specific airbase (sets airdromeId + moves WP to airbase position)",
+		Run:		meWaypointLinkAirbaseCmd,
+		Flags:		flagsOnly(meWaypointLinkAirbaseFlags),
+		Synopsis:	"link a waypoint to a specific airbase (sets airdromeId + moves WP to airbase position)",
 	})
 }
 
@@ -75,11 +75,11 @@ func meWaypointLinkAirbaseCmd(args []string, stdout, stderr io.Writer) int {
 	}
 	var idClause string
 	if hasName {
-		idClause = fmt.Sprintf("name = %q", opts.GroupName)
+		idClause = fmt.Sprintf("name = %s", luaQuote(opts.GroupName))
 	} else {
 		idClause = fmt.Sprintf("id = %d", opts.GroupID)
 	}
-	luaArgs := fmt.Sprintf("{ %s, index = %d, airbase = %q }", idClause, opts.Index, opts.Airbase)
+	luaArgs := fmt.Sprintf("{ %s, index = %d, airbase = %s }", idClause, opts.Index, luaQuote(opts.Airbase))
 	resp, exitCode := runMeVerb("waypoint_link_airbase", luaArgs, opts.Timeout, opts.SavedGames, stderr)
 	if exitCode != 0 {
 		return exitCode

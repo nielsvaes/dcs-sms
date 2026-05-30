@@ -8,12 +8,12 @@ import (
 )
 
 type meUnitSetSkillOpts struct {
-	Name       string
-	ID         int
-	Skill      string
-	Timeout    time.Duration
-	Pretty     bool
-	SavedGames string
+	Name		string
+	ID		int
+	Skill		string
+	Timeout		time.Duration
+	Pretty		bool
+	SavedGames	string
 }
 
 func meUnitSetSkillFlags() (*flag.FlagSet, *meUnitSetSkillOpts) {
@@ -31,9 +31,9 @@ func meUnitSetSkillFlags() (*flag.FlagSet, *meUnitSetSkillOpts) {
 
 func init() {
 	registerMeInfo("unit", "set-skill", cmdInfo{
-		Run:      meUnitSetSkillCmd,
-		Flags:    flagsOnly(meUnitSetSkillFlags),
-		Synopsis: "set a unit's AI skill (Average, Good, High, Excellent, Random, Player)",
+		Run:		meUnitSetSkillCmd,
+		Flags:		flagsOnly(meUnitSetSkillFlags),
+		Synopsis:	"set a unit's AI skill (Average, Good, High, Excellent, Random, Player)",
 	})
 }
 
@@ -61,11 +61,11 @@ func meUnitSetSkillCmd(args []string, stdout, stderr io.Writer) int {
 
 	var idClause string
 	if hasName {
-		idClause = fmt.Sprintf("name = %q", opts.Name)
+		idClause = fmt.Sprintf("name = %s", luaQuote(opts.Name))
 	} else {
 		idClause = fmt.Sprintf("id = %d", opts.ID)
 	}
-	luaArgs := fmt.Sprintf("{ %s, skill = %q }", idClause, opts.Skill)
+	luaArgs := fmt.Sprintf("{ %s, skill = %s }", idClause, luaQuote(opts.Skill))
 
 	resp, exitCode := runMeVerb("unit_set_skill", luaArgs, opts.Timeout, opts.SavedGames, stderr)
 	if exitCode != 0 {

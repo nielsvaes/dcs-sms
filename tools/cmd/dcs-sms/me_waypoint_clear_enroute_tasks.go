@@ -8,14 +8,14 @@ import (
 )
 
 type meWaypointClearEnrouteTasksOpts struct {
-	GroupName  string
-	GroupID    int
-	Index      int
-	Timeout    time.Duration
-	Pretty     bool
-	SavedGames string
+	GroupName	string
+	GroupID		int
+	Index		int
+	Timeout		time.Duration
+	Pretty		bool
+	SavedGames	string
 
-	indexSet bool
+	indexSet	bool
 }
 
 func meWaypointClearEnrouteTasksFlags() (*flag.FlagSet, *meWaypointClearEnrouteTasksOpts) {
@@ -32,9 +32,9 @@ func meWaypointClearEnrouteTasksFlags() (*flag.FlagSet, *meWaypointClearEnrouteT
 
 func init() {
 	registerMeInfo("waypoint", "clear-enroute-tasks", cmdInfo{
-		Run:      meWaypointClearEnrouteTasksCmd,
-		Flags:    flagsOnly(meWaypointClearEnrouteTasksFlags),
-		Synopsis: "drop all enroute-kind tasks at a waypoint (waypoint kind kept)",
+		Run:		meWaypointClearEnrouteTasksCmd,
+		Flags:		flagsOnly(meWaypointClearEnrouteTasksFlags),
+		Synopsis:	"drop all enroute-kind tasks at a waypoint (waypoint kind kept)",
 	})
 }
 
@@ -61,7 +61,7 @@ func meWaypointClearEnrouteTasksCmd(args []string, stdout, stderr io.Writer) int
 	}
 	var idClause string
 	if hasName {
-		idClause = fmt.Sprintf("name = %q", opts.GroupName)
+		idClause = fmt.Sprintf("name = %s", luaQuote(opts.GroupName))
 	} else {
 		idClause = fmt.Sprintf("id = %d", opts.GroupID)
 	}

@@ -9,11 +9,11 @@ import (
 )
 
 type meZoneListOpts struct {
-	Shape      string
-	Name       string
-	Timeout    time.Duration
-	Pretty     bool
-	SavedGames string
+	Shape		string
+	Name		string
+	Timeout		time.Duration
+	Pretty		bool
+	SavedGames	string
 }
 
 func meZoneListFlags() (*flag.FlagSet, *meZoneListOpts) {
@@ -29,9 +29,9 @@ func meZoneListFlags() (*flag.FlagSet, *meZoneListOpts) {
 
 func init() {
 	registerMeInfo("zone", "list", cmdInfo{
-		Run:      meZoneListCmd,
-		Flags:    flagsOnly(meZoneListFlags),
-		Synopsis: "list all zones in the open mission",
+		Run:		meZoneListCmd,
+		Flags:		flagsOnly(meZoneListFlags),
+		Synopsis:	"list all zones in the open mission",
 	})
 }
 
@@ -45,10 +45,10 @@ func meZoneListCmd(args []string, stdout, stderr io.Writer) int {
 
 	var parts []string
 	if opts.Shape != "" {
-		parts = append(parts, fmt.Sprintf("shape = %q", strings.ToLower(opts.Shape)))
+		parts = append(parts, fmt.Sprintf("shape = %s", luaQuote(strings.ToLower(opts.Shape))))
 	}
 	if opts.Name != "" {
-		parts = append(parts, fmt.Sprintf("name = %q", opts.Name))
+		parts = append(parts, fmt.Sprintf("name = %s", luaQuote(opts.Name)))
 	}
 	luaArgs := "{ " + strings.Join(parts, ", ") + " }"
 

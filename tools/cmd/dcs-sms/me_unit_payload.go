@@ -12,13 +12,13 @@ import (
 // the `me unit payload` entry — the run handler itself dispatches to the
 // per-sub-verb implementations below, each of which builds its own FlagSet.
 type meUnitPayloadOpts struct {
-	Name       string
-	ID         int
-	Pylon      int
-	Weapon     string
-	Timeout    time.Duration
-	Pretty     bool
-	SavedGames string
+	Name		string
+	ID		int
+	Pylon		int
+	Weapon		string
+	Timeout		time.Duration
+	Pretty		bool
+	SavedGames	string
 }
 
 func meUnitPayloadFlags() (*flag.FlagSet, *meUnitPayloadOpts) {
@@ -36,9 +36,9 @@ func meUnitPayloadFlags() (*flag.FlagSet, *meUnitPayloadOpts) {
 
 func init() {
 	registerMeInfo("unit", "payload", cmdInfo{
-		Run:      meUnitPayloadCmd,
-		Flags:    flagsOnly(meUnitPayloadFlags),
-		Synopsis: "manage a unit's per-pylon weapon payload (sub-verbs: set, clear)",
+		Run:		meUnitPayloadCmd,
+		Flags:		flagsOnly(meUnitPayloadFlags),
+		Synopsis:	"manage a unit's per-pylon weapon payload (sub-verbs: set, clear)",
 	})
 }
 
@@ -81,13 +81,13 @@ func meUnitPayloadSetCmd(args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("me unit payload set", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	var (
-		flagName       = fs.String("name", "", "unit name (mutually exclusive with --id)")
-		flagID         = fs.Int("id", 0, "unit id (mutually exclusive with --name)")
-		flagPylon      = fs.Int("pylon", 0, "pylon number (per-airframe, see DB.unit_by_type[type].Pylons)")
-		flagWeapon     = fs.String("weapon", "", "weapon CLSID (e.g. \"{GUID}\") or display name")
-		flagTimeout    = fs.Duration("timeout", 30*time.Second, "wall-clock timeout")
-		flagPretty     = fs.Bool("pretty", false, "indent JSON output")
-		flagSavedGames = fs.String("saved-games", "", "override Saved Games path")
+		flagName	= fs.String("name", "", "unit name (mutually exclusive with --id)")
+		flagID		= fs.Int("id", 0, "unit id (mutually exclusive with --name)")
+		flagPylon	= fs.Int("pylon", 0, "pylon number (per-airframe, see DB.unit_by_type[type].Pylons)")
+		flagWeapon	= fs.String("weapon", "", "weapon CLSID (e.g. \"{GUID}\") or display name")
+		flagTimeout	= fs.Duration("timeout", 30*time.Second, "wall-clock timeout")
+		flagPretty	= fs.Bool("pretty", false, "indent JSON output")
+		flagSavedGames	= fs.String("saved-games", "", "override Saved Games path")
 	)
 	if err := fs.Parse(args); err != nil {
 		return 2
@@ -109,12 +109,12 @@ func meUnitPayloadSetCmd(args []string, stdout, stderr io.Writer) int {
 
 	var idClause string
 	if hasName {
-		idClause = fmt.Sprintf("name = %q", *flagName)
+		idClause = fmt.Sprintf("name = %s", luaQuote(*flagName))
 	} else {
 		idClause = fmt.Sprintf("id = %d", *flagID)
 	}
-	luaArgs := fmt.Sprintf("{ %s, pylon = %d, weapon = %q }",
-		idClause, *flagPylon, *flagWeapon)
+	luaArgs := fmt.Sprintf("{ %s, pylon = %d, weapon = %s }",
+		idClause, *flagPylon, luaQuote(*flagWeapon))
 
 	resp, exitCode := runMeVerb("unit_payload_set", luaArgs, *flagTimeout, *flagSavedGames, stderr)
 	if exitCode != 0 {
@@ -127,12 +127,12 @@ func meUnitPayloadClearCmd(args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("me unit payload clear", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	var (
-		flagName       = fs.String("name", "", "unit name (mutually exclusive with --id)")
-		flagID         = fs.Int("id", 0, "unit id (mutually exclusive with --name)")
-		flagPylon      = fs.Int("pylon", 0, "pylon number")
-		flagTimeout    = fs.Duration("timeout", 30*time.Second, "wall-clock timeout")
-		flagPretty     = fs.Bool("pretty", false, "indent JSON output")
-		flagSavedGames = fs.String("saved-games", "", "override Saved Games path")
+		flagName	= fs.String("name", "", "unit name (mutually exclusive with --id)")
+		flagID		= fs.Int("id", 0, "unit id (mutually exclusive with --name)")
+		flagPylon	= fs.Int("pylon", 0, "pylon number")
+		flagTimeout	= fs.Duration("timeout", 30*time.Second, "wall-clock timeout")
+		flagPretty	= fs.Bool("pretty", false, "indent JSON output")
+		flagSavedGames	= fs.String("saved-games", "", "override Saved Games path")
 	)
 	if err := fs.Parse(args); err != nil {
 		return 2
@@ -150,7 +150,7 @@ func meUnitPayloadClearCmd(args []string, stdout, stderr io.Writer) int {
 
 	var idClause string
 	if hasName {
-		idClause = fmt.Sprintf("name = %q", *flagName)
+		idClause = fmt.Sprintf("name = %s", luaQuote(*flagName))
 	} else {
 		idClause = fmt.Sprintf("id = %d", *flagID)
 	}

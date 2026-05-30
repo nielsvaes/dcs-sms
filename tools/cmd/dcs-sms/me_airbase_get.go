@@ -10,18 +10,18 @@ import (
 
 func init() {
 	registerMeInfo("airbase", "get", cmdInfo{
-		Run:      meAirbaseGetCmd,
-		Flags:    flagsOnly(meAirbaseGetFlags),
-		Synopsis: "get an airbase's full info — metadata, frequencies, parking stands, runways",
+		Run:		meAirbaseGetCmd,
+		Flags:		flagsOnly(meAirbaseGetFlags),
+		Synopsis:	"get an airbase's full info — metadata, frequencies, parking stands, runways",
 	})
 }
 
 type meAirbaseGetOpts struct {
-	Name       string
-	Filter     string
-	Timeout    time.Duration
-	Pretty     bool
-	SavedGames string
+	Name		string
+	Filter		string
+	Timeout		time.Duration
+	Pretty		bool
+	SavedGames	string
 }
 
 func meAirbaseGetFlags() (*flag.FlagSet, *meAirbaseGetOpts) {
@@ -57,7 +57,7 @@ func meAirbaseGetCmd(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 
-	luaArgs := fmt.Sprintf("{ name = %q, filter = %q }", opts.Name, strings.ToLower(opts.Filter))
+	luaArgs := fmt.Sprintf("{ name = %s, filter = %s }", luaQuote(opts.Name), luaQuote(strings.ToLower(opts.Filter)))
 	resp, exitCode := runMeVerb("airbase_get", luaArgs, opts.Timeout, opts.SavedGames, stderr)
 	if exitCode != 0 {
 		return exitCode

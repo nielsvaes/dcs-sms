@@ -9,13 +9,13 @@ import (
 )
 
 type meDrawingRemoveOpts struct {
-	Name       string
-	NamePrefix string
-	Layer      string
-	All        bool
-	Timeout    time.Duration
-	Pretty     bool
-	SavedGames string
+	Name		string
+	NamePrefix	string
+	Layer		string
+	All		bool
+	Timeout		time.Duration
+	Pretty		bool
+	SavedGames	string
 }
 
 func meDrawingRemoveFlags() (*flag.FlagSet, *meDrawingRemoveOpts) {
@@ -33,9 +33,9 @@ func meDrawingRemoveFlags() (*flag.FlagSet, *meDrawingRemoveOpts) {
 
 func init() {
 	registerMeInfo("drawing", "remove", cmdInfo{
-		Run:      meDrawingRemoveCmd,
-		Flags:    flagsOnly(meDrawingRemoveFlags),
-		Synopsis: "delete one or many drawings from the open mission",
+		Run:		meDrawingRemoveCmd,
+		Flags:		flagsOnly(meDrawingRemoveFlags),
+		Synopsis:	"delete one or many drawings from the open mission",
 	})
 }
 
@@ -78,13 +78,13 @@ func meDrawingRemoveCmd(args []string, stdout, stderr io.Writer) int {
 
 	var parts []string
 	if hasName {
-		parts = append(parts, fmt.Sprintf("name = %q", opts.Name))
+		parts = append(parts, fmt.Sprintf("name = %s", luaQuote(opts.Name)))
 	}
 	if hasPrefix {
-		parts = append(parts, fmt.Sprintf("name_prefix = %q", opts.NamePrefix))
+		parts = append(parts, fmt.Sprintf("name_prefix = %s", luaQuote(opts.NamePrefix)))
 	}
 	if hasLayer {
-		parts = append(parts, fmt.Sprintf("layer = %q", opts.Layer))
+		parts = append(parts, fmt.Sprintf("layer = %s", luaQuote(opts.Layer)))
 	}
 	if opts.All {
 		parts = append(parts, "all = true")

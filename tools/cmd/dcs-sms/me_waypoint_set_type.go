@@ -8,15 +8,15 @@ import (
 )
 
 type meWaypointSetTypeOpts struct {
-	GroupName  string
-	GroupID    int
-	Index      int
-	WpType     string
-	Timeout    time.Duration
-	Pretty     bool
-	SavedGames string
+	GroupName	string
+	GroupID		int
+	Index		int
+	WpType		string
+	Timeout		time.Duration
+	Pretty		bool
+	SavedGames	string
 
-	indexSet bool
+	indexSet	bool
 }
 
 func meWaypointSetTypeFlags() (*flag.FlagSet, *meWaypointSetTypeOpts) {
@@ -40,9 +40,9 @@ func meWaypointSetTypeFlags() (*flag.FlagSet, *meWaypointSetTypeOpts) {
 
 func init() {
 	registerMeInfo("waypoint", "set-type", cmdInfo{
-		Run:      meWaypointSetTypeCmd,
-		Flags:    flagsOnly(meWaypointSetTypeFlags),
-		Synopsis: "set a waypoint's type (sms.waypoint.TYPE enum)",
+		Run:		meWaypointSetTypeCmd,
+		Flags:		flagsOnly(meWaypointSetTypeFlags),
+		Synopsis:	"set a waypoint's type (sms.waypoint.TYPE enum)",
 	})
 }
 
@@ -73,11 +73,11 @@ func meWaypointSetTypeCmd(args []string, stdout, stderr io.Writer) int {
 	}
 	var idClause string
 	if hasName {
-		idClause = fmt.Sprintf("name = %q", opts.GroupName)
+		idClause = fmt.Sprintf("name = %s", luaQuote(opts.GroupName))
 	} else {
 		idClause = fmt.Sprintf("id = %d", opts.GroupID)
 	}
-	luaArgs := fmt.Sprintf("{ %s, index = %d, wp_type = %q }", idClause, opts.Index, opts.WpType)
+	luaArgs := fmt.Sprintf("{ %s, index = %d, wp_type = %s }", idClause, opts.Index, luaQuote(opts.WpType))
 	resp, exitCode := runMeVerb("waypoint_set_type", luaArgs, opts.Timeout, opts.SavedGames, stderr)
 	if exitCode != 0 {
 		return exitCode

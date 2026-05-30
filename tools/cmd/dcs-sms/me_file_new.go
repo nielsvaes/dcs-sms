@@ -8,11 +8,11 @@ import (
 )
 
 type meFileNewOpts struct {
-	Map        string
-	Force      bool
-	Timeout    time.Duration
-	Pretty     bool
-	SavedGames string
+	Map		string
+	Force		bool
+	Timeout		time.Duration
+	Pretty		bool
+	SavedGames	string
 }
 
 func meFileNewFlags() (*flag.FlagSet, *meFileNewOpts) {
@@ -28,9 +28,9 @@ func meFileNewFlags() (*flag.FlagSet, *meFileNewOpts) {
 
 func init() {
 	registerMeInfo("file", "new", cmdInfo{
-		Run:      meFileNewCmd,
-		Flags:    flagsOnly(meFileNewFlags),
-		Synopsis: "create a new empty mission in the open Mission Editor",
+		Run:		meFileNewCmd,
+		Flags:		flagsOnly(meFileNewFlags),
+		Synopsis:	"create a new empty mission in the open Mission Editor",
 	})
 }
 
@@ -53,7 +53,7 @@ func meFileNewCmd(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 
-	luaArgs := fmt.Sprintf("{ map = %q, force = %t }", opts.Map, opts.Force)
+	luaArgs := fmt.Sprintf("{ map = %s, force = %t }", luaQuote(opts.Map), opts.Force)
 
 	resp, exitCode := runMeVerb("file_new", luaArgs, opts.Timeout, opts.SavedGames, stderr)
 	if exitCode != 0 {

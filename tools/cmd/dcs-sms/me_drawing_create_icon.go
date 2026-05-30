@@ -9,18 +9,18 @@ import (
 )
 
 type meDrawingCreateIconOpts struct {
-	North           float64
-	East            float64
-	File            string
-	Scale           float64
-	Angle           float64
-	Name            string
-	Color           string
-	Layer           string
-	HiddenOnPlanner bool
-	Timeout         time.Duration
-	Pretty          bool
-	SavedGames      string
+	North		float64
+	East		float64
+	File		string
+	Scale		float64
+	Angle		float64
+	Name		string
+	Color		string
+	Layer		string
+	HiddenOnPlanner	bool
+	Timeout		time.Duration
+	Pretty		bool
+	SavedGames	string
 }
 
 func meDrawingCreateIconFlags() (*flag.FlagSet, *meDrawingCreateIconOpts) {
@@ -43,9 +43,9 @@ func meDrawingCreateIconFlags() (*flag.FlagSet, *meDrawingCreateIconOpts) {
 
 func init() {
 	registerMeInfo("drawing", "create-icon", cmdInfo{
-		Run:      meDrawingCreateIconCmd,
-		Flags:    flagsOnly(meDrawingCreateIconFlags),
-		Synopsis: "place an icon on the F10 map",
+		Run:		meDrawingCreateIconCmd,
+		Flags:		flagsOnly(meDrawingCreateIconFlags),
+		Synopsis:	"place an icon on the F10 map",
 	})
 }
 
@@ -77,18 +77,18 @@ func meDrawingCreateIconCmd(args []string, stdout, stderr io.Writer) int {
 	parts := []string{
 		fmt.Sprintf("north = %g", opts.North),
 		fmt.Sprintf("east = %g", opts.East),
-		fmt.Sprintf("file = %q", opts.File),
+		fmt.Sprintf("file = %s", luaQuote(opts.File)),
 		fmt.Sprintf("scale = %g", opts.Scale),
 		fmt.Sprintf("angle_deg = %g", opts.Angle),
 	}
 	if opts.Name != "" {
-		parts = append(parts, fmt.Sprintf("name = %q", opts.Name))
+		parts = append(parts, fmt.Sprintf("name = %s", luaQuote(opts.Name)))
 	}
 	if colorLua != "" {
 		parts = append(parts, "color = "+colorLua)
 	}
 	if opts.Layer != "" {
-		parts = append(parts, fmt.Sprintf("layer = %q", opts.Layer))
+		parts = append(parts, fmt.Sprintf("layer = %s", luaQuote(opts.Layer)))
 	}
 	if opts.HiddenOnPlanner {
 		parts = append(parts, "hidden_on_planner = true")
