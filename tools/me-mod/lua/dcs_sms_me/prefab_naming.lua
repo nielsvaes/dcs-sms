@@ -73,6 +73,14 @@ function M.apply(rec, opts)
         result.failed = result.failed + (r.failed or 0)
     end
 
+    -- Pass 3: Suffix (groups + statics — zones + drawings added in Task 6).
+    if type(opts.suffix) == 'string' and opts.suffix ~= '' then
+        local add_suffix = require('dcs_sms_me.mass_edit_forms.add_suffix_group_name')
+        local r = add_suffix._apply(group_entities, opts.suffix, { keep_num = opts.keep_num == true })
+        result.renamed_groups = result.renamed_groups + (r.changed or 0)
+        result.failed = result.failed + (r.failed or 0)
+    end
+
     -- Composition / aggregate sev set in Task 7. For now, report success
     -- when any rename landed and no failures occurred.
     if result.renamed_groups > 0 and result.failed == 0 then

@@ -123,5 +123,37 @@ do
     check('C2: renamed_groups >= 1', result.renamed_groups >= 1)
 end
 
+-- Case D1: Suffix with keep_num=false -> plain append.
+do
+    mock.new_mission(); renames = {}
+    local rec = build_rec({ 'Viper-1' })
+    local result = naming.apply(rec, { suffix = '_alpha', keep_num = false })
+    check('D1: Viper-1 -> Viper-1_alpha',
+          rec.groups[1].group_obj.name == 'Viper-1_alpha',
+          'got ' .. tostring(rec.groups[1].group_obj.name))
+end
+
+-- Case D2: Suffix with keep_num=true -> inserted before -<digits>.
+do
+    mock.new_mission(); renames = {}
+    local rec = build_rec({ 'Viper-1' })
+    local result = naming.apply(rec, { suffix = '_alpha', keep_num = true })
+    check('D2: Viper-1 -> Viper_alpha-1 (keep num)',
+          rec.groups[1].group_obj.name == 'Viper_alpha-1',
+          'got ' .. tostring(rec.groups[1].group_obj.name))
+end
+
+-- Case D3: Full stack Name + Prefix + Suffix with keep_num=true.
+do
+    mock.new_mission(); renames = {}
+    local rec = build_rec({ 'Foo' })
+    local result = naming.apply(rec, {
+        name = 'Tank-{n}', prefix = 'EAST_', suffix = '_alpha', keep_num = true,
+    })
+    check('D3: Foo -> EAST_Tank_alpha-01',
+          rec.groups[1].group_obj.name == 'EAST_Tank_alpha-01',
+          'got ' .. tostring(rec.groups[1].group_obj.name))
+end
+
 if failures > 0 then print(failures .. ' failure(s)'); os.exit(1) end
 print('All prefab_naming tests passed.')
