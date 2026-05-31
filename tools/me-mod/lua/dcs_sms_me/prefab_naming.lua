@@ -70,10 +70,11 @@ end
 
 -- Apply a text transform to each zone/drawing entry's .name. Each entity
 -- gets resolved via the resolver; nil-resolution counts as a failure but
--- does not abort the batch. Returns {changed, failed}. Live DCS refresh
--- hooks (panel.loadFromMission for drawings, TriggerZoneController for
--- zones) are best-effort: we pcall them; failure leaves .name written
--- but ME visual state unrefreshed until the next manual interaction.
+-- does not abort the batch. Returns {changed, failed}. Only the drawing
+-- pass has a refresh hook today (refresh_drawings → me_draw_panel); zones
+-- write .name directly and rely on whatever ME-side refresh fires next.
+-- Either may leave the ME visually stale until a manual interaction in
+-- builds that don't auto-refresh on field mutation.
 local function apply_text_transform(entries, resolver, transform_fn)
     local changed, failed = 0, 0
     for _, entry in ipairs(entries or {}) do
