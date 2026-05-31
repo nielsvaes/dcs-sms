@@ -1,11 +1,26 @@
 -- mass_edit_forms/set_skill_unit.lua -- Mass Edit form: set the skill of
 -- every checked unit via verbs.unit_set_skill.
 --
--- Universal applicability (every category has a `skill` field in the
--- ME). Pre-checks each unit's current skill against the picked value so
--- "already-at-target" rows count as `unchanged` without spending a verb
--- call. Combo populated from a small static list -- skill is one of
--- seven canonical DCS values, no mission-tree lookup needed.
+-- Two skill universes (matches ED's stock dialogs in me_aircraft.lua /
+-- me_vehicle.lua / me_ship.lua):
+--   * Aircraft (plane + helicopter): 7 IDs — Average / Good / High /
+--     Excellent / Random / Client / Player. ED renders these as Rookie /
+--     Trained / Veteran / Ace / Random / Client / Player.
+--   * Ground (vehicle + ship): 5 IDs — Average / Good / High / Excellent
+--     / Random. ED uses the IDs as labels.
+--   * Static: no skill field — form stays disabled for any static in
+--     the selection.
+--
+-- The combo holds ED's per-category LABELS but each item carries the
+-- canonical ID on _skill_id. set_enabled() repopulates the combo when
+-- the checked set's category mix changes (aircraft-only ↔ ground-only),
+-- preserving the user's pick by ID across the swap. Mixed selections
+-- (aircraft + ground, or anything with a static) disable the whole
+-- form — there's no single skill list valid for both sides.
+--
+-- Pre-checks each unit's current skill against the picked ID so
+-- "already-at-target" rows count as `unchanged` without spending a
+-- verb call.
 --
 -- Public:
 --   M.scope   : 'unit'
@@ -33,9 +48,41 @@ local function log_warn(msg)
     pcall(function() _G.log.write('sms.me.mass_edit.set_skill_unit', _G.log.WARNING or 2, msg) end)
 end
 
--- Canonical DCS skill values. Order matches the ME's own combo so the
--- list reads naturally to users.
-local SKILLS = { 'Average', 'Good', 'High', 'Excellent', 'Random', 'Player', 'Client' }
+-- Two parallel arrays per category — same length, item i in LABELS pairs
+-- with item i in IDS. The label is what the user sees in the combo;
+-- the ID is what gets written to u.skill.
+local AIRCRAFT = {
+    labels = { 'Rookie',  'Trained', 'Veteran', 'Ace',       'Random', 'Client', 'Player' },
+    ids    = { 'Average', 'Good',    'High',    'Excellent', 'Random', 'Client', 'Player' },
+}
+local GROUND = {
+    labels = { 'Average', 'Good', 'High', 'Excellent', 'Random' },
+    ids    = { 'Average', 'Good', 'High', 'Excellent', 'Random' },
+}
+
+-- Inspect the checked set's categories and return either 'aircraft',
+-- 'ground', or nil (nil ⇒ mixed / contains static / empty ⇒ form is
+-- disabled, no valid single skill list).
+local function classify_selection(entities, categories)
+    if type(entities) ~= 'table' or #entities == 0 then return nil end
+    categories = categories or {}
+    local has_air, has_ground = false, false
+    for _, e in ipairs(entities) do
+        local cat = categories[e] or 'unknown'
+        if cat == 'plane' or cat == 'helicopter' then
+            has_air = true
+        elseif cat == 'vehicle' or cat == 'ship' then
+            has_ground = true
+        else
+            -- static / unknown / anything else — can't be skill-edited.
+            return nil
+        end
+    end
+    if has_air and has_ground then return nil end  -- mixed
+    if has_air then return 'aircraft' end
+    if has_ground then return 'ground' end
+    return nil
+end
 
 -- ---------------------------------------------------------------------------
 -- Apply (testable; no dxgui access).
@@ -148,31 +195,39 @@ local function form_height()
     return L.ROW_H + L.FOOTER_PAD
 end
 
--- Populate the skill combo from the static SKILLS list. Preserves the
--- currently-selected entry across rebuilds (so re-population on category
--- changes doesn't churn the user's pick).
-local function populate_skill_combo(combo)
+-- Populate the skill combo with the given kind's label/ID pair. Each
+-- item stashes its canonical ID on _skill_id (read by the apply handler
+-- — never read .getText() since the displayed label differs from the
+-- stored ID for aircraft). Preserves the currently-selected ID across
+-- repopulation: e.g. if the user picked "Ace" (id=Excellent) on
+-- aircraft, then switches to a ground-only selection, "Excellent" stays
+-- selected (now labeled "Excellent" since ground labels = IDs).
+local function populate_skill_combo(combo, kind)
     if not (combo and ListBoxItem and ListBoxItem.new) then return end
+    local set = (kind == 'aircraft') and AIRCRAFT or GROUND
 
-    local prev_text
+    local prev_id
     if combo.getSelectedItem then
         local cur = combo:getSelectedItem()
-        if cur and cur.getText then prev_text = cur:getText() end
+        if cur and cur._skill_id then prev_id = cur._skill_id end
     end
 
     if combo.removeAllItems then pcall(combo.removeAllItems, combo) end
 
-    local match_item
-    for _, name in ipairs(SKILLS) do
-        local ok, item = pcall(ListBoxItem.new, name)
+    local match_item, first_item
+    for i, label in ipairs(set.labels) do
+        local ok, item = pcall(ListBoxItem.new, label)
         if ok and item then
+            item._skill_id = set.ids[i]
             pcall(combo.insertItem, combo, item)
-            if prev_text and name == prev_text then match_item = item end
+            if i == 1 then first_item = item end
+            if prev_id and set.ids[i] == prev_id then match_item = item end
         end
     end
 
-    if match_item and combo.selectItem then
-        pcall(combo.selectItem, combo, match_item)
+    local target = match_item or first_item
+    if target and combo.selectItem then
+        pcall(combo.selectItem, combo, target)
     end
 end
 
@@ -196,7 +251,11 @@ function M.new(parent_raw, get_checked, on_after_apply, get_categories)
         if ok and c then
             skin_helper.apply(c, 'comboListSkinNew_')
             skill_combo = add(c)
-            populate_skill_combo(skill_combo)
+            -- Seed with the ground list — populate_skill_combo will swap
+            -- to aircraft on the first set_enabled() call if the active
+            -- selection is aircraft. Ground is the broader-applicable
+            -- default (it's a strict subset of the aircraft IDs).
+            populate_skill_combo(skill_combo, 'ground')
         end
     end
 
@@ -215,7 +274,11 @@ function M.new(parent_raw, get_checked, on_after_apply, get_categories)
                 local picked = ''
                 if skill_combo and skill_combo.getSelectedItem then
                     local item = skill_combo:getSelectedItem()
-                    if item and item.getText then picked = item:getText() or '' end
+                    -- Always read the canonical ID off the item — the
+                    -- displayed label may be 'Ace' (aircraft) while the
+                    -- ID is 'Excellent', and that ID is what u.skill
+                    -- expects in the .miz.
+                    if item and item._skill_id then picked = item._skill_id end
                 end
                 local entities = (type(get_checked) == 'function') and get_checked() or {}
                 local cats     = (type(get_categories) == 'function') and get_categories() or {}
@@ -224,6 +287,11 @@ function M.new(parent_raw, get_checked, on_after_apply, get_categories)
             end)
         end)
     end
+
+    -- Track the kind currently populating the combo so we only repopulate
+    -- on transitions. Avoids churning the user's mid-edit selection on
+    -- every check-state mutation within the same category.
+    local current_kind = 'ground'
 
     local panel = {}
 
@@ -242,7 +310,20 @@ function M.new(parent_raw, get_checked, on_after_apply, get_categories)
     function panel:get_height() return form_height() end
 
     function panel:set_enabled(flag)
-        local en = flag and true or false
+        -- Host's flag is "at least one checked" (universal applies_to).
+        -- We refine: classify the checked set into 'aircraft' / 'ground'
+        -- / nil. nil means mixed, contains static, or empty — disable
+        -- the whole form. Otherwise repopulate the combo only when the
+        -- kind changes (so picking a skill, then checking another unit
+        -- of the same category, doesn't reset the selection).
+        local entities = (type(get_checked) == 'function') and get_checked() or {}
+        local cats     = (type(get_categories) == 'function') and get_categories() or {}
+        local kind     = classify_selection(entities, cats)
+        local en       = (flag and kind ~= nil) and true or false
+        if kind and kind ~= current_kind then
+            current_kind = kind
+            populate_skill_combo(skill_combo, kind)
+        end
         for _, w in ipairs(owned) do
             if w.setEnabled then pcall(w.setEnabled, w, en) end
         end
