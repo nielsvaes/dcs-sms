@@ -62,6 +62,7 @@ local new_mission_hook = require('dcs_sms_me.new_mission_hook')
 local airbase_detect = require('dcs_sms_me.airbase_detect')
 local warehouse_ops = require('dcs_sms_me.warehouse_ops')
 local version       = require('dcs_sms_me.version')
+local splitter_mod  = require('dcs_sms_me.splitter')
 
 -- Apply a skin by name. Resolves in this order:
 --   * 'dtc_button' / 'dtc_grid' / 'dtc_grid_header' → DTC-dialog-style skins
@@ -210,6 +211,8 @@ local W = {
     new_folder_btn       = nil,    -- Button widget
     show_all_btn         = nil,    -- "Show all" button — deselects the tree
     folder_tree_uses_listbox = false,  -- true when TreeView is unavailable
+    splitter             = nil,    -- draggable vertical splitter between tree and grid panes
+    tree_w               = 200,    -- current left-column width (was constant TREE_W; now mutable via splitter)
 }
 
 -- Column definitions for the prefab grid. Module-level so refresh_list and the
@@ -1523,14 +1526,17 @@ local function on_undo_click()
     end)
 end
 
--- Minimum window size below which the layout starts overlapping. Acts as a
--- floor for #32's resize support (no setMinSize() in dxgui — the size
--- callback re-sets bounds if the user shrinks past this).
--- 540 floor: place_origin_btn (200 wide, x = w-336) needs w ≥ ~520 to clear
--- the rotation dial at x=132+47=179. Was 440 when the button was 130 wide.
-local MIN_W, MIN_H = 760, 460
-local TREE_W = 200      -- fixed width of the left (folder tree) pane
-local SPLIT  = 6        -- gutter between left and right panes
+-- Min dims: width drops because side-by-side place buttons no longer
+-- need to fit at full-window width; height grows to fit the new right-
+-- column control stack (3 naming rows + 1 toggle row).
+local MIN_W, MIN_H = 560, 580
+local SPLIT  = 6        -- gutter between left and right panes (also the splitter's visual thickness)
+
+-- Splitter clamps: keep left column wide enough for [+New folder][Show all]
+-- to fit (min ~140), and right column wide enough for [Place at original
+-- location] + [Place at click] side-by-side (min ~360).
+local LEFT_MIN  = 140
+local RIGHT_MIN = 360
 
 -- Single source of truth for child geometry. Called once at construction and
 -- from the Window:addSizeCallback. Top band (Name + Search) sticks to the
@@ -1561,8 +1567,8 @@ local function relayout(w, h)
 
     -- Row 1: search inputs (same y for both panes).
     local left_x  = 10
-    local left_w  = TREE_W
-    local right_x = 10 + TREE_W + SPLIT
+    local left_w  = W.tree_w
+    local right_x = 10 + W.tree_w + SPLIT
     local right_w = w - right_x - 10
 
     set(W.folder_search_label, left_x,        51, 100, 22)
@@ -1588,6 +1594,26 @@ local function relayout(w, h)
 
     set(W.folder_tree, left_x,  body_y, left_w,  tree_h)
     set(W.grid,        right_x, body_y, right_w, grid_h)
+
+    -- Splitter sits in the gutter between tree and grid. Y spans from the
+    -- top of the search row (51) down to the bottom of row3 (row3_y + 22)
+    -- so it only covers the BODY columns — the bottom strip below sep2
+    -- stays full-width. Width = SPLIT (visual thickness; reuses the gutter
+    -- constant). Range is updated every relayout so window resizes shrink
+    -- the max clamp before the user can drag past RIGHT_MIN.
+    local splitter_x        = 10 + W.tree_w + 2  -- 2px inset so tree's right edge has breathing room
+    local splitter_y_top    = 51
+    local splitter_y_bottom = row3_y + 22
+    local splitter_h        = math.max(60, splitter_y_bottom - splitter_y_top)
+    if W.splitter and W.splitter.set_bounds then
+        W.splitter:set_bounds(splitter_x, splitter_y_top, SPLIT, splitter_h)
+    end
+    if W.splitter and W.splitter.set_range then
+        W.splitter:set_range(LEFT_MIN, math.max(LEFT_MIN, w - RIGHT_MIN - 20))
+    end
+    if W.splitter and W.splitter.set_value then
+        W.splitter:set_value(W.tree_w)
+    end
 
     -- Left-pane buttons on row3_y: two equal-width with a 4px gap.
     local btn_gap   = 4
@@ -2175,6 +2201,33 @@ function M.show()
             apply_me_tree_skin(W.folder_tree)
         end
         W.window:insertWidget(W.folder_tree)
+
+        -- Inter-pane splitter: thin vertical drag bar between the tree and
+        -- the grid. Parented to W.window so it sits in the gutter (NOT
+        -- inside either pane). Constructed AFTER the tree so it inserts
+        -- later in dxgui's z-order — keeps the splitter clickable even if
+        -- a future gutter tweak made its x range bleed into a neighbour.
+        --
+        -- on_drag mutates W.tree_w and re-runs relayout, which repositions
+        -- every body widget AND the splitter itself (set_value in relayout
+        -- keeps the widget consistent if anyone else mutates W.tree_w).
+        W.splitter = splitter_mod.new(W.window, {
+            initial  = W.tree_w,
+            min      = LEFT_MIN,
+            max      = 800,   -- dynamically tightened in relayout via set_range
+            skin     = 'dtc_splitter',
+            on_drag  = function(new_left_w)
+                W.tree_w = new_left_w
+                pcall(function()
+                    if W.window and W.window.getSize then
+                        local ww, wh = W.window:getSize()
+                        if ww and wh then
+                            relayout(ww, wh)
+                        end
+                    end
+                end)
+            end,
+        })
 
         -- Tree selection handler — sets W.selected_folder and re-filters.
         -- Native TreeView fires onSelect with the item; we read item._sms_path.
