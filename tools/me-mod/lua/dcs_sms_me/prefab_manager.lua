@@ -63,6 +63,7 @@ local airbase_detect = require('dcs_sms_me.airbase_detect')
 local warehouse_ops = require('dcs_sms_me.warehouse_ops')
 local version       = require('dcs_sms_me.version')
 local splitter_mod  = require('dcs_sms_me.splitter')
+local clearable_edit = require('dcs_sms_me.clearable_edit')
 
 -- Apply a skin by name. Resolves in this order:
 --   * 'dtc_button' / 'dtc_grid' / 'dtc_grid_header' → DTC-dialog-style skins
@@ -213,6 +214,15 @@ local W = {
     folder_tree_uses_listbox = false,  -- true when TreeView is unavailable
     splitter             = nil,    -- draggable vertical splitter between tree and grid panes
     tree_w               = 200,    -- current left-column width (was constant TREE_W; now mutable via splitter)
+
+    -- Naming forms (placement-time renames). All sticky for the session.
+    naming_name_label    = nil,
+    naming_name_input    = nil,    -- clearable_edit handle
+    naming_prefix_label  = nil,
+    naming_prefix_input  = nil,
+    naming_suffix_label  = nil,
+    naming_suffix_input  = nil,
+    naming_keep_num_btn  = nil,    -- ToggleButton, default ON
 }
 
 -- Column definitions for the prefab grid. Module-level so refresh_list and the
@@ -1687,9 +1697,28 @@ local function relayout(w, h)
     -- Rotation row eats 50 px of vertical space (dial is taller than text rows).
     cur_y = cur_y + 50
 
-    -- Naming rows (Name, Prefix, Suffix) -- wired in Task 10. Reserve 3 rows
-    -- here so this task's layout shows the place buttons in their final spot.
-    cur_y = cur_y + row_pitch * 3
+    -- Naming rows: 3x [label][input], suffix row has [Keep Num] button on the right.
+    local label_w     = 56
+    local keep_num_w  = 90
+    local gap_x       = 6
+
+    -- Name row.
+    set(W.naming_name_label, stack_x, cur_y, label_w, row_h)
+    set(W.naming_name_input, stack_x + label_w + gap_x, cur_y, stack_w - label_w - gap_x, row_h)
+    cur_y = cur_y + row_pitch
+
+    -- Prefix row.
+    set(W.naming_prefix_label, stack_x, cur_y, label_w, row_h)
+    set(W.naming_prefix_input, stack_x + label_w + gap_x, cur_y, stack_w - label_w - gap_x, row_h)
+    cur_y = cur_y + row_pitch
+
+    -- Suffix row.
+    set(W.naming_suffix_label, stack_x, cur_y, label_w, row_h)
+    local suffix_input_w = stack_w - label_w - gap_x - keep_num_w - gap_x
+    if suffix_input_w < 80 then suffix_input_w = 80 end
+    set(W.naming_suffix_input, stack_x + label_w + gap_x, cur_y, suffix_input_w, row_h)
+    set(W.naming_keep_num_btn, stack_x + stack_w - keep_num_w, cur_y, keep_num_w, row_h)
+    cur_y = cur_y + row_pitch
 
     -- Place buttons row -- side-by-side. Same widths as before (200 + 122).
     local place_orig_w  = 200
@@ -2629,6 +2658,79 @@ function M.show()
             try_skin(W.rotation_unit, 'staticSkin_ME')
             W.window:insertWidget(W.rotation_unit)
         end
+
+        -- Naming form widgets. Sticky values; read at placement time
+        -- (wired in Task 11). Three label+input rows for Name / Prefix /
+        -- Suffix, plus a default-ON "Keep Num" ToggleButton next to the
+        -- suffix input that controls whether the suffix is inserted
+        -- BEFORE a trailing -<n> / _<n> token so auto-numbered names
+        -- stay sortable. Each widget is independently pcall-guarded so a
+        -- missing dxgui binding leaves the field nil — read_naming_opts
+        -- treats nil as empty.
+        pcall(function()
+            if Static and Static.new then
+                W.naming_name_label = Static.new('Name:')
+                try_skin(W.naming_name_label, 'staticSkin_ME')
+                W.window:insertWidget(W.naming_name_label)
+
+                W.naming_prefix_label = Static.new('Prefix:')
+                try_skin(W.naming_prefix_label, 'staticSkin_ME')
+                W.window:insertWidget(W.naming_prefix_label)
+
+                W.naming_suffix_label = Static.new('Suffix:')
+                try_skin(W.naming_suffix_label, 'staticSkin_ME')
+                W.window:insertWidget(W.naming_suffix_label)
+            end
+        end)
+
+        pcall(function()
+            W.naming_name_input   = clearable_edit.new(W.window, {})
+            W.naming_prefix_input = clearable_edit.new(W.window, {})
+            W.naming_suffix_input = clearable_edit.new(W.window, {})
+        end)
+
+        pcall(function()
+            if ToggleButton and ToggleButton.new then
+                local t = ToggleButton.new()
+                try_skin(t, 'dtc_button')
+                if t.setText  then pcall(t.setText,  t, 'Keep Num') end
+                if t.setState then pcall(t.setState, t, true) end
+                if t.setTooltipText then
+                    pcall(t.setTooltipText, t,
+                        'When ON, suffix is inserted BEFORE the trailing -<n>/_<n> ' ..
+                        'so an auto-numbered name stays sortable.')
+                end
+                W.naming_keep_num_btn = t
+                W.window:insertWidget(t)
+            end
+        end)
+
+        -- Tooltips for the inputs. clearable_edit doesn't proxy
+        -- setTooltipText, so attach to the underlying EditBox via
+        -- :widget() — that's the raw control that actually renders the
+        -- tooltip on hover.
+        pcall(function()
+            local function tip(input, text)
+                if not input then return end
+                local raw = (input.widget and input:widget()) or nil
+                if raw and raw.setTooltipText then
+                    pcall(raw.setTooltipText, raw, text)
+                elseif input.setTooltipText then
+                    pcall(input.setTooltipText, input, text)
+                end
+            end
+            tip(W.naming_name_input,
+                'On placement: renames every group + static. Use {n} for an ' ..
+                'index (Tank-{n} -> Tank-01, Tank-02). Then runs auto-name-' ..
+                'units on each group.')
+            tip(W.naming_prefix_input,
+                'On placement: prepends to every group, static, zone, and ' ..
+                'drawing. Then runs auto-name-units on each group.')
+            tip(W.naming_suffix_input,
+                'On placement: appends to every group, static, zone, and ' ..
+                'drawing. Then runs auto-name-units on each group. Toggle ' ..
+                '"Keep Num" inserts the suffix BEFORE a trailing -<n>.')
+        end)
 
         W.place_origin_btn = Button.new()
         W.place_origin_btn:setText('Place at original location')
