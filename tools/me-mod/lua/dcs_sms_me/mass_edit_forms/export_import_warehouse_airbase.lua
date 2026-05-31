@@ -326,6 +326,32 @@ function M.new(parent_raw, get_checked, on_after_apply, _get_categories)
         end,
         show = function() for _, w in ipairs(owned) do if w.setVisible then pcall(w.setVisible, w, true) end if w.show then pcall(w.show, w) end end end,
         hide = function() for _, w in ipairs(owned) do if w.setVisible then pcall(w.setVisible, w, false) end if w.hide then pcall(w.hide, w) end end end,
+        set_enabled = function(_, flag)
+            -- Two gating tiers:
+            --   * Save row (Name label + input + Save button) — needs
+            --     EXACTLY one airbase checked, since Save snapshots a
+            --     single airbase's warehouse into a named file.
+            --   * Apply row (Saved label + combo + Delete + Apply) —
+            --     enabled whenever the host says >= 1 is checked (the
+            --     host-supplied flag). Apply can target any number; Delete
+            --     just removes a saved preset file but we keep it gated
+            --     with the row for visual consistency.
+            local en_any = flag and true or false
+            local count  = 0
+            if type(get_checked) == 'function' then
+                local ok, ents = pcall(get_checked)
+                if ok and type(ents) == 'table' then count = #ents end
+            end
+            local en_save = (count == 1)
+            local save_row  = { name_label, name_input, save_btn }
+            local apply_row = { combo_label, combo, delete_btn, apply_btn }
+            for _, w in ipairs(save_row) do
+                if w and w.setEnabled then pcall(w.setEnabled, w, en_save) end
+            end
+            for _, w in ipairs(apply_row) do
+                if w and w.setEnabled then pcall(w.setEnabled, w, en_any) end
+            end
+        end,
     }
     return panel
 end

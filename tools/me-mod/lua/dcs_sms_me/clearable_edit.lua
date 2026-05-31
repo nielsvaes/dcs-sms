@@ -110,6 +110,12 @@ function M.new(parent_raw, opts)
         end
     end
 
+    function self:set_enabled(v)
+        local en = v and true or false
+        if self._eb.setEnabled then pcall(self._eb.setEnabled, self._eb, en) end
+        if self._btn and self._btn.setEnabled then pcall(self._btn.setEnabled, self._btn, en) end
+    end
+
     function self:set_bounds(x, y, w, h)
         self._bounds = { x = x, y = y, w = w, h = h }
         if self._eb.setBounds then pcall(self._eb.setBounds, self._eb, x, y, w, h) end
@@ -132,6 +138,7 @@ function M.new(parent_raw, opts)
     -- on a raw EditBox without per-call branching.
     self.setBounds  = function(s, x, y, w, h) s:set_bounds(x, y, w, h) end
     self.setVisible = function(s, v) s:set_visible(v) end
+    self.setEnabled = function(s, v) s:set_enabled(v) end
     self.getText    = function(s) return s:get_text() end
     self.setText    = function(s, v) s:set_text(v) end
 

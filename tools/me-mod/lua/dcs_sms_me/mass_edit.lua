@@ -215,8 +215,9 @@ end
 
 -- Recompute per-form gating based on the active scope's checked set.
 -- Calls panel:set_enabled(applicable > 0) on every panel in the active
--- scope. Panels without set_enabled (the airbase / group forms) are
--- left untouched — only unit-scope panels implement gating today.
+-- scope. Panels without set_enabled are left untouched — every shipped
+-- unit/group/airbase form implements gating, this fallback is just a
+-- safety net for any future panel added without it.
 local function recompute_form_gating()
     local panels = W.form_panels[W.scope] or {}
     if #panels == 0 then return end

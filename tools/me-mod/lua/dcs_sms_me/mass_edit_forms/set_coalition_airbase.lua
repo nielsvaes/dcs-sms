@@ -168,6 +168,12 @@ function M.new(parent_raw, get_checked, on_after_apply, _get_categories)
         end,
         show = function() for _, w in ipairs(owned) do if w.setVisible then pcall(w.setVisible, w, true) end end end,
         hide = function() for _, w in ipairs(owned) do if w.setVisible then pcall(w.setVisible, w, false) end end end,
+        set_enabled = function(_, flag)
+            local en = flag and true or false
+            for _, w in ipairs(owned) do
+                if w.setEnabled then pcall(w.setEnabled, w, en) end
+            end
+        end,
     }
     return panel
 end
