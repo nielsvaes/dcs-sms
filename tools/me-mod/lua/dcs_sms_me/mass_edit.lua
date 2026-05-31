@@ -871,7 +871,7 @@ local function relayout(w, h)
     -- Bulk order left→right: Select all · Invert · Clear · [From map
     -- · Highlight] -- the last two only on group scope (other scopes
     -- hide them; see below).
-    local sel_btn_w   = 70
+    local sel_btn_w   = 90
     local sel_strip_y = body_bottom - L.BTN_H
     set(W.widgets.refresh_btn, L.EDGE, sel_strip_y, L.REFRESH_W, L.BTN_H)
     local show_map_btns = (W.scope == 'group' or W.scope == 'unit')
