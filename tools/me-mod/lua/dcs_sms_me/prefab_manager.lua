@@ -64,6 +64,7 @@ local warehouse_ops = require('dcs_sms_me.warehouse_ops')
 local version       = require('dcs_sms_me.version')
 local splitter_mod  = require('dcs_sms_me.splitter')
 local clearable_edit = require('dcs_sms_me.clearable_edit')
+local prefab_naming = require('dcs_sms_me.prefab_naming')
 
 -- Apply a skin by name. Resolves in this order:
 --   * 'dtc_button' / 'dtc_grid' / 'dtc_grid_header' → DTC-dialog-style skins
@@ -1109,14 +1110,21 @@ local function enter_place_pending(prefab_name, prefab_table, rotation_deg)
                     -- record.statics doesn't exist in Task 6's shape (statics
                     -- ride inside record.groups since DCS treats them as
                     -- groups with type='static'). Sum errors instead.
-                    set_status(string.format(
+                    local naming_opts = read_naming_opts()
+                    local naming = prefab_naming.apply(rec, naming_opts)
+                    local placement_msg = string.format(
                         'Placed %s (%dg %dz %dd, %d errors) at (%.0f, %.0f)',
                         prefab_name,
                         #(rec.groups or {}),
                         #(rec.zones or {}),
                         #(rec.drawings or {}),
                         #(rec.errors or {}),
-                        wx, wy))
+                        wx or 0, wy or 0)
+                    if naming.toast then
+                        placement_msg = placement_msg .. ' — ' .. naming.toast
+                    end
+                    local sev = (naming.failed > 0) and 'warning' or nil
+                    set_status(placement_msg, sev)
                     log.write('sms.me.prefab', log.INFO, 'placed ' .. prefab_name)
                     run_airbase_apply(prefab_table)
                 else
@@ -1255,6 +1263,35 @@ local function on_rotation_dial_change(self)
     end)
     rotation_syncing = false
     refresh_preview()
+end
+
+-- Read the sticky naming-form values from the widgets. Empty strings are
+-- normalized to nil so prefab_naming.apply's has_any check treats them
+-- correctly. Keep Num is a tri-state-ish toggle but we read just the
+-- bool state.
+local function read_naming_opts()
+    local function read_text(handle)
+        if not (handle and handle.getText) then return nil end
+        local ok, v = pcall(handle.getText, handle)
+        if not ok then return nil end
+        v = tostring(v or '')
+        -- Trim whitespace; empty -> nil so apply()'s emptiness check fires.
+        v = v:gsub('^%s+', ''):gsub('%s+$', '')
+        if v == '' then return nil end
+        return v
+    end
+    local keep_num = false
+    pcall(function()
+        if W.naming_keep_num_btn and W.naming_keep_num_btn.getState then
+            keep_num = W.naming_keep_num_btn:getState() == true
+        end
+    end)
+    return {
+        name     = read_text(W.naming_name_input),
+        prefix   = read_text(W.naming_prefix_input),
+        suffix   = read_text(W.naming_suffix_input),
+        keep_num = keep_num,
+    }
 end
 
 -- Read the currently-selected country from the dropdown. Returns nil when
@@ -1397,14 +1434,21 @@ local function on_place_origin_click()
     if rec then
         undo.record(rec)
         local wa = prefab.meta and prefab.meta.world_anchor or { x = 0, y = 0 }
-        set_status(string.format(
+        local naming_opts = read_naming_opts()
+        local naming = prefab_naming.apply(rec, naming_opts)
+        local placement_msg = string.format(
             'Placed %s at original (%dg %dz %dd, %d errors) at (%.0f, %.0f)',
             row.name,
             #(rec.groups or {}),
             #(rec.zones or {}),
             #(rec.drawings or {}),
             #(rec.errors or {}),
-            wa.x, wa.y))
+            wa.x or 0, wa.y or 0)
+        if naming.toast then
+            placement_msg = placement_msg .. ' — ' .. naming.toast
+        end
+        local sev = (naming.failed > 0) and 'warning' or nil
+        set_status(placement_msg, sev)
         log.write('sms.me.prefab', log.INFO, 'placed ' .. row.name .. ' at original')
         run_airbase_apply(prefab)
     else
