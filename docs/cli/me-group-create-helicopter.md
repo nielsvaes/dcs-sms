@@ -28,6 +28,7 @@ dcs-sms me group create-helicopter [flags]
 | `--saved-games` | string | `""` | override Saved Games path |
 | `--skill` | string | `Average` | AI skill |
 | `--speed` | float | `50` | speed in m/s |
+| `--task` | string | `""` | group task (e.g. "CAS", "Transport"); default "Transport" |
 | `--timeout` | duration | `30s` | wall-clock timeout |
 | `--type` | string | `""` | airframe id (e.g. UH-60L, Mi-8MT) |
 

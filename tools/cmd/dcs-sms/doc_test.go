@@ -70,3 +70,59 @@ func TestFlagTypeStandardKinds(t *testing.T) {
 		t.Errorf("bool: got %q, want %q", got["b"], "bool")
 	}
 }
+
+func TestFlagTypeStringSliceFlag(t *testing.T) {
+	fs := flag.NewFlagSet("t", flag.ContinueOnError)
+	var sl stringSliceFlag
+	fs.Var(&sl, "set", "")
+	var got string
+	fs.VisitAll(func(f *flag.Flag) { got = flagType(f) })
+	if got != "string (repeatable)" {
+		t.Errorf("stringSliceFlag: got %q, want %q", got, "string (repeatable)")
+	}
+}
+
+// A cmdInfo with SubCommands renders one flags table per sub-verb, and the
+// usage line lists the sub-verb names. Guards the gh #68 doc-gen fix.
+func TestBuildPageRendersSubCommands(t *testing.T) {
+	setFlags := func() *flag.FlagSet {
+		fs := flag.NewFlagSet("set", flag.ContinueOnError)
+		fs.String("weapon", "", "weapon clsid")
+		return fs
+	}
+	fuzeFlags := func() *flag.FlagSet {
+		fs := flag.NewFlagSet("set-fuze", flag.ContinueOnError)
+		var sl stringSliceFlag
+		fs.Var(&sl, "set", "key=value pair")
+		return fs
+	}
+	info := cmdInfo{
+		// Run is unused by buildPage/renderPage; leave nil.
+		Synopsis: "manage payload",
+		SubCommands: []subCommand{
+			{Name: "set", Synopsis: "set a weapon", Flags: setFlags},
+			{Name: "set-fuze", Synopsis: "set fuze settings", Flags: fuzeFlags},
+		},
+	}
+	page := buildPage("me unit payload", "me unit", info)
+	if len(page.SubVerbs) != 2 {
+		t.Fatalf("got %d sub-verbs, want 2", len(page.SubVerbs))
+	}
+	if page.SubVerbs[1].Name != "set-fuze" || len(page.SubVerbs[1].Flags) != 1 {
+		t.Errorf("set-fuze sub-verb: %+v", page.SubVerbs[1])
+	}
+
+	out := renderPage(page)
+	for _, want := range []string{
+		"dcs-sms me unit payload <set|set-fuze> [flags]",
+		"## `set`",
+		"## `set-fuze`",
+		"set fuze settings",
+		"| `--set` | string (repeatable) |",
+		"| `--weapon` | string |",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("rendered page missing %q\n---\n%s", want, out)
+		}
+	}
+}

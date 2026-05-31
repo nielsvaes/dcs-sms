@@ -28,6 +28,7 @@ dcs-sms me group create-plane [flags]
 | `--saved-games` | string | `""` | override Saved Games path |
 | `--skill` | string | `Average` | AI skill: Average, Good, High, Excellent, Random, Player |
 | `--speed` | float | `220` | speed in m/s |
+| `--task` | string | `""` | group task (e.g. "CAP", "CAS", "Ground Attack"); default "Nothing" |
 | `--timeout` | duration | `30s` | wall-clock timeout |
 | `--type` | string | `""` | airframe id (e.g. F-16C_50, Su-27) |
 

@@ -144,6 +144,25 @@ local WAYPOINT_MODES = {
     ['on railroads']             = { key = 'onRailroads',      type = 'On Railroads',      action = 'On Railroads' },
 }
 
+-- ACTION_AIRFIELD_TYPE — the subset of WAYPOINT_ACTIONS that imply an
+-- airfield-linked TYPE. Picking one of these actions in ED's route panel
+-- flips the paired waypoint type (e.g. "From Parking Area" → TakeOffParking).
+-- set-action consults this so the type tracks the action the way the GUI
+-- does; actions absent here are non-airfield (Turning Point, Fly Over Point,
+-- ground/ship traversal, formations) and leave the type alone. The
+-- (action → type, panel-actions key) pairing mirrors WAYPOINT_MODES above.
+-- gh #68 item 4: set-action "From Parking Area" used to leave the type at
+-- "Turning Point", producing an invalid parking-start waypoint.
+local ACTION_AIRFIELD_TYPE = {
+    ['From Runway']           = { type = 'TakeOff',           key = 'takeoffRunway' },
+    ['From Parking Area']     = { type = 'TakeOffParking',    key = 'takeoffParking' },
+    ['From Parking Area Hot'] = { type = 'TakeOffParkingHot', key = 'takeoffParkingHot' },
+    ['From Ground Area']      = { type = 'TakeOffGround',     key = 'takeoffGround' },
+    ['From Ground Area Hot']  = { type = 'TakeOffGroundHot',  key = 'takeoffGroundHot' },
+    ['Landing']               = { type = 'Land',              key = 'landing' },
+    ['LandingReFuAr']         = { type = 'LandingReFuAr',     key = 'LandingReFuAr' },
+}
+
 -- resolve_action_entry — look up panel_route.actions[key] (the runtime
 -- table reference the route panel uses for wpt.type). Returns nil if
 -- panel_route isn't loaded — e.g. in unit tests — letting callers fall
@@ -687,41 +706,60 @@ function M.waypoint_link_airbase(args)
     local wp_type_str = type(wp.type) == 'string' and wp.type
             or (type(wp.type) == 'table' and wp.type.type) or ''
 
+    -- Parking preservation (gh #68 item 5). If this is a parking-start
+    -- waypoint already linked to THIS airbase and the lead unit has an
+    -- explicit stand assigned (via `me unit set-parking`), re-running
+    -- link-airbase here used to drag the waypoint to the airbase centre and
+    -- call setAirGroupOnAirport, which re-selects a (different) stand and
+    -- loses the deliberate assignment. When that condition holds we skip the
+    -- move + stand re-selection entirely and only (idempotently) re-assert
+    -- airdromeId below — the unit, its stand, and WP 0 stay put. Linking to
+    -- a DIFFERENT airbase (airdromeId mismatch) still reshuffles, since the
+    -- old stand is meaningless at the new field.
+    local lead = g.units and g.units[1]
+    local lead_has_stand = lead ~= nil and type(lead.parking_id) == 'string'
+            and lead.parking_id ~= ''
+    local preserve_parking =
+        (wp_type_str == 'TakeOffParking' or wp_type_str == 'TakeOffParkingHot')
+        and lead_has_stand and (wp.airdromeId == airdrome_number)
+
     -- Move the waypoint to the airbase position via MapWindow.move_waypoint
     -- (handles spans, symbol, label, child units for WP 0). Done first so
     -- setAirGroupOn* in the takeoff branches see the WP at the target.
-    ensure_map_objects(g)
-    pcall(function()
-        local MapWindow = require('me_map_window')
-        if type(MapWindow.move_waypoint) == 'function' then
-            MapWindow.move_waypoint(g, args.index + 1, x, y, nil, nil, nil, nil, true)
-        end
-    end)
-    wp.x = x
-    wp.y = y
-
-    -- For TakeOffParking / TakeOffParkingHot: position each unit at a
-    -- parking stand near (x,y). For TakeOff (runway): position the group
-    -- at the runway threshold. These are the same primitives the ME UI
-    -- uses inside attractToAirfield — calling them directly works
-    -- regardless of whether wpt.type is a string or panel-table.
     local units_positioned = false
-    if wp_type_str == 'TakeOffParking' or wp_type_str == 'TakeOffParkingHot' then
+    if not preserve_parking then
+        ensure_map_objects(g)
         pcall(function()
-            local mp = require('me_parking')
-            if type(mp.setAirGroupOnAirport) == 'function' then
-                local res = mp.setAirGroupOnAirport(g, x, y)
-                if res ~= false then units_positioned = true end
+            local MapWindow = require('me_map_window')
+            if type(MapWindow.move_waypoint) == 'function' then
+                MapWindow.move_waypoint(g, args.index + 1, x, y, nil, nil, nil, nil, true)
             end
         end)
-    elseif wp_type_str == 'TakeOff' then
-        pcall(function()
-            local mp = require('me_parking')
-            if type(mp.setAirGroupOnAirportRunway) == 'function' then
-                local res = mp.setAirGroupOnAirportRunway(g, x, y)
-                if res ~= false then units_positioned = true end
-            end
-        end)
+        wp.x = x
+        wp.y = y
+
+        -- For TakeOffParking / TakeOffParkingHot: position each unit at a
+        -- parking stand near (x,y). For TakeOff (runway): position the group
+        -- at the runway threshold. These are the same primitives the ME UI
+        -- uses inside attractToAirfield — calling them directly works
+        -- regardless of whether wpt.type is a string or panel-table.
+        if wp_type_str == 'TakeOffParking' or wp_type_str == 'TakeOffParkingHot' then
+            pcall(function()
+                local mp = require('me_parking')
+                if type(mp.setAirGroupOnAirport) == 'function' then
+                    local res = mp.setAirGroupOnAirport(g, x, y)
+                    if res ~= false then units_positioned = true end
+                end
+            end)
+        elseif wp_type_str == 'TakeOff' then
+            pcall(function()
+                local mp = require('me_parking')
+                if type(mp.setAirGroupOnAirportRunway) == 'function' then
+                    local res = mp.setAirGroupOnAirportRunway(g, x, y)
+                    if res ~= false then units_positioned = true end
+                end
+            end)
+        end
     end
 
     -- Force airdromeId to our target. setAirGroupOn* may have set it
@@ -745,6 +783,7 @@ function M.waypoint_link_airbase(args)
         airbase = ad:getName(), airdromeId = airdrome_number,
         north = wp.x, east = wp.y,
         units_positioned = units_positioned,
+        parking_preserved = preserve_parking,
         wp_type = wp_type_str,
     }
 end
@@ -808,9 +847,62 @@ function M.waypoint_set_action(args)
     local wp, _, g, _, err = find_waypoint(has_name and args.name or nil, has_id and args.id or nil, args.index)
     if not wp then return { ok = false, error = err } end
     wp.action = args.action
+
+    -- Pair the waypoint TYPE with the action, the way ED's action combo does.
+    -- An airfield/takeoff/landing action implies a specific airfield-linked
+    -- type; choosing a non-airfield action while the type is currently an
+    -- airfield type reverts it to "Turning Point" (and clears the linkage).
+    -- All other cases (a non-airfield action on a non-airfield type, e.g.
+    -- formations / ground traversal) leave wp.type untouched — those types
+    -- are managed by set-mode / set-formation. gh #68 item 4.
+    local old_type = type(wp.type) == 'string' and wp.type
+            or (type(wp.type) == 'table' and wp.type.type) or ''
+    local old_was_airfield = AIRFIELD_TYPES[old_type] == true
+    local pair = ACTION_AIRFIELD_TYPE[args.action]
+    local new_type_str = old_type
+    local type_managed = false
+    if pair then
+        type_managed = true
+        new_type_str = pair.type
+        wp.type = resolve_action_entry(pair.key) or pair.type
+    elseif old_was_airfield then
+        type_managed = true
+        new_type_str = 'Turning Point'
+        wp.type = resolve_action_entry('turningPoint') or 'Turning Point'
+    end
+
+    if type_managed then
+        local new_is_airfield = AIRFIELD_TYPES[new_type_str] == true
+        -- Leaving an airfield-linked type: clear airdromeId / helipadId /
+        -- grassAirfieldId and unlink any bound unit (mirrors set-type /
+        -- setWPTppmDefault). Stale linkage conflicts with the new type at load.
+        if old_was_airfield and not new_is_airfield then
+            wp.airdromeId      = nil
+            wp.helipadId       = nil
+            wp.grassAirfieldId = nil
+            if wp.linkUnit then
+                pcall(function()
+                    local Mission = require('me_mission')
+                    if type(Mission.unlinkWaypoint) == 'function' then
+                        Mission.unlinkWaypoint(wp)
+                    end
+                end)
+            end
+        end
+        -- timeReFuAr is LandingReFuAr-specific (see set-type / set-mode).
+        if new_type_str == 'LandingReFuAr' then
+            if type(wp.timeReFuAr) ~= 'number' or wp.timeReFuAr <= 0 then
+                wp.timeReFuAr = 10
+            end
+        else
+            wp.timeReFuAr = nil
+        end
+    end
+
     refresh_route_panel()
     refresh_group_view(g)
-    return { ok = true, group = g.name, index = args.index, action = wp.action }
+    return { ok = true, group = g.name, index = args.index,
+             action = wp.action, type = new_type_str }
 end
 
 function M.waypoint_set_name(args)

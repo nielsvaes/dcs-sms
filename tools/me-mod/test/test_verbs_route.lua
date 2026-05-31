@@ -442,6 +442,34 @@ local function test_set_action()
     local r = verbs.waypoint_set_action({ name = 'act1', index = 1, action = 'Fly Over Point' })
     assert_true(r.ok, 'set_action: ok')
     assert_eq(g.route.points[2].action, 'Fly Over Point', 'set_action: applied')
+    -- Non-airfield action on a non-airfield type leaves the type alone.
+    assert_eq(g.route.points[2].type, 'Turning Point', 'set_action: type unchanged for plain action')
+    assert_eq(r.type, 'Turning Point', 'set_action: returns type')
+end
+
+-- gh #68 item 4: an airfield action pairs the waypoint type with it.
+local function test_set_action_pairs_airfield_type()
+    local g = _setup_plane_route('act2')
+    local r = verbs.waypoint_set_action({ name = 'act2', index = 1, action = 'From Parking Area' })
+    assert_true(r.ok, 'set_action parking: ok')
+    assert_eq(g.route.points[2].action, 'From Parking Area', 'set_action parking: action')
+    assert_eq(g.route.points[2].type, 'TakeOffParking', 'set_action parking: type paired')
+    assert_eq(r.type, 'TakeOffParking', 'set_action parking: returns paired type')
+
+    local r2 = verbs.waypoint_set_action({ name = 'act2', index = 1, action = 'Landing' })
+    assert_eq(g.route.points[2].type, 'Land', 'set_action landing: type paired')
+end
+
+-- Switching from an airfield action to a plain one reverts the type and
+-- clears the airfield linkage fields.
+local function test_set_action_reverts_type_and_clears_linkage()
+    local g = _setup_plane_route('act3')
+    g.route.points[2].type = 'TakeOffParking'
+    g.route.points[2].airdromeId = 12
+    local r = verbs.waypoint_set_action({ name = 'act3', index = 1, action = 'Turning Point' })
+    assert_true(r.ok, 'set_action revert: ok')
+    assert_eq(g.route.points[2].type, 'Turning Point', 'set_action revert: type reset')
+    assert_eq(g.route.points[2].airdromeId, nil, 'set_action revert: airdromeId cleared')
 end
 
 local function test_set_name()
@@ -665,6 +693,8 @@ test_waypoint_remove_air_not_last_allowed()
 test_waypoint_remove_ground_last_allowed()
 test_task_preservation_on_neighbor_after_add()
 test_set_pos(); test_set_alt(); test_set_speed(); test_set_type(); test_set_action()
+test_set_action_pairs_airfield_type()
+test_set_action_reverts_type_and_clears_linkage()
 test_set_name(); test_set_eta(); test_set_speed_locked(); test_set_eta_locked()
 test_set_formation()
 test_set_mode_landing()

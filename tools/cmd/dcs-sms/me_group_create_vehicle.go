@@ -15,6 +15,7 @@ type meGroupCreateVehicleOpts struct {
 	Name		string
 	Heading		float64
 	Skill		string
+	Task		string
 	Timeout		time.Duration
 	Pretty		bool
 	SavedGames	string
@@ -30,6 +31,7 @@ func meGroupCreateVehicleFlags() (*flag.FlagSet, *meGroupCreateVehicleOpts) {
 	fs.StringVar(&opts.Name, "name", "", "group name (auto-allocated if empty)")
 	fs.Float64Var(&opts.Heading, "heading", 0, "heading in degrees (0 = north, CW positive)")
 	fs.StringVar(&opts.Skill, "skill", "Average", "AI skill")
+	fs.StringVar(&opts.Task, "task", "", "group task; default \"Ground Nothing\"")
 	fs.DurationVar(&opts.Timeout, "timeout", 30*time.Second, "wall-clock timeout")
 	fs.BoolVar(&opts.Pretty, "pretty", false, "indent JSON output")
 	fs.StringVar(&opts.SavedGames, "saved-games", "", "override Saved Games path")
@@ -67,7 +69,7 @@ func meGroupCreateVehicleCmd(args []string, stdout, stderr io.Writer) int {
 
 	luaArgs := fmt.Sprintf(
 		"{ country = %s, type = %s, north = %g, east = %g, name = %s, "+
-			"heading_deg = %g, skill = %s }", luaQuote(opts.Country), luaQuote(opts.Type), opts.North, opts.East, luaQuote(opts.Name), opts.Heading, luaQuote(opts.Skill),
+			"heading_deg = %g, skill = %s, task = %s }", luaQuote(opts.Country), luaQuote(opts.Type), opts.North, opts.East, luaQuote(opts.Name), opts.Heading, luaQuote(opts.Skill), luaQuote(opts.Task),
 	)
 
 	resp, exitCode := runMeVerb("group_create_vehicle", luaArgs, opts.Timeout, opts.SavedGames, stderr)

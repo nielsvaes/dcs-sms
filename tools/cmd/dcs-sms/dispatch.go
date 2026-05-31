@@ -21,6 +21,20 @@ type cmdInfo struct {
 	Flags    func() *flag.FlagSet
 	Synopsis string
 	Examples []string // TODO(#49 doc gen): consumed by `dcs-sms doc` once Task 10 lands
+
+	// SubCommands documents verbs that dispatch on a further positional token
+	// (e.g. `me unit payload set`, `... set-fuze`). The umbrella command's Run
+	// routes to them itself; the doc generator renders one flags table per
+	// sub-command so each sub-verb's flags are documented. A command with
+	// SubCommands set but Flags == nil is still included in the reference.
+	SubCommands []subCommand
+}
+
+// subCommand is one documented sub-verb of an umbrella command.
+type subCommand struct {
+	Name     string
+	Synopsis string
+	Flags    func() *flag.FlagSet
 }
 
 // commands maps subcommand names to their metadata. Subcommands register

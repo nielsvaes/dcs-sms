@@ -21,6 +21,7 @@ type meGroupCreateHelicopterOpts struct {
 	Livery		string
 	Frequency	float64
 	OnboardNum	string
+	Task		string
 	Timeout		time.Duration
 	Pretty		bool
 	SavedGames	string
@@ -42,6 +43,7 @@ func meGroupCreateHelicopterFlags() (*flag.FlagSet, *meGroupCreateHelicopterOpts
 	fs.StringVar(&opts.Livery, "livery", "", "livery id")
 	fs.Float64Var(&opts.Frequency, "frequency", 127.5, "radio frequency MHz")
 	fs.StringVar(&opts.OnboardNum, "onboard-num", "010", "onboard number")
+	fs.StringVar(&opts.Task, "task", "", "group task (e.g. \"CAS\", \"Transport\"); default \"Transport\"")
 	fs.DurationVar(&opts.Timeout, "timeout", 30*time.Second, "wall-clock timeout")
 	fs.BoolVar(&opts.Pretty, "pretty", false, "indent JSON output")
 	fs.StringVar(&opts.SavedGames, "saved-games", "", "override Saved Games path")
@@ -80,7 +82,7 @@ func meGroupCreateHelicopterCmd(args []string, stdout, stderr io.Writer) int {
 	luaArgs := fmt.Sprintf(
 		"{ country = %s, type = %s, north = %g, east = %g, name = %s, "+
 			"alt = %g, alt_type = %s, speed = %g, heading_deg = %g, "+
-			"skill = %s, livery = %s, frequency = %g, onboard_num = %s }", luaQuote(opts.Country), luaQuote(opts.Type), opts.North, opts.East, luaQuote(opts.Name), opts.Alt, luaQuote(opts.AltType), opts.Speed, opts.Heading, luaQuote(opts.Skill), luaQuote(opts.Livery), opts.Frequency, luaQuote(opts.OnboardNum),
+			"skill = %s, livery = %s, frequency = %g, onboard_num = %s, task = %s }", luaQuote(opts.Country), luaQuote(opts.Type), opts.North, opts.East, luaQuote(opts.Name), opts.Alt, luaQuote(opts.AltType), opts.Speed, opts.Heading, luaQuote(opts.Skill), luaQuote(opts.Livery), opts.Frequency, luaQuote(opts.OnboardNum), luaQuote(opts.Task),
 	)
 
 	resp, exitCode := runMeVerb("group_create_helicopter", luaArgs, opts.Timeout, opts.SavedGames, stderr)

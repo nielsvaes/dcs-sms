@@ -181,6 +181,28 @@ local function test_create_plane_overrides()
     assert_eq(g.units[1].onboard_num, '042', 'override: onboard_num')
 end
 
+-- gh #68 item 3: --task overrides the default group task at create-time.
+local function test_create_plane_task_default_and_override()
+    mock.new_mission()
+    verbs.group_create_plane({ country = 'USA', type = 'F-16C_50', north = 0, east = 0, name = 'T1' })
+    assert_eq(mock.mission.coalition.blue.country[1].plane.group[1].task, 'Nothing',
+              'create_plane: default task Nothing')
+
+    mock.new_mission()
+    verbs.group_create_plane({ country = 'USA', type = 'F-16C_50', north = 0, east = 0,
+        name = 'T2', task = 'CAS' })
+    assert_eq(mock.mission.coalition.blue.country[1].plane.group[1].task, 'CAS',
+              'create_plane: task overridden')
+end
+
+local function test_create_vehicle_task_override()
+    mock.new_mission()
+    verbs.group_create_vehicle({ country = 'USA', type = 'Hummer', north = 0, east = 0,
+        name = 'V1', task = 'Ground Attack' })
+    assert_eq(mock.mission.coalition.blue.country[1].vehicle.group[1].task, 'Ground Attack',
+              'create_vehicle: task overridden')
+end
+
 local function test_create_plane_arg_validation()
     mock.new_mission()
     assert_false(verbs.group_create_plane(nil).ok, 'create_plane: nil args rejected')
@@ -1043,6 +1065,8 @@ local tests = {
     test_create_plane_default_name,
     test_create_plane_name_collision_uniquifies,
     test_create_plane_overrides,
+    test_create_plane_task_default_and_override,
+    test_create_vehicle_task_override,
     test_create_plane_arg_validation,
     test_create_plane_country_not_in_tree,
     test_create_plane_unknown_type_rejected,

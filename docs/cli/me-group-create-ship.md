@@ -23,6 +23,7 @@ dcs-sms me group create-ship [flags]
 | `--pretty` | bool | `false` | indent JSON output |
 | `--saved-games` | string | `""` | override Saved Games path |
 | `--skill` | string | `Average` | AI skill |
+| `--task` | string | `""` | group task; default "CAP" |
 | `--timeout` | duration | `30s` | wall-clock timeout |
 | `--type` | string | `""` | ship id (e.g. CVN_71_THEODORE_ROOSEVELT, FFG_7CL_OliverHazardPerry) |
 

@@ -411,6 +411,260 @@ function M.unit_payload_clear(args)
              pylon = args.pylon, had_weapon = had_weapon ~= nil }
 end
 
+-- ============================================================
+-- Per-pylon weapon SETTINGS (fuzes, presets, jammer modes, …)
+-- ============================================================
+--
+-- DCS stores a freeform `settings` table per pylon entry alongside the
+-- CLSID, e.g. for a WWII bomb:
+--   pylons[1] = { CLSID = "{British_GP_500LB_Bomb_Mk4}", settings = {
+--       NFP_fuze_type_nose = 1, NFP_fuze_type_tail = 1,
+--       ["00_prfx_function_delay_ctrl_NP27MkII"] = 11,
+--       ["01_prfx_function_delay_ctrl_TP30MkIII"] = 11,
+--       NFP_PRESID = "WWII_B_B_GPMkIV", NFP_PRESVER = 2, ... } }
+--
+-- The legal keys/values are weapon-specific and descriptor-driven: the ME
+-- exposes them via me_loadoututils.getLauncherSettings(clsid) (the schema:
+-- id, label, control 'comboList'/'spinbox', combo `values`, min/max,
+-- readOnly, VisibilityCondition) and getLauncherSettingsDefaultValues(clsid)
+-- (a flat key→value map of defaults, including the NFP_PRESID / NFP_PRESVER
+-- preset metadata DCS needs at load). We validate against that descriptor
+-- rather than hardcoding any weapon's fields. gh #68 item 1.
+
+-- _load_loadoututils — fetch me_loadoututils with the settings API present.
+local function _load_loadoututils()
+    local ok, LU = pcall(require, 'me_loadoututils')
+    if not ok or type(LU) ~= 'table'
+            or type(LU.getLauncherSettings) ~= 'function' then
+        return nil, 'me_loadoututils.getLauncherSettings unavailable'
+    end
+    return LU, nil
+end
+
+-- _resolve_settings_clsid — determine which weapon's settings we're editing.
+-- Prefers an explicit args.weapon (validated against the pylon's Launchers,
+-- and written onto the pylon), else falls back to the weapon already on the
+-- pylon. Returns (clsid, pylon_entry, weapon_changed, err).
+local function _resolve_settings_clsid(unit, pylon_num, weapon_arg)
+    unit.payload = unit.payload or {}
+    unit.payload.pylons = unit.payload.pylons or {}
+    local pylon = unit.payload.pylons[pylon_num]
+    local prev_clsid = pylon and pylon.CLSID
+    if type(weapon_arg) == 'string' and weapon_arg ~= '' then
+        local pylon_def, perr = _find_pylon_def(unit.type, pylon_num)
+        if not pylon_def then return nil, nil, false, perr end
+        local clsid, werr = _resolve_weapon(pylon_def, weapon_arg)
+        if not clsid then return nil, nil, false, werr end
+        local changed = clsid ~= prev_clsid
+        -- Drop stale settings when the weapon actually changes.
+        pylon = { CLSID = clsid, settings = (not changed) and pylon and pylon.settings or nil }
+        unit.payload.pylons[pylon_num] = pylon
+        return clsid, pylon, changed, nil
+    end
+    if not (pylon and pylon.CLSID) then
+        return nil, nil, false,
+            'pylon ' .. pylon_num .. ' has no weapon; set one first with '
+            .. '`me unit payload set` or pass --weapon'
+    end
+    return pylon.CLSID, pylon, false, nil
+end
+
+-- _resolve_setting_value — coerce a CLI string value against a descriptor
+-- entry. comboList: match by value id (string-compared) or dispName
+-- (case-insensitive), returning the canonical id (preserving its Lua type —
+-- ids may be numbers like 11 or strings like "EMPTY_NOSE"). spinbox/other:
+-- parse a number and range-check. Returns (value, nil) or (nil, errmsg).
+local function _resolve_setting_value(entry, raw)
+    local sval = tostring(raw)
+    if entry.control == 'comboList' and type(entry.values) == 'table' then
+        local lval = string.lower(sval)
+        for _, v in ipairs(entry.values) do
+            if tostring(v.id) == sval then return v.id end
+            if type(v.dispName) == 'string' and string.lower(v.dispName) == lval then
+                return v.id
+            end
+        end
+        local opts = {}
+        for _, v in ipairs(entry.values) do
+            opts[#opts + 1] = tostring(v.id) .. ' (' .. tostring(v.dispName) .. ')'
+        end
+        return nil, "'" .. sval .. "' is not a legal value; options: "
+                    .. table.concat(opts, ', ')
+    end
+    local n = tonumber(sval)
+    if not n then return nil, "'" .. sval .. "' is not a number" end
+    if type(entry.min) == 'number' and n < entry.min then
+        return nil, n .. ' is below min ' .. entry.min
+    end
+    if type(entry.max) == 'number' and n > entry.max then
+        return nil, n .. ' is above max ' .. entry.max
+    end
+    return n
+end
+
+-- unit_payload_list_settings — dump a weapon's configurable settings
+-- descriptor (the discovery half, mirroring `trigger list-predicates`).
+-- Resolves the weapon from args.weapon or the pylon's current loadout.
+function M.unit_payload_list_settings(args)
+    local ctx, err = _check_air_unit('unit_payload_list_settings', args)
+    if not ctx then return { ok = false, error = err } end
+    local has_weapon = type(args.weapon) == 'string' and args.weapon ~= ''
+    if type(args.pylon) ~= 'number' or args.pylon < 1 then
+        if not has_weapon then
+            return { ok = false,
+                     error = 'unit_payload_list_settings requires args.pylon (positive integer) or args.weapon' }
+        end
+    end
+    local u = ctx.unit
+    local clsid
+    if args.pylon and args.pylon >= 1 then
+        local c, _, _, rerr = _resolve_settings_clsid(u, args.pylon, args.weapon)
+        if not c then return { ok = false, error = 'unit_payload_list_settings: ' .. rerr } end
+        clsid = c
+    else
+        -- weapon-only discovery: dump the descriptor for the named weapon
+        -- without requiring it to be mounted on any pylon.
+        clsid = args.weapon
+    end
+
+    local LU, lerr = _load_loadoututils()
+    if not LU then return { ok = false, error = lerr } end
+    local descr = LU.getLauncherSettings(clsid)
+    if type(descr) ~= 'table' then
+        return { ok = false, error = 'no settings descriptor for ' .. tostring(clsid) }
+    end
+    local defs = (type(LU.getLauncherSettingsDefaultValues) == 'function')
+                 and LU.getLauncherSettingsDefaultValues(clsid) or {}
+
+    local settings = {}
+    for _, s in ipairs(descr) do
+        local values
+        if type(s.values) == 'table' then
+            values = {}
+            for _, v in ipairs(s.values) do
+                values[#values + 1] = { id = v.id, name = v.dispName }
+            end
+        end
+        local visible_when
+        if type(s.VisibilityCondition) == 'table' then
+            visible_when = {}
+            for _, c in ipairs(s.VisibilityCondition) do
+                visible_when[#visible_when + 1] = { id = c.id, value = c.value }
+            end
+        end
+        settings[#settings + 1] = {
+            id = s.id, label = s.label, control = s.control,
+            default = s.defValue, read_only = s.readOnly == true,
+            min = s.min, max = s.max, step = s.step,
+            dimension = s.dimension, values = values, visible_when = visible_when,
+        }
+    end
+
+    return { ok = true, id = u.unitId, name = u.name,
+             pylon = args.pylon, clsid = clsid,
+             preset = { id = defs and defs.NFP_PRESID, version = defs and defs.NFP_PRESVER },
+             settings = settings, count = #settings }
+end
+
+-- unit_payload_set_fuze — set per-pylon weapon settings (fuzes, function
+-- delays, presets, …) on a plane/helicopter pylon. Each args.sets entry is
+-- a { key, value } pair where key matches a descriptor `id` OR `label`
+-- (case-insensitive) and value matches a combo id/dispName or a numeric
+-- spinbox value. Starts from the weapon's default settings (so the preset
+-- metadata + sibling keys are always present), overlays any existing pylon
+-- settings, then applies the user's overrides. Writes the result to
+-- pylon.settings. gh #68 item 1.
+function M.unit_payload_set_fuze(args)
+    local ctx, err = _check_air_unit('unit_payload_set_fuze', args)
+    if not ctx then return { ok = false, error = err } end
+    if type(args.pylon) ~= 'number' or args.pylon < 1 then
+        return { ok = false, error = 'unit_payload_set_fuze requires args.pylon (positive integer)' }
+    end
+    local sets = args.sets
+    if type(sets) ~= 'table' or #sets == 0 then
+        return { ok = false, error = 'unit_payload_set_fuze requires at least one --set <key>=<value>' }
+    end
+    local u = ctx.unit
+    local clsid, pylon, _, rerr = _resolve_settings_clsid(u, args.pylon, args.weapon)
+    if not clsid then return { ok = false, error = 'unit_payload_set_fuze: ' .. rerr } end
+
+    local LU, lerr = _load_loadoututils()
+    if not LU then return { ok = false, error = lerr } end
+    local descr = LU.getLauncherSettings(clsid)
+    if type(descr) ~= 'table' or #descr == 0 then
+        return { ok = false, error = 'weapon ' .. clsid .. ' has no configurable settings' }
+    end
+    local defs = (type(LU.getLauncherSettingsDefaultValues) == 'function')
+                 and LU.getLauncherSettingsDefaultValues(clsid) or {}
+
+    -- Index the descriptor by id and by lowercased label (labels collide —
+    -- e.g. "Function Delay" exists for both nose and tail wells — so a label
+    -- match is only accepted when unambiguous; otherwise the caller must use
+    -- the exact id, which list-settings surfaces).
+    local by_id, by_label = {}, {}
+    for _, s in ipairs(descr) do
+        by_id[s.id] = s
+        if type(s.label) == 'string' then
+            local lk = string.lower(s.label)
+            by_label[lk] = by_label[lk] or {}
+            table.insert(by_label[lk], s)
+        end
+    end
+
+    -- Build the settings table: defaults → existing pylon settings → overrides.
+    local settings = {}
+    for k, v in pairs(defs or {}) do settings[k] = v end
+    if type(pylon.settings) == 'table' then
+        for k, v in pairs(pylon.settings) do settings[k] = v end
+    end
+
+    local applied = {}
+    for _, kv in ipairs(sets) do
+        local key = kv.key
+        if type(key) ~= 'string' or key == '' then
+            return { ok = false, error = 'unit_payload_set_fuze: each --set needs a non-empty key' }
+        end
+        local entry = by_id[key]
+        if not entry then
+            local cands = by_label[string.lower(key)]
+            if cands and #cands == 1 then
+                entry = cands[1]
+            elseif cands and #cands > 1 then
+                local ids = {}
+                for _, c in ipairs(cands) do ids[#ids + 1] = c.id end
+                return { ok = false, error = "setting '" .. key .. "' is ambiguous (matches "
+                        .. #cands .. " fields by label: " .. table.concat(ids, ', ')
+                        .. "); use the exact id" }
+            else
+                return { ok = false, error = "unknown setting '" .. key .. "' for " .. clsid
+                        .. " — see `me unit payload list-settings`" }
+            end
+        end
+        if entry.readOnly == true then
+            return { ok = false, error = "setting '" .. entry.id .. "' ("
+                    .. tostring(entry.label) .. ") is read-only/computed and cannot be set" }
+        end
+        local resolved, verr = _resolve_setting_value(entry, kv.value)
+        if verr ~= nil and resolved == nil then
+            return { ok = false, error = "setting '" .. entry.id .. "': " .. verr }
+        end
+        settings[entry.id] = resolved
+        applied[#applied + 1] = { id = entry.id, label = entry.label, value = resolved }
+    end
+
+    pylon.settings = settings
+
+    -- Refresh the payload panel if it's showing this unit (cosmetic).
+    pcall(function()
+        local pp = require('me_payload')
+        if type(pp.update) == 'function' then pp.update() end
+    end)
+
+    return { ok = true, id = u.unitId, name = u.name,
+             pylon = args.pylon, clsid = clsid, applied = applied,
+             preset = { id = settings.NFP_PRESID, version = settings.NFP_PRESVER } }
+end
+
 -- unit_set_chaff — set u.payload.chaff (count).
 function M.unit_set_chaff(args)
     local ctx, err = _check_air_unit('unit_set_chaff', args)
