@@ -28,6 +28,7 @@ local clearable_edit   = require('dcs_sms_me.clearable_edit')
 local marquee_hook     = require('dcs_sms_me.marquee_hook')
 local airbase_detect   = require('dcs_sms_me.airbase_detect')
 local applicability    = require('dcs_sms_me.applicability')
+local units_list_hook  = require('dcs_sms_me.me_units_list_hook')
 
 -- dxgui modules. pcall-required so the file still loads in test VMs.
 local Static;          do local ok, m = pcall(require, 'Static');         if ok then Static         = m end end
@@ -1295,6 +1296,34 @@ local function build_window()
 
     W._built = true
 
+    -- Mirror ED's Unit List live-update behavior: when any stock ED
+    -- panel (Aircraft / Ship / Vehicle / Static / Map / Mission) mutates
+    -- a unit or group, those panels all call into me_units_list's
+    -- dispatch functions. The hook below wraps those functions so we
+    -- also see every change and re-render the treeview. The handler is
+    -- visibility-guarded so the wrap is a no-op when Mass Edit is hidden.
+    --
+    -- Granularity note: we currently treat 'unit' / 'group' / 'full' the
+    -- same — rebuild_pool + rebuild_treeview. Single edits in ED's
+    -- Group panel hit updateRow once, so the rebuild cost is bounded.
+    -- Mission load fires update() repeatedly but that's a one-shot
+    -- expensive op the user is aware of; not worth coalescing yet.
+    pcall(function()
+        units_list_hook.install(function(_kind, _group, _unit)
+            if not (W.sms_window and W.sms_window:raw()) then return end
+            local raw = W.sms_window:raw()
+            if not (raw.isVisible and raw:isVisible()) then return end
+            rebuild_pool()
+            M.rebuild_treeview()
+            recompute_form_gating()
+            -- Opportunistic catch-up: if any ED panel's c_skill widget
+            -- just got created (e.g. user opened the vehicle Group panel
+            -- between our last show and this updateRow), wrap its
+            -- onChange now so the NEXT skill change fires our handler.
+            pcall(units_list_hook.try_wrap_skill_handlers)
+        end)
+    end)
+
     pcall(function() local cw, ch = raw:getSize(); relayout(cw, ch) end)
 end
 
@@ -1307,6 +1336,11 @@ function M.show()
     M.rebuild_treeview()
     show_forms_for_active_scope()
     update_map_buttons_visibility()
+    -- Catch any ED Group panels (aircraft/vehicle/ship) that opened
+    -- AFTER our initial install. Each panel's c_skill widget exists only
+    -- once the user has opened that panel at least once; the wrap is
+    -- idempotent so repeat calls cost a table lookup.
+    pcall(units_list_hook.try_wrap_skill_handlers)
     pcall(function() local cw, ch = W.sms_window:raw():getSize(); relayout(cw, ch) end)
     W.sms_window:show()
 end
