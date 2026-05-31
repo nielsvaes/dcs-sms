@@ -431,4 +431,33 @@ The **External execution** toggle flips `_G.DCS_SMS_GUI_BRIDGE_ENABLED`. Anythin
 - **Update `docs/cli/`** by running `dcs-sms doc`. Same commit. CI fails the PR otherwise.
 - **Bump `version.lua` and `CHANGELOG.md`.** Same commit. Rules in [`../../AGENTS.md`](../../AGENTS.md#4-versioning-and-releases).
 
+## 2.12 Prefab Manager placement-time naming forms
+
+The Prefab Manager has three sticky text fields in the right-column control
+stack (below Rotation, above the place buttons): **Name**, **Prefix**, and
+**Suffix** (with a default-ON **Keep Num** toggle on the suffix row).
+
+When a prefab is placed (`Place at click` or `Place at original location`),
+all three forms apply in this order — each is skipped if its field is empty:
+
+1. **Name** rewrites every placed group + static. Supports `{n}` for a
+   1-based index (e.g. `Tank-{n}` → `Tank-01`, `Tank-02`). Without `{n}`,
+   DCS's collision handling disambiguates duplicates.
+2. **Prefix** prepends to every group, static, zone, and drawing.
+3. **Suffix** appends to every group, static, zone, and drawing. When
+   `Keep Num` is ON, the suffix is inserted BEFORE a trailing `-<digits>`
+   (so `Tank-01` + suffix `_alpha` → `Tank_alpha-01`, preserving sort order).
+4. After any of the above ran, **auto-name-units** rewrites every unit
+   inside every placed group to `<groupname>-<idx>` (mirrors Mass Edit's
+   `Auto name units` button).
+
+Form fields are sticky for the session — they persist across placements
+until manually cleared. ME relaunch resets them. No per-prefab or per-folder
+persistence.
+
+The naming pipeline lives in `dcs_sms_me.prefab_naming` (pure Lua, no
+dxgui) and is composed from Mass Edit's existing form `_apply` functions
+for groups + statics; zones + drawings use an internal walk because
+Mass Edit's `name_writer.write` is group-only.
+
 Cross-cutting rules (commit style, versioning, doc-sync at the repo level) live in [`../../AGENTS.md`](../../AGENTS.md).
