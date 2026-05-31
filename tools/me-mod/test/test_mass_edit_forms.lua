@@ -52,13 +52,13 @@ end
 do
     local list = forms.forms_for('unit')
     check('unit: 9 forms', #list == 9, 'got ' .. tostring(#list))
-    -- Order: find/replace → add_prefix → add_suffix → auto_name → set_skill
+    -- Order: auto_name → find/replace → add_prefix → add_suffix → set_skill
     --        → set_onboard_num → set_livery → set_heading → set_fuel_pct.
     local expected_titles = {
+        'Auto-name units',
         'Find & replace in unit names',
         'Add prefix to unit names',
         'Add suffix to unit names',
-        'Auto-name units',
         'Set skill',
         'Set onboard #',
         'Set livery',
@@ -77,12 +77,35 @@ do
 end
 
 do
+    -- set_warehouse_airbase was removed (tri-state OFF/ON/leave for
+    -- unlimited aircraft/fuel/munitions). Export/Import warehouse still
+    -- covers warehouse mutation via saved presets.
     local list = forms.forms_for('airbase')
-    check('airbase: 3 forms', #list == 3, 'got ' .. tostring(#list))
-    local expected = { 'Set coalition', 'Set warehouse', 'Export / Import warehouse' }
+    check('airbase: 2 forms', #list == 2, 'got ' .. tostring(#list))
+    local expected = { 'Set coalition', 'Export / Import warehouse' }
     for i, _ in ipairs(expected) do
         check('airbase: form[' .. i .. '].scope = airbase',
               list[i] and list[i].scope == 'airbase')
+    end
+end
+
+do
+    -- Static scope: parallel to group with static-specific tweaks.
+    local list = forms.forms_for('static')
+    check('static: 7 forms', #list == 7, 'got ' .. tostring(#list))
+    local expected_titles = {
+        'Rename groups',
+        'Find & replace in group names',
+        'Add prefix to group names',
+        'Add suffix to group names',
+        'Set country',
+        'Visibility & state',
+        'Set heading',
+    }
+    for i, expected in ipairs(expected_titles) do
+        check('static: form[' .. i .. '].title = ' .. expected,
+              list[i] and list[i].title == expected,
+              'got ' .. tostring(list[i] and list[i].title))
     end
 end
 
