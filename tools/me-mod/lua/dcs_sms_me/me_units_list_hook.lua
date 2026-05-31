@@ -17,6 +17,16 @@
 -- those references instead of re-wrapping wraps (which would call
 -- stale handlers and skip the real ED implementation).
 --
+-- The HANDLER reference (what install() registers) is similarly
+-- stashed on ED's Hook table as _dcs_sms_on_change rather than kept
+-- in a module local. The wraps installed on Hook.update/Row/Group
+-- close over `Hook`, not over this module's chunk, so they always
+-- read the current handler. Without this, a dev-reload (which
+-- re-runs THIS module's chunk and creates a fresh local _on_change)
+-- would orphan the wraps — they'd keep pointing at the old chunk's
+-- now-nil _on_change, even though install() was called again on the
+-- fresh module.
+--
 -- Public:
 --   M.install(on_change)
 --       on_change(kind, group, unit)
@@ -37,41 +47,51 @@ local function get_hook_module()
     return nil
 end
 
-local _on_change = nil
-
 function M.install(on_change)
     local Hook = get_hook_module()
     if not Hook then return false, 'me_units_list not available' end
 
-    _on_change = on_change
+    -- Store the handler ON the Hook module so the wraps below (which
+    -- close over `Hook`) always see the current handler — survives
+    -- dev-reload of this file.
+    Hook._dcs_sms_on_change = on_change
 
+    -- Stash original ONCE on first wrap; never overwrite (Hook.update
+    -- after first wrap IS our wrapper, not ED's original — stashing it
+    -- would chain wraps infinitely). Then ALWAYS install a fresh wrap
+    -- on top of the stashed original. This makes install() idempotent
+    -- AND lets a re-install (after dev-reload of THIS module) replace
+    -- the previous wrap's closure logic — earlier we relied on the
+    -- handler-on-Hook trick alone, but the previous wrap still had to
+    -- be replaced for any code-path changes inside the wrap itself to
+    -- take effect.
     if Hook._dcs_sms_orig_update == nil and type(Hook.update) == 'function' then
         Hook._dcs_sms_orig_update = Hook.update
+    end
+    if type(Hook._dcs_sms_orig_update) == 'function' then
         Hook.update = function(...)
-            if Hook._dcs_sms_orig_update then
-                pcall(Hook._dcs_sms_orig_update, ...)
-            end
-            if _on_change then pcall(_on_change, 'full') end
+            pcall(Hook._dcs_sms_orig_update, ...)
+            if Hook._dcs_sms_on_change then pcall(Hook._dcs_sms_on_change, 'full') end
         end
     end
 
     if Hook._dcs_sms_orig_updateRow == nil and type(Hook.updateRow) == 'function' then
         Hook._dcs_sms_orig_updateRow = Hook.updateRow
+    end
+    if type(Hook._dcs_sms_orig_updateRow) == 'function' then
         Hook.updateRow = function(group, unit, ...)
-            if Hook._dcs_sms_orig_updateRow then
-                pcall(Hook._dcs_sms_orig_updateRow, group, unit, ...)
-            end
-            if _on_change then pcall(_on_change, 'unit', group, unit) end
+            pcall(Hook._dcs_sms_orig_updateRow, group, unit, ...)
+            if Hook._dcs_sms_on_change then pcall(Hook._dcs_sms_on_change, 'unit', group, unit) end
         end
     end
 
     if Hook._dcs_sms_orig_updateGroup == nil and type(Hook.updateGroup) == 'function' then
         Hook._dcs_sms_orig_updateGroup = Hook.updateGroup
+    end
+    if type(Hook._dcs_sms_orig_updateGroup) == 'function' then
         Hook.updateGroup = function(group, ...)
-            if Hook._dcs_sms_orig_updateGroup then
-                pcall(Hook._dcs_sms_orig_updateGroup, group, ...)
-            end
-            if _on_change then pcall(_on_change, 'group', group) end
+            pcall(Hook._dcs_sms_orig_updateGroup, group, ...)
+            if Hook._dcs_sms_on_change then pcall(Hook._dcs_sms_on_change, 'group', group) end
         end
     end
 
@@ -99,10 +119,17 @@ local SKILL_PANELS = {
 local function wrap_widget_onchange(panel_mod, panel_name)
     local widget = panel_mod and panel_mod.c_skill
     if not widget or type(widget) ~= 'table' then return end
-    if widget._dcs_sms_orig_onChange ~= nil then return end  -- already wrapped
-    local orig = widget.onChange
-    if type(orig) ~= 'function' then return end
-    widget._dcs_sms_orig_onChange = orig
+    -- Stash the true original on first wrap; subsequent wraps re-
+    -- install on top of that stash. Replaces an earlier "skip if
+    -- already wrapped" guard which left a stale closure pointing at
+    -- the previous module's _on_change after dev-reload.
+    if widget._dcs_sms_orig_onChange == nil then
+        local orig = widget.onChange
+        if type(orig) ~= 'function' then return end
+        widget._dcs_sms_orig_onChange = orig
+    end
+    local orig = widget._dcs_sms_orig_onChange
+    local Hook = get_hook_module()
     widget.onChange = function(self, ...)
         local ok, err = pcall(orig, self, ...)
         if not ok then
@@ -111,12 +138,12 @@ local function wrap_widget_onchange(panel_mod, panel_name)
                     panel_name .. '.c_skill orig onChange threw: ' .. tostring(err))
             end)
         end
-        if _on_change then
+        if Hook and Hook._dcs_sms_on_change then
             local vdata = panel_mod.vdata
             local group = vdata and vdata.group
             local unit  = group and vdata.unit and group.units
                           and group.units[vdata.unit.cur or vdata.unit]
-            pcall(_on_change, 'unit', group, unit)
+            pcall(Hook._dcs_sms_on_change, 'unit', group, unit)
         end
     end
 end
@@ -131,7 +158,8 @@ function M.try_wrap_skill_handlers()
 end
 
 function M.uninstall()
-    _on_change = nil
+    local Hook = get_hook_module()
+    if Hook then Hook._dcs_sms_on_change = nil end
 end
 
 return M
