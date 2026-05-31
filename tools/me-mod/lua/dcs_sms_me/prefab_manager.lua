@@ -1580,11 +1580,17 @@ local function on_undo_click()
     end)
 end
 
--- Min dims: width drops because side-by-side place buttons no longer
--- need to fit at full-window width; height grows to fit the new right-
--- column control stack (3 naming rows + 1 toggle row).
-local MIN_W, MIN_H = 560, 580
-local SPLIT  = 6        -- gutter between left and right panes (also the splitter's visual thickness)
+-- Min dims: width drops vs. the original full-width-bottom-strip layout
+-- because side-by-side place buttons no longer constrain full window
+-- width; height grows to fit the new right-column control stack
+-- (3 naming rows + 1 toggle row).
+local MIN_W, MIN_H = 580, 580
+-- Gutter between tree and grid panes. The splitter sits centered inside
+-- it with SPLITTER_MARGIN of breathing room on each side so the grab
+-- bar doesn't visually butt against either pane (matches Mass Edit).
+local SPLIT           = 6   -- splitter's visual thickness
+local SPLITTER_MARGIN = 10  -- breathing room each side of the grab bar
+local SPLIT_GUTTER    = SPLITTER_MARGIN + SPLIT + SPLITTER_MARGIN  -- 26
 
 -- Splitter clamps: keep left column wide enough for [+New folder][Show all]
 -- to fit (min ~140), and right column wide enough for [Place at original
@@ -1608,7 +1614,7 @@ local function relayout(w, h)
     -- splitter widget's set_range/set_value below also re-clamps, but only
     -- inside the widget — it doesn't write back here. Without this, the
     -- tree pane and the splitter handle drift apart on aggressive shrink.
-    local max_tree_w = math.max(LEFT_MIN, w - RIGHT_MIN - 20)
+    local max_tree_w = math.max(LEFT_MIN, w - RIGHT_MIN - SPLIT_GUTTER - 20)
     if W.tree_w < LEFT_MIN  then W.tree_w = LEFT_MIN  end
     if W.tree_w > max_tree_w then W.tree_w = max_tree_w end
 
@@ -1627,10 +1633,13 @@ local function relayout(w, h)
     -- Separator at y=40.
     set(W.sep1, 10, 40, w - 20, 1)
 
-    -- Row 1: search inputs (same y for both panes).
+    -- Row 1: search inputs (same y for both panes). The grid (and the
+    -- right-column control stack below it) starts after the full
+    -- SPLIT_GUTTER strip so there's 10 px of breathing room on either
+    -- side of the splitter handle.
     local left_x  = 10
     local left_w  = W.tree_w
-    local right_x = 10 + W.tree_w + SPLIT
+    local right_x = 10 + W.tree_w + SPLIT_GUTTER
     local right_w = w - right_x - 10
 
     set(W.folder_search_label, left_x,        51, 100, 22)
@@ -1659,13 +1668,14 @@ local function relayout(w, h)
     set(W.folder_tree, left_x,  body_y, left_w,  tree_h)
     set(W.grid,        right_x, body_y, right_w, grid_h)
 
-    -- Splitter sits in the gutter between tree and grid. Y spans from the
-    -- top of the search row (51) down to the bottom of row3 (row3_y + 22)
-    -- so it only covers the BODY columns — the bottom strip below sep2
-    -- stays full-width. Width = SPLIT (visual thickness; reuses the gutter
-    -- constant). Range is updated every relayout so window resizes shrink
-    -- the max clamp before the user can drag past RIGHT_MIN.
-    local splitter_x        = 10 + W.tree_w + 2  -- 2px inset so tree's right edge has breathing room
+    -- Splitter sits centered in the SPLIT_GUTTER strip between tree and
+    -- grid, with SPLITTER_MARGIN of breathing room on each side. Y spans
+    -- from the top of the search row (51) down to the bottom of row3
+    -- (row3_y + 22), so it only covers the BODY columns — the bottom
+    -- strip below sep2 stays full-width. Range is updated every relayout
+    -- so window resizes shrink the max clamp before the user can drag
+    -- past RIGHT_MIN.
+    local splitter_x        = 10 + W.tree_w + SPLITTER_MARGIN
     local splitter_y_top    = 51
     local splitter_y_bottom = row3_y + 22
     local splitter_h        = math.max(60, splitter_y_bottom - splitter_y_top)
@@ -1673,7 +1683,7 @@ local function relayout(w, h)
         W.splitter:set_bounds(splitter_x, splitter_y_top, SPLIT, splitter_h)
     end
     if W.splitter and W.splitter.set_range then
-        W.splitter:set_range(LEFT_MIN, math.max(LEFT_MIN, w - RIGHT_MIN - 20))
+        W.splitter:set_range(LEFT_MIN, math.max(LEFT_MIN, w - RIGHT_MIN - SPLIT_GUTTER - 20))
     end
     if W.splitter and W.splitter.set_value then
         W.splitter:set_value(W.tree_w)
@@ -1706,9 +1716,9 @@ local function relayout(w, h)
     set(W.reload_btn, w - del_w - 10 - name_w_btn - btn_pad - undo_w - btn_pad - reload_w - btn_pad, row3_y, reload_w, 22)
 
     -- Right-column control stack (below the grid + Reload/Undo/Rename/Delete row).
-    -- Anchored to the splitter's right edge; spans from splitter_x + SPLIT to
-    -- the window right margin. Vertical stack, ~30 px per row.
-    local stack_x = splitter_x + SPLIT + 4    -- 4 px inset from splitter
+    -- Aligns with the grid's left edge (right_x) so all right-column
+    -- content sits in the same column. Vertical stack, ~30 px per row.
+    local stack_x = right_x
     local stack_w = w - stack_x - 10          -- 10 px right margin
     local row_h   = 22
     local row_gap = 6
