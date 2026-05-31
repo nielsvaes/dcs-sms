@@ -151,10 +151,9 @@ end)
 local LAYOUT = {
     PAD_X      = 8,
     LABEL_W    = 56,
-    REPL_LBL_W = 64,  -- 'Replace:' is wider than 'Find:'
     ROW_H      = 24,
     BTN_W      = 90,
-    SWAP_W     = 28,  -- '⇅' swap button between the two inputs
+    SWAP_W     = 28,  -- '< >' swap button between the two inputs
     GAP_X      = 6,
     GAP_Y      = 4,
     FOOTER_PAD = 6,
@@ -174,7 +173,7 @@ function M.new(parent_raw, get_checked, on_after_apply, get_categories)
         return widget
     end
 
-    local find_lbl, find_box, swap_btn, repl_lbl, repl_box, apply_btn
+    local find_lbl, find_box, swap_btn, repl_box, apply_btn
 
     if Static and Static.new then
         local ok, s = pcall(Static.new, 'Find:')
@@ -201,10 +200,6 @@ function M.new(parent_raw, get_checked, on_after_apply, get_categories)
         end
     end
 
-    if Static and Static.new then
-        local ok, s = pcall(Static.new, 'Replace:')
-        if ok and s then skin_helper.apply(s, 'staticSkin_ME'); repl_lbl = add(s) end
-    end
     if clearable_edit and clearable_edit.new then
         repl_box = clearable_edit.new(parent_raw, {})
         if repl_box then owned[#owned + 1] = repl_box end
@@ -276,29 +271,29 @@ function M.new(parent_raw, get_checked, on_after_apply, get_categories)
         local row_y = y
 
         -- Single-row layout:
-        --   [Find:][find_box] [⇅] [Replace:][repl_box] [Replace]
-        -- The Replace button is right-anchored; the two EditBoxes share
-        -- the remaining horizontal space equally with the swap button
-        -- between them.
+        --   [Find:][find_box] [< >] [repl_box] [Replace]
+        -- The Replace button text identifies the second input; no
+        -- "Replace:" label needed. Replace button is right-anchored;
+        -- the two EditBoxes share remaining space equally with the swap
+        -- button between them.
         local apply_x = x + w - L.PAD_X - L.BTN_W
 
         local find_lbl_x = x + L.PAD_X
         local find_box_x = find_lbl_x + L.LABEL_W + L.GAP_X
         local remaining  = apply_x - L.GAP_X - find_box_x
         -- Split remaining horizontal space between the two input columns,
-        -- accounting for swap button + Replace: label + the 4 gaps.
+        -- accounting for the swap button + the 3 gaps between the four
+        -- elements (find_box | swap | repl_box | apply).
         local each_input = math.floor(
-            (remaining - L.SWAP_W - L.REPL_LBL_W - 4 * L.GAP_X) / 2)
+            (remaining - L.SWAP_W - 3 * L.GAP_X) / 2)
         if each_input < 60 then each_input = 60 end
 
-        local swap_x    = find_box_x + each_input + L.GAP_X
-        local repl_lbl_x = swap_x + L.SWAP_W + L.GAP_X
-        local repl_box_x = repl_lbl_x + L.REPL_LBL_W + L.GAP_X
+        local swap_x     = find_box_x + each_input + L.GAP_X
+        local repl_box_x = swap_x + L.SWAP_W + L.GAP_X
 
         set(find_lbl,  find_lbl_x, row_y, L.LABEL_W,    L.ROW_H)
         set(find_box,  find_box_x, row_y, each_input,   L.ROW_H)
         set(swap_btn,  swap_x,     row_y, L.SWAP_W,     L.ROW_H)
-        set(repl_lbl,  repl_lbl_x, row_y, L.REPL_LBL_W, L.ROW_H)
         set(repl_box,  repl_box_x, row_y, each_input,   L.ROW_H)
         set(apply_btn, apply_x,    row_y, L.BTN_W,      L.ROW_H)
     end
