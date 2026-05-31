@@ -162,7 +162,7 @@ end
 -- }
 -- ---------------------------------------------------------------------------
 
-local VALID_SCOPES = { group = true, unit = true, waypoint = true, zone = true, drawing = true, airbase = true }
+local VALID_SCOPES = { group = true, unit = true, waypoint = true, zone = true, drawing = true, airbase = true, static = true }
 
 -- Module-local cache so airbase entries returned by snapshot_mission('airbase')
 -- are STABLE table references across calls — required because W.checked in
@@ -231,18 +231,44 @@ function M.snapshot_drilled(scope)
     local function cat_of(g) return cat_by_group[g] or 'unknown' end
 
     if scope == 'group' then
+        -- Group scope excludes statics — they live in the dedicated
+        -- 'static' scope. Without this filter, every static group (each
+        -- a single-unit group in the ME data model) would show up in
+        -- the group treeview and the static scope, which double-counts
+        -- them and clutters the group view.
         for _, g in ipairs(groups) do
-            out.pool[#out.pool + 1] = g
-            out.parent_map[g] = g
-            out.categories[g] = cat_of(g)
+            local cat = cat_of(g)
+            if cat ~= 'static' then
+                out.pool[#out.pool + 1] = g
+                out.parent_map[g] = g
+                out.categories[g] = cat
+            end
+        end
+        return out
+    end
+
+    if scope == 'static' then
+        -- Static scope is the mirror of group scope but filtered to
+        -- category=='static' only. Statics are single-unit groups in
+        -- the ME data model so each pool entry is a static-group ref
+        -- (parent_map[g] = g, matching group-scope identity).
+        for _, g in ipairs(groups) do
+            local cat = cat_of(g)
+            if cat == 'static' then
+                out.pool[#out.pool + 1] = g
+                out.parent_map[g] = g
+                out.categories[g] = cat
+            end
         end
         return out
     end
 
     if scope == 'unit' then
+        -- Unit scope, like group scope, excludes statics — they're
+        -- managed exclusively from the dedicated 'static' scope.
         for _, g in ipairs(groups) do
-            if type(g.units) == 'table' then
-                local cat = cat_of(g)
+            local cat = cat_of(g)
+            if cat ~= 'static' and type(g.units) == 'table' then
                 for _, u in ipairs(g.units) do
                     out.pool[#out.pool + 1] = u
                     out.parent_map[u] = g
@@ -396,18 +422,36 @@ function M.snapshot_mission(scope)
     local function cat_of(g) return cat_by_group[g] or 'unknown' end
 
     if scope == 'group' then
+        -- Mirror snapshot_drilled: statics live exclusively in the
+        -- 'static' scope. Without this filter, every static (each a
+        -- single-unit group) would double-count between group + static.
         walk_mission_groups(function(g)
-            out.pool[#out.pool + 1] = g
-            out.parent_map[g] = g
-            out.categories[g] = cat_of(g)
+            local cat = cat_of(g)
+            if cat ~= 'static' then
+                out.pool[#out.pool + 1] = g
+                out.parent_map[g] = g
+                out.categories[g] = cat
+            end
+        end)
+        return out
+    end
+
+    if scope == 'static' then
+        walk_mission_groups(function(g)
+            local cat = cat_of(g)
+            if cat == 'static' then
+                out.pool[#out.pool + 1] = g
+                out.parent_map[g] = g
+                out.categories[g] = cat
+            end
         end)
         return out
     end
 
     if scope == 'unit' then
         walk_mission_groups(function(g)
-            if type(g.units) == 'table' then
-                local cat = cat_of(g)
+            local cat = cat_of(g)
+            if cat ~= 'static' and type(g.units) == 'table' then
                 for _, u in ipairs(g.units) do
                     out.pool[#out.pool + 1] = u
                     out.parent_map[u] = g

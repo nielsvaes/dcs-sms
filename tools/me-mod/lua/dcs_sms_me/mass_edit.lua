@@ -88,27 +88,28 @@ local W = {
     scope       = 'group',
     pool        = {},
     parent_map  = {},
-    checked     = { group = {}, unit = {}, waypoint = {}, zone = {}, drawing = {}, airbase = {} },
+    checked     = { group = {}, unit = {}, waypoint = {}, zone = {}, drawing = {}, airbase = {}, static = {} },
     -- Anchor entity (table reference) per scope -- the row a shift-click
     -- extends FROM. Set on every non-shift click; left untouched by
     -- shift-clicks so repeated extensions all originate from the same
     -- anchor (Explorer / GTK style).
-    anchor      = { group = nil, unit = nil, waypoint = nil, zone = nil, drawing = nil, airbase = nil },
-    filters     = { group = {}, unit = {}, waypoint = {}, zone = {}, drawing = {}, airbase = {} },
+    anchor      = { group = nil, unit = nil, waypoint = nil, zone = nil, drawing = nil, airbase = nil, static = nil },
+    filters     = { group = {}, unit = {}, waypoint = {}, zone = {}, drawing = {}, airbase = {}, static = {} },
     sort_state  = {
         group    = { key = 'name',  dir = 'asc' },
         unit     = { key = 'name',  dir = 'asc' },
+        static   = { key = 'name',  dir = 'asc' },
         waypoint = { key = 'group', dir = 'asc' },
         zone     = { key = 'name',  dir = 'asc' },
         drawing  = { key = 'name',  dir = 'asc' },
         airbase  = { key = 'name',  dir = 'asc' },
     },
-    form_panels = { group = {}, unit = {}, waypoint = {}, zone = {}, drawing = {}, airbase = {} },
+    form_panels = { group = {}, unit = {}, waypoint = {}, zone = {}, drawing = {}, airbase = {}, static = {} },
     -- Per-scope thin horizontal separator widgets (Static + dtc_separator
     -- skin) drawn between consecutive form panels. Length is always
     -- #form_panels[scope] - 1 (zero when the scope has 0 or 1 forms);
     -- shown/hidden along with the active scope's form stack.
-    form_separators = { group = {}, unit = {}, waypoint = {}, zone = {}, drawing = {}, airbase = {} },
+    form_separators = { group = {}, unit = {}, waypoint = {}, zone = {}, drawing = {}, airbase = {}, static = {} },
     -- entity → 'plane' | 'helicopter' | 'vehicle' | 'ship' | 'static' | 'unknown'
     -- Populated from selection.snapshot_mission(). Reads the Type column for
     -- the group treeview (the category lives at container-key level in the
@@ -135,7 +136,7 @@ local W = {
     _built = false,
 }
 
-local SCOPES = { 'group', 'unit', 'waypoint', 'zone', 'drawing', 'airbase' }
+local SCOPES = { 'group', 'unit', 'static', 'waypoint', 'zone', 'drawing', 'airbase' }
 
 -- Map a coalition side → dtc-coalition-skin name for the Coalition and
 -- Country cells in group scope. Unknown sides fall back to staticSkin_ME
@@ -436,6 +437,15 @@ local SCOPE_COLUMNS = {
         { key = 'north',     label = 'North',     width = 90,  type = 'number' },
         { key = 'east',      label = 'East',      width = 90,  type = 'number' },
     },
+    static = {
+        { key = 'check',     label = '',          width = 28,  type = 'check'  },
+        { key = 'name',      label = 'Name',      width = 180, type = 'string' },
+        { key = 'coalition', label = 'Coalition', width = 60,  type = 'string' },
+        { key = 'country',   label = 'Country',   width = 80,  type = 'string' },
+        { key = 'type',      label = 'Type',      width = 120, type = 'string' },
+        { key = 'cargo',     label = 'Cargo',     width = 50,  type = 'string' },
+        { key = 'dead',      label = 'Dead',      width = 50,  type = 'string' },
+    },
 }
 
 local function row_values(scope, entity, group)
@@ -483,6 +493,42 @@ local function row_values(scope, entity, group)
                  coalition = tostring(entity.coalition or ''),
                  north     = math.floor(n + (n >= 0 and 0.5 or -0.5)),
                  east      = math.floor(e + (e >= 0 and 0.5 or -0.5)) }
+    elseif scope == 'static' then
+        -- Statics are single-unit groups; the displayed Type is the
+        -- unit type (e.g. 'iso_container', 'oiltank_cargo'), not the
+        -- group category which is always 'static'. The Cargo column
+        -- shows the sling-loadable flag (unit.canCargo): yes/no for
+        -- cargo-category statics, blank for non-cargo statics where
+        -- canCargo doesn't apply. Dead is rendered as 'yes'/blank.
+        --
+        -- Cargo detection: ED does NOT set unit.category for newly-
+        -- added statics in memory — that field is only present in the
+        -- saved .miz format. The authoritative source is the DB lookup
+        -- (matches the unit_is_cargo helper in toggle_static_flags).
+        local country   = (entity.boss and entity.boss.name) or ''
+        local coalition = (entity.boss and W.country_to_side[entity.boss]) or ''
+        local unit      = entity.units and entity.units[1]
+        local utype     = (unit and unit.type) or ''
+        local is_cargo  = false
+        if unit then
+            if unit.category == 'Cargos' then
+                is_cargo = true
+            elseif type(unit.type) == 'string' then
+                local ok, DB = pcall(require, 'me_db_api')
+                if ok and DB and DB.unit_by_type then
+                    local udb = DB.unit_by_type[unit.type]
+                    if udb and udb.category == 'Cargo' then is_cargo = true end
+                end
+            end
+        end
+        local cargo_str = ''
+        if is_cargo then cargo_str = unit.canCargo and 'yes' or 'no' end
+        return { name      = tostring(entity.name or ''),
+                 coalition = tostring(coalition),
+                 country   = tostring(country),
+                 type      = tostring(utype),
+                 cargo     = cargo_str,
+                 dead      = entity.dead and 'yes' or '' }
     end
     return {}
 end
@@ -747,7 +793,7 @@ function M.rebuild_treeview()
                     -- happen after make_cell's default staticSkin_ME apply.
                     if cell and c.key == 'coalition' then
                         local side
-                        if W.scope == 'group' then
+                        if W.scope == 'group' or W.scope == 'static' then
                             side = W.country_to_side[r.entity.boss]
                         elseif W.scope == 'airbase' then
                             -- entry.coalition is 'red'/'blue'/'neutrals' from
@@ -764,7 +810,7 @@ function M.rebuild_treeview()
                         end
                         local skin = side and COALITION_CELL_SKIN[side]
                         if skin then skin_helper.apply(cell, skin) end
-                    elseif cell and W.scope == 'group' and c.key == 'country' then
+                    elseif cell and (W.scope == 'group' or W.scope == 'static') and c.key == 'country' then
                         local side = W.country_to_side[r.entity.boss]
                         local skin = COALITION_CELL_SKIN[side]
                         if skin then skin_helper.apply(cell, skin) end
@@ -790,7 +836,7 @@ end
 -- ---------------------------------------------------------------------------
 
 local SCOPE_LABEL = {
-    group = 'Group', unit = 'Unit', waypoint = 'Waypoint',
+    group = 'Group', unit = 'Unit', static = 'Static', waypoint = 'Waypoint',
     zone = 'Zone', drawing = 'Drawing',
     airbase = 'Airbase',
 }

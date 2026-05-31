@@ -19,6 +19,7 @@ local set_country             = require('dcs_sms_me.mass_edit_forms.set_country'
 local toggle_group_flags      = require('dcs_sms_me.mass_edit_forms.toggle_group_flags')
 local set_coalition_airbase             = require('dcs_sms_me.mass_edit_forms.set_coalition_airbase')
 local export_import_warehouse_airbase   = require('dcs_sms_me.mass_edit_forms.export_import_warehouse_airbase')
+local toggle_static_flags               = require('dcs_sms_me.mass_edit_forms.toggle_static_flags')
 
 local auto_name_unit            = require('dcs_sms_me.mass_edit_forms.auto_name_unit')
 local find_replace_unit_name    = require('dcs_sms_me.mass_edit_forms.find_replace_unit_name')
@@ -62,6 +63,21 @@ M.by_scope = {
         set_livery_unit,
         set_heading_unit,
         set_fuel_pct_unit,
+    },
+    -- Static scope mirrors the group scope's name-mutating + set_country
+    -- forms (statics are single-unit groups so all of those reuse the
+    -- same verbs). Omits auto_name_units_group (statics have no concept
+    -- of synced unit names — single unit per group). The toggle form is
+    -- static-specific: drops Uncontrolled / Game Master Only / Late
+    -- activation (none apply to statics), adds Dead (group.dead) and
+    -- Can be cargo (group.units[1].canCargo, Cargo statics only).
+    static   = {
+        rename_group,
+        find_replace_group_name,
+        add_prefix_group_name,
+        add_suffix_group_name,
+        set_country,
+        toggle_static_flags,
     },
     waypoint = {},
     zone     = {},
