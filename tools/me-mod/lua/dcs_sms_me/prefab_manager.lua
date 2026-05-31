@@ -1586,7 +1586,12 @@ local function relayout(w, h)
     set(W.filter_input, right_x + 84,  51, right_w - 84, 22)
 
     -- Bottom-band offsets (anchored to h).
-    local row3_y   = h - 197
+    -- row3 / [+New folder] / [Show all] / [Reload][Undo][Rename][Delete] row.
+    -- Sits above the new right-column control stack (sep2 + country + rotation +
+    -- 3 naming-row placeholder + place buttons + status bar margin).
+    -- Stack content ~= 211px + status ~30px = ~241px below row3 bottom edge.
+    -- Anchored so place buttons land just above the status bar at any window height.
+    local row3_y   = h - 263
 
     -- Tree + Grid stretch the same full height between y=77 and row3_y-8.
     -- The "+ New folder" / "Show all" buttons live on the row3_y row (same
