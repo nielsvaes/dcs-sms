@@ -41,5 +41,66 @@ do
     check('A2: toast = nil', result.toast == nil)
 end
 
+local mock = require('mock_me_mission')
+
+-- Capture renames for assertion.
+local renames = {}
+local mission_mod = setmetatable({}, { __index = mock })
+function mission_mod.renameGroup(g, new) renames[#renames + 1] = { g = g, new = new }; g.name = new; return true end
+function mission_mod.check_group_name(desired) return desired end
+package.loaded['me_mission'] = mission_mod  -- override the preload registration
+
+-- Helper: build a minimal placement record with N planes-as-groups (no
+-- statics/zones/drawings). Each entry mimics prefab_ops.M.place's shape.
+local function build_rec(group_names)
+    local rec = { groups = {}, zones = {}, drawings = {}, errors = {} }
+    for _, n in ipairs(group_names) do
+        local g = mock.add_plane({ name = n })
+        rec.groups[#rec.groups + 1] = {
+            orig_name  = n,
+            runtime_id = g.groupId,
+            group_obj  = g,
+        }
+    end
+    return rec
+end
+
+-- Case B1: Name with {n} renames groups in name_asc order.
+do
+    mock.new_mission(); renames = {}
+    local rec = build_rec({ 'Charlie', 'Alpha', 'Bravo' })
+    local result = naming.apply(rec, { name = 'Tank-{n}' })
+    check('B1: renamed_groups = 3', result.renamed_groups == 3,
+          'got ' .. tostring(result.renamed_groups))
+    check('B1: Alpha -> Tank-01', rec.groups[2].group_obj.name == 'Tank-01',
+          'got ' .. tostring(rec.groups[2].group_obj.name))
+    check('B1: Bravo -> Tank-02', rec.groups[3].group_obj.name == 'Tank-02',
+          'got ' .. tostring(rec.groups[3].group_obj.name))
+    check('B1: Charlie -> Tank-03', rec.groups[1].group_obj.name == 'Tank-03',
+          'got ' .. tostring(rec.groups[1].group_obj.name))
+    check('B1: sev = success', result.sev == 'success',
+          'got ' .. tostring(result.sev))
+end
+
+-- Case B2: Name without {n} -> identical names; ME collision handling
+-- applies (our mock returns desired verbatim, so all three become "Tank").
+do
+    mock.new_mission(); renames = {}
+    local rec = build_rec({ 'A', 'B' })
+    local result = naming.apply(rec, { name = 'Tank' })
+    check('B2: renamed_groups = 2', result.renamed_groups == 2)
+    check('B2: both became Tank',
+          rec.groups[1].group_obj.name == 'Tank' and rec.groups[2].group_obj.name == 'Tank')
+end
+
+-- Case B3: empty name string -> no-op (other fields nil).
+do
+    mock.new_mission(); renames = {}
+    local rec = build_rec({ 'A' })
+    local result = naming.apply(rec, { name = '', prefix = '', suffix = '' })
+    check('B3: renamed_groups = 0', result.renamed_groups == 0)
+    check('B3: A unchanged', rec.groups[1].group_obj.name == 'A')
+end
+
 if failures > 0 then print(failures .. ' failure(s)'); os.exit(1) end
 print('All prefab_naming tests passed.')

@@ -26,6 +26,21 @@ local function has_any(opts)
     return nz(opts.name) or nz(opts.prefix) or nz(opts.suffix)
 end
 
+-- Extract the live entity table from a placement-record entry. rec.groups
+-- entries are {orig_name, runtime_id, group_obj}; we want the group_obj
+-- to hand to Mass Edit's _apply functions (which read .name + .units).
+local function entities_from_groups(rec)
+    local out = {}
+    if type(rec) == 'table' and type(rec.groups) == 'table' then
+        for _, e in ipairs(rec.groups) do
+            if type(e) == 'table' and type(e.group_obj) == 'table' then
+                out[#out + 1] = e.group_obj
+            end
+        end
+    end
+    return out
+end
+
 function M.apply(rec, opts)
     opts = opts or {}
     local result = {
@@ -39,7 +54,23 @@ function M.apply(rec, opts)
         sev              = nil,
     }
     if not has_any(opts) then return result end
-    -- Passes added in subsequent tasks.
+
+    local group_entities = entities_from_groups(rec)
+
+    -- Pass 1: Name (groups + statics together — both live in rec.groups).
+    if type(opts.name) == 'string' and opts.name ~= '' then
+        local rename_group = require('dcs_sms_me.mass_edit_forms.rename_group')
+        local r = rename_group._apply(group_entities, opts.name)
+        result.renamed_groups = result.renamed_groups + (r.changed or 0)
+        result.failed = result.failed + (r.failed or 0)
+    end
+
+    -- Composition / aggregate sev set in Task 7. For now, report success
+    -- when any rename landed and no failures occurred.
+    if result.renamed_groups > 0 and result.failed == 0 then
+        result.sev = 'success'
+    end
+
     return result
 end
 
