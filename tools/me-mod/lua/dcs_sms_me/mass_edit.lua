@@ -138,6 +138,14 @@ local W = {
 
 local SCOPES = { 'group', 'unit', 'static', 'waypoint', 'zone', 'drawing', 'airbase' }
 
+-- Scopes whose tabs are visible but greyed out — the underlying
+-- pool/forms aren't ready yet but we want users to see the tab
+-- placeholders so the feature surface is discoverable. Clicking a
+-- disabled tab is a no-op (the change-callback bails out early); the
+-- tab itself also has setEnabled(false) applied so dxgui renders the
+-- standard disabled appearance.
+local DISABLED_SCOPES = { waypoint = true, zone = true, drawing = true }
+
 -- Map a coalition side → dtc-coalition-skin name for the Coalition and
 -- Country cells in group scope. Unknown sides fall back to staticSkin_ME
 -- (no tint).
@@ -320,6 +328,12 @@ end
 
 local function on_scope_changed(new_scope)
     if new_scope == W.scope then return end
+    -- Hard guard against switching into a disabled scope. The tab is
+    -- also setEnabled(false)'d below so this branch is mostly defensive
+    -- — covers any path that might still invoke on_scope_changed
+    -- programmatically (e.g. a future cross-scope selector targeting a
+    -- not-yet-implemented scope).
+    if DISABLED_SCOPES[new_scope] then return end
     W.scope = new_scope
     -- Walk every scope tab and update its toggle state so exactly one tab
     -- is visually active (pressed/teal) at a time. set_tab_state is guarded
@@ -1073,10 +1087,18 @@ local function build_window()
             -- Seed the active state so the default scope (W.scope, set to
             -- 'group' at module load) renders pressed/teal on first paint.
             set_tab_state(tab, scope == W.scope)
-            -- Airbase scope is the only scope where marquee-drag-on-F10
-            -- bulk-checks rows; advertise the trick via a tooltip since
-            -- it's otherwise invisible from this UI.
-            if scope == 'airbase' and tab.setTooltipText then
+            -- Greyed-out placeholder for scopes whose forms aren't ready
+            -- yet. Disable + advertise the reason via tooltip so users
+            -- aren't left wondering why nothing happens on click.
+            if DISABLED_SCOPES[scope] then
+                if tab.setEnabled then pcall(tab.setEnabled, tab, false) end
+                if tab.setTooltipText then
+                    pcall(tab.setTooltipText, tab, 'Coming soon')
+                end
+            elseif scope == 'airbase' and tab.setTooltipText then
+                -- Airbase scope is the only scope where marquee-drag-on-F10
+                -- bulk-checks rows; advertise the trick via a tooltip since
+                -- it's otherwise invisible from this UI.
                 pcall(tab.setTooltipText, tab,
                     'Tip: drag on the F10 map to bulk-check airbases.')
             end

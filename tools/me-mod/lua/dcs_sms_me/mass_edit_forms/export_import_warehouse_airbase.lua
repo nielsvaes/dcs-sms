@@ -185,7 +185,7 @@ function M.new(parent_raw, get_checked, on_after_apply, _get_categories)
 
     if Static and Static.new then
         local ok, s = pcall(Static.new); if ok and s then
-            if s.setText then pcall(s.setText, s, 'Name:') end
+            if s.setText then pcall(s.setText, s, 'File Name:') end
             skin_helper.apply(s, 'staticSkin_ME')
             name_label = add(s)
         end
@@ -296,7 +296,7 @@ function M.new(parent_raw, get_checked, on_after_apply, _get_categories)
         end)
     end
 
-    local LABEL_W = 60
+    local LABEL_W = 70  -- fits both 'File Name:' (row 1) and 'Saved:' (row 2)
     local BTN_W   = 90
     local ROW_H   = 24
     local PAD     = 4
