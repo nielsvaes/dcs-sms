@@ -48,6 +48,7 @@ local renames = {}
 local mission_mod = setmetatable({}, { __index = mock })
 function mission_mod.renameGroup(g, new) renames[#renames + 1] = { g = g, new = new }; g.name = new; return true end
 function mission_mod.check_group_name(desired) return desired end
+function mission_mod.renameUnit(u, new) u.name = new; return true end
 package.loaded['me_mission'] = mission_mod  -- override the preload registration
 
 -- Helper: build a minimal placement record with N planes-as-groups (no
@@ -153,6 +154,59 @@ do
     check('D3: Foo -> EAST_Tank_alpha-01',
           rec.groups[1].group_obj.name == 'EAST_Tank_alpha-01',
           'got ' .. tostring(rec.groups[1].group_obj.name))
+end
+
+-- Helper: build a group with multiple units.
+local function build_rec_with_units(group_name, unit_names)
+    local rec = { groups = {}, zones = {}, drawings = {}, errors = {} }
+    local g = mock.add_plane({ name = group_name })
+    -- Add additional units by copying the first one's pattern.
+    g.units = g.units or { { unitId = 1, name = unit_names[1] } }
+    g.units[1].name = unit_names[1]
+    for i = 2, #unit_names do
+        g.units[i] = { unitId = i * 100, name = unit_names[i] }
+    end
+    rec.groups[#rec.groups + 1] = {
+        orig_name = group_name, runtime_id = g.groupId, group_obj = g,
+    }
+    return rec
+end
+
+-- Case E1: After Name rename, units take <newGroupName>-<idx>.
+do
+    mock.new_mission(); renames = {}
+    local rec = build_rec_with_units('Viper-1', { 'Old-1', 'Old-2' })
+    local result = naming.apply(rec, { name = 'Tank-{n}' })
+    local g = rec.groups[1].group_obj
+    check('E1: group -> Tank-01', g.name == 'Tank-01',
+          'got ' .. tostring(g.name))
+    check('E1: unit[1] -> Tank-01-1', g.units[1].name == 'Tank-01-1',
+          'got ' .. tostring(g.units[1].name))
+    check('E1: unit[2] -> Tank-01-2', g.units[2].name == 'Tank-01-2',
+          'got ' .. tostring(g.units[2].name))
+    check('E1: renamed_units = 2', result.renamed_units == 2,
+          'got ' .. tostring(result.renamed_units))
+end
+
+-- Case E2: No naming opts -> auto-name-units does NOT run.
+do
+    mock.new_mission(); renames = {}
+    local rec = build_rec_with_units('Viper-1', { 'A', 'B' })
+    local result = naming.apply(rec, {})
+    local g = rec.groups[1].group_obj
+    check('E2: unit[1] unchanged (A)', g.units[1].name == 'A')
+    check('E2: renamed_units = 0', result.renamed_units == 0)
+end
+
+-- Case E3: Only Prefix -> auto-name-units uses post-prefix group name.
+do
+    mock.new_mission(); renames = {}
+    local rec = build_rec_with_units('Viper', { 'a', 'b' })
+    local result = naming.apply(rec, { prefix = 'EAST_' })
+    local g = rec.groups[1].group_obj
+    check('E3: group -> EAST_Viper', g.name == 'EAST_Viper')
+    check('E3: unit[1] -> EAST_Viper-1', g.units[1].name == 'EAST_Viper-1',
+          'got ' .. tostring(g.units[1].name))
 end
 
 if failures > 0 then print(failures .. ' failure(s)'); os.exit(1) end

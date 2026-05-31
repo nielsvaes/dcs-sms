@@ -81,6 +81,21 @@ function M.apply(rec, opts)
         result.failed = result.failed + (r.failed or 0)
     end
 
+    -- Pass 4: Auto-name units (only if any of name/prefix/suffix ran). Reads
+    -- each group's CURRENT name so unit names see the post-rename state.
+    -- Passes all group entries — statics are 1-unit groups, so the lone unit
+    -- becomes <staticname>-1 which is benign and consistent.
+    local any_rename = (result.renamed_groups > 0)
+                    or (result.renamed_statics > 0)
+                    or (result.renamed_zones > 0)
+                    or (result.renamed_drawings > 0)
+    if any_rename then
+        local auto_name = require('dcs_sms_me.mass_edit_forms.auto_name_units_group')
+        local r = auto_name._apply(group_entities)
+        result.renamed_units = result.renamed_units + (r.changed or 0)
+        result.failed = result.failed + (r.failed or 0)
+    end
+
     -- Composition / aggregate sev set in Task 7. For now, report success
     -- when any rename landed and no failures occurred.
     if result.renamed_groups > 0 and result.failed == 0 then
