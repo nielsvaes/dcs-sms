@@ -1550,6 +1550,14 @@ local function relayout(w, h)
         end
     end
 
+    -- Clamp W.tree_w to the splitter's valid range BEFORE reading it. The
+    -- splitter widget's set_range/set_value below also re-clamps, but only
+    -- inside the widget — it doesn't write back here. Without this, the
+    -- tree pane and the splitter handle drift apart on aggressive shrink.
+    local max_tree_w = math.max(LEFT_MIN, w - RIGHT_MIN - 20)
+    if W.tree_w < LEFT_MIN  then W.tree_w = LEFT_MIN  end
+    if W.tree_w > max_tree_w then W.tree_w = max_tree_w end
+
     -- Row 0: Name + Fixed checkbox + Save (spans full width).
     local check_w   = 130
     local save_x    = w - 90
@@ -2012,7 +2020,9 @@ function M.show()
         return
     end
     local ok, err = pcall(function()
-        local w, h = 920, 480
+        -- Initial dims must meet MIN_W/MIN_H to avoid a squashed first-paint
+        -- before SMSWindow's resize-clamp fires.
+        local w, h = 920, 580
 
         W.sms_window = sms_window.new({
             title    = 'Prefab Manager',
