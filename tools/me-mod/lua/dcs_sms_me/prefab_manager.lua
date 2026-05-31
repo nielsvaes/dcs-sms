@@ -149,6 +149,22 @@ local function apply_me_tree_skin(widget)
             if rel[3] and rel[3].bkg  then rel[3].bkg.center_center = '0x2da1beff' end
             if rel[4] and rel[4].bkg  then rel[4].bkg.center_center = '0x2da1beff' end
         end
+        -- Replace the stock dark-gray scrollbars with the grid's thin
+        -- modern-blue ones so the folder browser matches the file
+        -- browser. Same trick dtc_skins.scroll_pane uses: clone the
+        -- vertScrollBar sub-skin from gridSkin_Multiplayer_roleNew and
+        -- inject it over the tree's default vertScrollBar.
+        local grid_skin = Skin_mod.gridSkin_Multiplayer_roleNew
+                          and Skin_mod.gridSkin_Multiplayer_roleNew()
+        if grid_skin and grid_skin.skinData and grid_skin.skinData.skins
+           and s.skinData.skins then
+            if grid_skin.skinData.skins.vertScrollBar then
+                s.skinData.skins.vertScrollBar = grid_skin.skinData.skins.vertScrollBar
+            end
+            if grid_skin.skinData.skins.horzScrollBar then
+                s.skinData.skins.horzScrollBar = grid_skin.skinData.skins.horzScrollBar
+            end
+        end
         widget:setSkin(s)
     end)
 end
@@ -544,10 +560,15 @@ end
 -- user types, the typed text takes over, which is the right UX.
 local function update_count_label()
     pcall(function()
-        if not (W.filter_input and W.filter_input.setHintText) then return end
+        if not W.filter_input then return end
+        -- W.filter_input is a clearable_edit panel — route setHintText
+        -- to the underlying EditBox via :widget(). On the raw-TextBox
+        -- fallback path, the panel IS the EditBox itself.
+        local target = (W.filter_input.widget and W.filter_input:widget()) or W.filter_input
+        if not (target and target.setHintText) then return end
         local total = #W.rows
         local label = (total == 1) and 'Search 1 prefab' or string.format('Search %d prefabs', total)
-        W.filter_input:setHintText(label)
+        target:setHintText(label)
     end)
 end
 
@@ -1656,14 +1677,21 @@ local function relayout(w, h)
     -- row3_y <= h - 305 keeps an 8 px breath between place buttons and status bar.
     local row3_y   = h - 305
 
-    -- Tree + Grid stretch the same full height between y=77 and row3_y-8.
-    -- The "+ New folder" / "Show all" buttons live on the row3_y row (same
-    -- vertical band as Reload / Undo / Rename / Delete on the right), so the
-    -- tree itself fills the entire body height — no in-pane button row.
+    -- Tree extends FULL height of the left column — past the grid's bottom
+    -- edge — to fill the space alongside the right-column bottom stack.
+    -- [+ New folder] / [Show all] sit at left_bottom_y (same y as the Place
+    -- buttons row on the right), so the left column terminates at the same
+    -- height as the right column.
+    --
+    -- left_bottom_y derivation: right-column stack from row3_y down adds
+    --   row_h (row3 height) + 10 (gap below row3) + 1 (sep2) + 8 (pad)
+    --   + 28 (country) + 50 (rotation) + 84 (3 naming rows)
+    -- which sums to row_h + 181, landing at the place buttons row's top y.
     local body_y = 77
-    local body_h_total = math.max(60, row3_y - body_y - 8)
-    local tree_h = body_h_total
-    local grid_h = body_h_total
+    local left_bottom_y = row3_y + 22 + 10 + 8 + 28 + 50 + 84  -- = row3_y + 202
+
+    local tree_h = math.max(60, left_bottom_y - body_y - 8)
+    local grid_h = math.max(60, row3_y         - body_y - 8)
 
     set(W.folder_tree, left_x,  body_y, left_w,  tree_h)
     set(W.grid,        right_x, body_y, right_w, grid_h)
@@ -1689,11 +1717,12 @@ local function relayout(w, h)
         W.splitter:set_value(W.tree_w)
     end
 
-    -- Left-pane buttons on row3_y: two equal-width with a 4px gap.
+    -- Left-pane buttons at left_bottom_y so they sit alongside the Place
+    -- buttons row on the right. Two equal-width buttons with a 4px gap.
     local btn_gap   = 4
     local left_btn_w = math.floor((left_w - btn_gap) / 2)
-    set(W.new_folder_btn, left_x,                            row3_y, left_btn_w, 22)
-    set(W.show_all_btn,   left_x + left_btn_w + btn_gap,     row3_y, left_w - left_btn_w - btn_gap, 22)
+    set(W.new_folder_btn, left_x,                            left_bottom_y, left_btn_w, 22)
+    set(W.show_all_btn,   left_x + left_btn_w + btn_gap,     left_bottom_y, left_w - left_btn_w - btn_gap, 22)
 
     if W.grid and W.grid.setColumnWidth then
         local fixed_w = 0
@@ -1728,7 +1757,8 @@ local function relayout(w, h)
     -- Layout from top: sep2 -> country -> rotation -> name -> prefix -> suffix -> place buttons.
     local stack_top  = row3_y + row_h + 10
 
-    -- sep2 (right-column-only thin separator).
+    -- sep2 is right-column-only — sits between Reload/Undo/Rename/Delete
+    -- and the country/rotation/naming/place stack.
     set(W.sep2, stack_x, stack_top, stack_w, 1)
     local cur_y = stack_top + 8  -- pad below separator
 
@@ -1752,7 +1782,8 @@ local function relayout(w, h)
     cur_y = cur_y + 50
 
     -- Naming rows: 3x [label][input], suffix row has [Keep Num] button on the right.
-    local label_w     = 56
+    -- LABEL_W widened from 56 to 90 so 'Placed name:' / 'Add prefix:' / 'Add suffix:' fit.
+    local label_w     = 90
     local keep_num_w  = 90
     local gap_x       = 6
 
@@ -2187,6 +2218,26 @@ function M.show()
             end)
         end
 
+        -- Build a clearable_edit (EditBox + inline X-clear button) for a
+        -- text-input slot in this window, falling back to a raw TextBox /
+        -- Static on test VMs that don't expose EditBox. opts pass through
+        -- to clearable_edit.new (initial_text, on_change, …).
+        local function make_clearable_or_fallback(opts)
+            opts = opts or {}
+            local ce = clearable_edit.new(W.window, opts)
+            if ce then return ce end
+            local fb
+            if TextBox then
+                fb = TextBox.new()
+                try_skin(fb, 'editBoxSkin_ME')
+            else
+                fb = Static.new()
+            end
+            if fb.setText then fb:setText(tostring(opts.initial_text or '')) end
+            W.window:insertWidget(fb)
+            return fb
+        end
+
         -- Row 0: Name + Save. Bounds for every widget below are set by
         -- relayout(w, h) at the end of build (and on every Window resize).
         W.name_label = Static.new()
@@ -2194,15 +2245,7 @@ function M.show()
         try_skin(W.name_label, 'staticSkin_ME')
         W.window:insertWidget(W.name_label)
 
-        if TextBox then
-            W.name_input = TextBox.new()
-        else
-            W.name_input = Static.new()
-            W.name_input.setText = W.name_input.setText  -- API parity stub
-        end
-        if W.name_input.setText then W.name_input:setText('') end
-        try_skin(W.name_input, 'editBoxSkin_ME')
-        W.window:insertWidget(W.name_input)
+        W.name_input = make_clearable_or_fallback({})
 
         W.save_btn = Button.new()
         W.save_btn:setText('Save')
@@ -2237,28 +2280,9 @@ function M.show()
         try_skin(W.search_label, 'staticSkin_ME')
         W.window:insertWidget(W.search_label)
 
-        if TextBox then
-            W.filter_input = TextBox.new()
-        else
-            W.filter_input = Static.new()
-        end
-        if W.filter_input.setText then W.filter_input:setText('') end
-        try_skin(W.filter_input, 'editBoxSkin_ME')
-        if W.filter_input.addChangeCallback then
-            pcall(function() W.filter_input:addChangeCallback(on_filter_change) end)
-        end
-        if W.filter_input.addKeyDownCallback then
-            pcall(function()
-                W.filter_input:addKeyDownCallback(function(_self, keyName)
-                    -- Escape clears the filter and re-shows all rows.
-                    if keyName == 'escape' or keyName == 'Escape' then
-                        pcall(function() W.filter_input:setText('') end)
-                        on_filter_change()
-                    end
-                end)
-            end)
-        end
-        W.window:insertWidget(W.filter_input)
+        W.filter_input = make_clearable_or_fallback({
+            on_change = function() on_filter_change() end,
+        })
 
         -- Task 14 — folder browser widgets (left pane).
         -- Folder search input (left of "Search files:" — same y row).
@@ -2269,36 +2293,14 @@ function M.show()
             W.window:insertWidget(lbl)
             W.folder_search_label = lbl
         end
-        if TextBox then
-            W.folder_search_input = TextBox.new()
-        else
-            W.folder_search_input = Static.new()
-        end
-        if W.folder_search_input.setText then W.folder_search_input:setText('') end
-        try_skin(W.folder_search_input, 'editBoxSkin_ME')
-        if W.folder_search_input.addChangeCallback then
-            pcall(function()
-                W.folder_search_input:addChangeCallback(function()
-                    if not (W.folder_search_input and W.folder_search_input.getText) then return end
-                    local txt = W.folder_search_input:getText() or ''
-                    if txt == W.folder_filter_text then return end
-                    W.folder_filter_text = txt
-                    if M._rebuild_tree then M._rebuild_tree() end
-                end)
-            end)
-        end
-        if W.folder_search_input.addKeyDownCallback then
-            pcall(function()
-                W.folder_search_input:addKeyDownCallback(function(_self, keyName)
-                    if keyName == 'escape' or keyName == 'Escape' then
-                        pcall(function() W.folder_search_input:setText('') end)
-                        W.folder_filter_text = ''
-                        if M._rebuild_tree then M._rebuild_tree() end
-                    end
-                end)
-            end)
-        end
-        W.window:insertWidget(W.folder_search_input)
+        W.folder_search_input = make_clearable_or_fallback({
+            on_change = function(txt)
+                txt = tostring(txt or '')
+                if txt == W.folder_filter_text then return end
+                W.folder_filter_text = txt
+                if M._rebuild_tree then M._rebuild_tree() end
+            end,
+        })
 
         -- Folder tree (TreeView preferred; ListBox fallback wired in Task 16).
         local TreeView
@@ -2723,15 +2725,15 @@ function M.show()
         -- treats nil as empty.
         pcall(function()
             if Static and Static.new then
-                W.naming_name_label = Static.new('Name:')
+                W.naming_name_label = Static.new('Placed name:')
                 try_skin(W.naming_name_label, 'staticSkin_ME')
                 W.window:insertWidget(W.naming_name_label)
 
-                W.naming_prefix_label = Static.new('Prefix:')
+                W.naming_prefix_label = Static.new('Add prefix:')
                 try_skin(W.naming_prefix_label, 'staticSkin_ME')
                 W.window:insertWidget(W.naming_prefix_label)
 
-                W.naming_suffix_label = Static.new('Suffix:')
+                W.naming_suffix_label = Static.new('Add suffix:')
                 try_skin(W.naming_suffix_label, 'staticSkin_ME')
                 W.window:insertWidget(W.naming_suffix_label)
             end
