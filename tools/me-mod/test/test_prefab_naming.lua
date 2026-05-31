@@ -102,5 +102,26 @@ do
     check('B3: A unchanged', rec.groups[1].group_obj.name == 'A')
 end
 
+-- Case C1: Prefix prepends to every group/static.
+do
+    mock.new_mission(); renames = {}
+    local rec = build_rec({ 'Alpha', 'Bravo' })
+    local result = naming.apply(rec, { prefix = 'EAST_' })
+    check('C1: renamed_groups = 2', result.renamed_groups == 2)
+    check('C1: Alpha -> EAST_Alpha', rec.groups[1].group_obj.name == 'EAST_Alpha')
+    check('C1: Bravo -> EAST_Bravo', rec.groups[2].group_obj.name == 'EAST_Bravo')
+end
+
+-- Case C2: Name THEN Prefix stack: Name replaces, Prefix prepends final.
+do
+    mock.new_mission(); renames = {}
+    local rec = build_rec({ 'Alpha' })
+    local result = naming.apply(rec, { name = 'Tank-{n}', prefix = 'EAST_' })
+    check('C2: result = EAST_Tank-01',
+          rec.groups[1].group_obj.name == 'EAST_Tank-01',
+          'got ' .. tostring(rec.groups[1].group_obj.name))
+    check('C2: renamed_groups >= 1', result.renamed_groups >= 1)
+end
+
 if failures > 0 then print(failures .. ' failure(s)'); os.exit(1) end
 print('All prefab_naming tests passed.')

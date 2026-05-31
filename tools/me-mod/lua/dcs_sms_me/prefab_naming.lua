@@ -65,6 +65,14 @@ function M.apply(rec, opts)
         result.failed = result.failed + (r.failed or 0)
     end
 
+    -- Pass 2: Prefix (groups + statics — zones + drawings added in Task 6).
+    if type(opts.prefix) == 'string' and opts.prefix ~= '' then
+        local add_prefix = require('dcs_sms_me.mass_edit_forms.add_prefix_group_name')
+        local r = add_prefix._apply(group_entities, opts.prefix)
+        result.renamed_groups = result.renamed_groups + (r.changed or 0)
+        result.failed = result.failed + (r.failed or 0)
+    end
+
     -- Composition / aggregate sev set in Task 7. For now, report success
     -- when any rename landed and no failures occurred.
     if result.renamed_groups > 0 and result.failed == 0 then
