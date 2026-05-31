@@ -1587,9 +1587,6 @@ local function relayout(w, h)
 
     -- Bottom-band offsets (anchored to h).
     local row3_y   = h - 197
-    local sep2_y   = h - 165
-    local row4_y   = h - 154
-    local row5_y   = h - 124
 
     -- Tree + Grid stretch the same full height between y=77 and row3_y-8.
     -- The "+ New folder" / "Show all" buttons live on the row3_y row (same
@@ -1649,21 +1646,53 @@ local function relayout(w, h)
     set(W.undo_btn,   w - del_w - 10 - name_w_btn - btn_pad - undo_w - btn_pad,       row3_y, undo_w,     22)
     set(W.reload_btn, w - del_w - 10 - name_w_btn - btn_pad - undo_w - btn_pad - reload_w - btn_pad, row3_y, reload_w, 22)
 
-    set(W.sep2, 10, sep2_y, w - 20, 1)
+    -- Right-column control stack (below the grid + Reload/Undo/Rename/Delete row).
+    -- Anchored to the splitter's right edge; spans from splitter_x + SPLIT to
+    -- the window right margin. Vertical stack, ~30 px per row.
+    local stack_x = splitter_x + SPLIT + 4    -- 4 px inset from splitter
+    local stack_w = w - stack_x - 10          -- 10 px right margin
+    local row_h   = 22
+    local row_gap = 6
+    local row_pitch = row_h + row_gap   -- 28 px
 
-    set(W.country_label, 10, row4_y, 100, 22)
-    local combo_x = 114
-    local combo_w = (W.country_filter_btn) and (w - combo_x - 90 - 6) or (w - combo_x - 10)
-    set(W.country_combo, combo_x, row4_y, combo_w, 22)
-    set(W.country_filter_btn, w - 90, row4_y, 80, 22)
+    -- Stack y bands. Top of stack = bottom of row3 + 10 (gap for visual breath).
+    -- Layout from top: sep2 -> country -> rotation -> name -> prefix -> suffix -> place buttons.
+    local stack_top  = row3_y + row_h + 10
 
-    set(W.rotation_label, 10, row5_y + 10, 60, 22)
-    set(W.rotation_spin,  70, row5_y + 10, 60, 22)
-    set(W.rotation_dial,  132, row5_y, 47, 43)
-    set(W.rotation_input, 70, row5_y + 10, 60, 22)
-    set(W.rotation_unit,  132, row5_y + 10, 20, 22)
-    set(W.place_origin_btn, w - 336, row5_y + 10, 200, 22)
-    set(W.place_click_btn,  w - 132, row5_y + 10, 122, 22)
+    -- sep2 (right-column-only thin separator).
+    set(W.sep2, stack_x, stack_top, stack_w, 1)
+    local cur_y = stack_top + 8  -- pad below separator
+
+    -- Country row.
+    set(W.country_label, stack_x, cur_y, 100, row_h)
+    local combo_x = stack_x + 110
+    local filter_w = 90
+    local combo_w = (W.country_filter_btn) and (stack_w - 110 - filter_w - 6) or (stack_w - 110)
+    set(W.country_combo, combo_x, cur_y, combo_w, row_h)
+    set(W.country_filter_btn, stack_x + stack_w - filter_w, cur_y, filter_w, row_h)
+    cur_y = cur_y + row_pitch
+
+    -- Rotation row. Dial visually overlaps the spinbox column intentionally
+    -- (matches the historical layout); spin sits at +60, dial behind it at +120.
+    set(W.rotation_label, stack_x,           cur_y + 10, 60, row_h)
+    set(W.rotation_spin,  stack_x + 70,      cur_y + 10, 60, row_h)
+    set(W.rotation_dial,  stack_x + 132,     cur_y,      47, 43)
+    set(W.rotation_input, stack_x + 70,      cur_y + 10, 60, row_h)
+    set(W.rotation_unit,  stack_x + 132,     cur_y + 10, 20, row_h)
+    -- Rotation row eats 48 px of vertical space (dial is taller than text rows).
+    cur_y = cur_y + 50
+
+    -- Naming rows (Name, Prefix, Suffix) -- wired in Task 10. Reserve 3 rows
+    -- here so this task's layout shows the place buttons in their final spot.
+    cur_y = cur_y + row_pitch * 3
+
+    -- Place buttons row -- side-by-side. Same widths as before (200 + 122).
+    local place_orig_w  = 200
+    local place_click_w = 122
+    local place_orig_x  = stack_x + stack_w - place_click_w - 6 - place_orig_w
+    local place_click_x = stack_x + stack_w - place_click_w
+    set(W.place_origin_btn, place_orig_x,  cur_y, place_orig_w,  row_h)
+    set(W.place_click_btn,  place_click_x, cur_y, place_click_w, row_h)
 end
 
 -- Folder operation handlers (Task 17). Confirmations use show_overlay;
