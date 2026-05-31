@@ -262,5 +262,47 @@ do
     check('F3: renamed_drawings = 0', result.renamed_drawings == 0)
 end
 
+-- Case G1: toast composes from per-category counts.
+do
+    mock.new_mission(); renames = {}
+    local rec = build_rec({ 'Alpha', 'Bravo' })
+    local result = naming.apply(rec, { name = 'Tank-{n}' })
+    check('G1: toast non-nil', type(result.toast) == 'string',
+          'got ' .. tostring(result.toast))
+    check('G1: toast mentions 2 renamed',
+          result.toast:find('2', 1, true) ~= nil and result.toast:find('rename', 1, true) ~= nil,
+          'got ' .. tostring(result.toast))
+    check('G1: sev = success', result.sev == 'success')
+end
+
+-- Case G2: failure aggregates to warning sev.
+do
+    mock.new_mission(); renames = {}
+    local rec = {
+        groups = {},
+        zones  = { { orig_name = 'Z', runtime_id = 99 } },  -- no zone_obj, will fail
+        drawings = {}, errors = {},
+    }
+    local result = naming.apply(rec, { prefix = 'P_' })
+    check('G2: failed >= 1', result.failed >= 1)
+    check('G2: sev = warning or error', result.sev == 'warning' or result.sev == 'error',
+          'got ' .. tostring(result.sev))
+end
+
+-- Case G3: _compute_targets returns planned writes without mutating.
+do
+    mock.new_mission()
+    local rec = build_rec({ 'Foo' })
+    local before = rec.groups[1].group_obj.name
+    local plan = naming._compute_targets(rec, { name = 'Bar' })
+    check('G3: plan is list', type(plan) == 'table')
+    check('G3: plan length = 1', #plan == 1,
+          'got ' .. tostring(#plan))
+    check('G3: plan[1].scope = group', plan[1] and plan[1].scope == 'group')
+    check('G3: plan[1].old = Foo', plan[1] and plan[1].old == 'Foo')
+    check('G3: plan[1].new = Bar', plan[1] and plan[1].new == 'Bar')
+    check('G3: entity untouched', rec.groups[1].group_obj.name == before)
+end
+
 if failures > 0 then print(failures .. ' failure(s)'); os.exit(1) end
 print('All prefab_naming tests passed.')

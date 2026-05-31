@@ -181,18 +181,61 @@ function M.apply(rec, opts)
         result.failed = result.failed + (r.failed or 0)
     end
 
-    -- Composition / aggregate sev set in Task 7. For now, report success
-    -- when any rename landed and no failures occurred.
-    if result.renamed_groups > 0 and result.failed == 0 then
-        result.sev = 'success'
+    -- Final pass: compose toast + severity from the per-category counts.
+    local total_entities = result.renamed_groups
+                         + result.renamed_statics
+                         + result.renamed_zones
+                         + result.renamed_drawings
+    if total_entities > 0 or result.renamed_units > 0 or result.failed > 0 then
+        local parts = {}
+        if total_entities > 0 then
+            parts[#parts + 1] = string.format('%d renamed', total_entities)
+        end
+        if result.renamed_units > 0 then
+            parts[#parts + 1] = string.format('%d units renamed', result.renamed_units)
+        end
+        if result.failed > 0 then
+            parts[#parts + 1] = string.format('%d failed', result.failed)
+        end
+        result.toast = table.concat(parts, ' · ')
+        if result.failed == 0 then
+            result.sev = 'success'
+        elseif total_entities + result.renamed_units == 0 then
+            result.sev = 'error'
+        else
+            result.sev = 'warning'
+        end
     end
 
     return result
 end
 
+-- _compute_targets — dry-run planner. Returns the list of intended writes
+-- WITHOUT mutating any entity. Used by tests and (potentially) by a future
+-- preview UI. Currently covers the Name pass for groups+statics; Prefix /
+-- Suffix planning composes via mass_edit_transforms' pure functions if
+-- callers need it (out of scope for the current tests).
 function M._compute_targets(rec, opts)
-    -- Filled out in Task 7.
-    return {}
+    opts = opts or {}
+    local out = {}
+    if not has_any(opts) then return out end
+
+    local group_entities = entities_from_groups(rec)
+
+    if type(opts.name) == 'string' and opts.name ~= '' then
+        local transforms = require('dcs_sms_me.mass_edit_transforms')
+        local sorted = {}
+        for _, e in ipairs(group_entities) do sorted[#sorted + 1] = e end
+        table.sort(sorted, function(a, b)
+            return tostring(a.name or '') < tostring(b.name or '')
+        end)
+        local args = { pattern = opts.name, start = 1, step = 1, pad = 2 }
+        for idx, e in ipairs(sorted) do
+            local new = transforms.auto_number(e.name or '', args, idx)
+            out[#out + 1] = { scope = 'group', entity = e, old = e.name, new = new }
+        end
+    end
+    return out
 end
 
 return M
