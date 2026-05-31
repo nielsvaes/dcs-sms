@@ -105,6 +105,57 @@ This is the first tag after a long quiet period — `sms.version` had been froze
 
 ## ME-mod
 
+### [0.16.0] — 2026-05-31
+
+Closes the remaining gaps from gh #68 (items 1, 3, 4, 5; item 2 shipped in
+0.15.1). A parking-started aircraft with fuzed bombs can now be built end to
+end from the CLI without hand-editing the `.miz`.
+
+**Added**
+- `me unit payload set-fuze --name <X> --pylon <N> --set "<key>=<value>" [...]`
+  sets per-pylon weapon settings (fuze type, function delay, presets, …).
+  Keys and values are validated against the weapon's own descriptor
+  (`me_loadoututils.getLauncherSettings`): `--set` keys match a setting `id`
+  or `label` (case-insensitive; ambiguous labels are refused with the
+  candidate ids), values match a combo `id`/display name or a numeric spinbox
+  value. Starts from the weapon's defaults so the `NFP_PRESID`/`NFP_PRESVER`
+  preset metadata and sibling keys are always written. Optional `--weapon`
+  arms the pylon first. gh #68 item 1.
+- `me unit payload list-settings --name <X> (--pylon <N> | --weapon <CLSID>)`
+  dumps a weapon's configurable-settings descriptor — id, label, control
+  type, combo values, min/max, read-only flag, visibility conditions, and the
+  preset id/version — so callers can discover legal `set-fuze` keys (mirrors
+  `me trigger list-predicates`). gh #68 item 1.
+- `me group create-plane` / `create-helicopter` / `create-vehicle` /
+  `create-ship` accept `--task` to set the group task at create-time instead
+  of requiring a follow-up `me group set-task`. gh #68 item 3.
+
+**Changed**
+- `me waypoint set-action` now pairs the waypoint type with the action the
+  way ED's action combo does: an airfield action (`From Parking Area`,
+  `From Parking Area Hot`, `From Ground Area[ Hot]`, `From Runway`, `Landing`,
+  `LandingReFuAr`) flips the type to its paired airfield type
+  (`TakeOffParking`, …); choosing a non-airfield action while the type is an
+  airfield type reverts it to `Turning Point` and clears the airfield linkage
+  fields. Plain action/type combinations (formations, ground traversal) are
+  left untouched. Previously the type stayed stale, producing an invalid
+  parking-start waypoint. gh #68 item 4.
+- `me waypoint link-airbase` preserves an explicit parking stand: when the
+  waypoint is a parking-start type already linked to the target airbase and
+  the lead unit has a stand assigned (via `me unit set-parking`), the verb no
+  longer drags the group to the airbase centre and re-selects a stand — it
+  re-asserts `airdromeId` and leaves the unit on its stand. Linking to a
+  different airbase still reshuffles. The response carries
+  `parking_preserved`. gh #68 item 5.
+
+**Internal**
+- `dcs-sms doc` now documents sub-verbs: a `cmdInfo` can declare
+  `SubCommands`, and the generator renders one flags table per sub-verb
+  (so `me unit payload set` / `clear` / `set-fuze` / `list-settings` each
+  get their own flags section instead of a single representative table).
+  Repeatable `flag.Value` flags now render as type `string (repeatable)`,
+  which also fixes the `me trigger create` `--condition` / `--action` rows.
+
 ### [0.15.1] — 2026-05-30
 
 **Fixed**

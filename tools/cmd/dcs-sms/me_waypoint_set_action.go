@@ -33,7 +33,10 @@ func meWaypointSetActionFlags() (*flag.FlagSet, *meWaypointSetActionOpts) {
 			"GROUND/SHIP TRAVERSAL: \"Off Road\", \"On Road\", \"On Railroads\". "+
 			"GROUND FORMATIONS (all need --type=\"Turning Point\"): \"Rank\" (line abreast), "+
 			"\"Cone\", \"Vee\", \"Diamond\", \"EchelonL\", \"EchelonR\", \"Custom\" "+
-			"(pairs with --formation-template <saved-template-name>).")
+			"(pairs with --formation-template <saved-template-name>). "+
+			"NOTE: an airfield action sets the paired waypoint type (e.g. \"From Parking Area\" "+
+			"-> TakeOffParking) but does NOT bind a field — follow with "+
+			"`me waypoint link-airbase` to set the airdrome and place the units.")
 	fs.DurationVar(&opts.Timeout, "timeout", 30*time.Second, "wall-clock timeout")
 	fs.BoolVar(&opts.Pretty, "pretty", false, "indent JSON output")
 	fs.StringVar(&opts.SavedGames, "saved-games", "", "override Saved Games path")

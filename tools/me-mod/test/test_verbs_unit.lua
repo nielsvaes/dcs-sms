@@ -37,7 +37,36 @@ package.preload['me_db_api'] = function()
     }
 end
 
--- me_loadoututils stub. Returns canned pylon assignments per (type, loadout).
+-- me_loadoututils stub. Returns canned pylon assignments per (type, loadout)
+-- plus a descriptor-driven settings schema for the fuze verbs (gh #68 item 1).
+-- The '{Mk82AIR}' descriptor mimics the real WWII-bomb shape: two fuze-well
+-- comboLists (nose/tail), each gating a "Function Delay" comboList (so the
+-- label "Function Delay" collides — exercising the ambiguity path) and a
+-- read-only "Arming Vane Revs. Required" spinbox.
+local fuze_descr = {
+    ['{Mk82AIR}'] = {
+        { id = 'NFP_fuze_type_nose', label = 'Nose Fuze Well', control = 'comboList', defValue = 1,
+          values = { { id = 1, dispName = 'Nose Pistol' }, { id = 'EMPTY_NOSE', dispName = 'Plugged' } } },
+        { id = '00_prfx_function_delay_ctrl_X', label = 'Function Delay', control = 'comboList', defValue = 0,
+          VisibilityCondition = { { id = 'NFP_fuze_type_nose', value = 1 } },
+          values = { { id = 0, dispName = '0' }, { id = 11, dispName = '11' } } },
+        { id = '00_prfx_vane_rev_threshold_ctrl_X', label = 'Arming Vane Revs. Required',
+          control = 'spinbox', defValue = 7, min = 0, max = 100, readOnly = true },
+        { id = 'NFP_fuze_type_tail', label = 'Tail Fuze Well', control = 'comboList', defValue = 1,
+          values = { { id = 1, dispName = 'Tail Pistol' }, { id = 'EMPTY_TAIL', dispName = 'Plugged' } } },
+        { id = '01_prfx_function_delay_ctrl_Y', label = 'Function Delay', control = 'comboList', defValue = 0,
+          VisibilityCondition = { { id = 'NFP_fuze_type_tail', value = 1 } },
+          values = { { id = 0, dispName = '0' }, { id = 11, dispName = '11' } } },
+    },
+}
+local fuze_defs = {
+    ['{Mk82AIR}'] = {
+        NFP_fuze_type_nose = 1, NFP_fuze_type_tail = 1,
+        ['00_prfx_function_delay_ctrl_X'] = 0, ['01_prfx_function_delay_ctrl_Y'] = 0,
+        ['00_prfx_vane_rev_threshold_ctrl_X'] = 7,
+        NFP_PRESID = 'TEST_PRESET', NFP_PRESVER = 2,
+    },
+}
 package.preload['me_loadoututils'] = function()
     return {
         getUnitPylons = function(unit_type, loadout_name)
@@ -52,6 +81,8 @@ package.preload['me_loadoututils'] = function()
             end
             return nil
         end,
+        getLauncherSettings = function(clsid) return fuze_descr[clsid] end,
+        getLauncherSettingsDefaultValues = function(clsid) return fuze_defs[clsid] end,
     }
 end
 
@@ -1047,6 +1078,166 @@ local function test_link_airbase_arg_validation()
                  'link_airbase: empty airbase')
 end
 
+-- gh #68 item 5: link-airbase preserves an explicit parking stand when the
+-- waypoint is already linked to THIS airbase and the lead unit has a stand.
+local function test_link_airbase_preserves_explicit_parking()
+    me_parking_stub.setAirGroupOnAirport_calls = 0
+    local g = _setup_plane_with_route('LA7', 'TakeOffParking')
+    g.units[1].parking_id = '08'
+    g.units[1].parking = 101
+    g.units[1].x = 5000
+    g.units[1].y = 6000
+    g.route.points[1].airdromeId = 12  -- already linked to Anapa (airdrome 12)
+    g.route.points[1].x = 5000
+    g.route.points[1].y = 6000
+    local r = verbs.waypoint_link_airbase({ name = g.name, index = 0, airbase = 'Anapa' })
+    assert_true(r.ok, 'link_airbase preserve: ok')
+    assert_true(r.parking_preserved, 'link_airbase preserve: flagged')
+    assert_eq(r.units_positioned, false, 'link_airbase preserve: no re-positioning')
+    assert_eq(me_parking_stub.setAirGroupOnAirport_calls, 0,
+              'link_airbase preserve: setAirGroupOnAirport NOT called')
+    assert_eq(g.units[1].parking_id, '08', 'link_airbase preserve: stand kept')
+    assert_eq(g.units[1].x, 5000, 'link_airbase preserve: unit not moved')
+    assert_eq(g.route.points[1].airdromeId, 12, 'link_airbase preserve: airdromeId asserted')
+end
+
+-- Linking to a DIFFERENT airbase (airdromeId mismatch) still reshuffles.
+local function test_link_airbase_reassigns_when_airbase_differs()
+    me_parking_stub.setAirGroupOnAirport_calls = 0
+    local g = _setup_plane_with_route('LA8', 'TakeOffParking')
+    g.units[1].parking_id = '08'
+    g.route.points[1].airdromeId = 999  -- linked elsewhere; Anapa is 12
+    local r = verbs.waypoint_link_airbase({ name = g.name, index = 0, airbase = 'Anapa' })
+    assert_true(r.ok, 'link_airbase reassign: ok')
+    assert_false(r.parking_preserved, 'link_airbase reassign: not preserved')
+    assert_eq(me_parking_stub.setAirGroupOnAirport_calls, 1,
+              'link_airbase reassign: setAirGroupOnAirport called')
+end
+
+-- ============================================================
+-- unit_payload_set_fuze / list-settings (gh #68 item 1)
+-- ============================================================
+
+-- Arm pylon 3 of an F-16C with the descriptor-bearing test bomb.
+local function _setup_plane_with_fuze_weapon(name)
+    mock.new_mission()
+    local g = mock.add_plane({ name = name, unit_type = 'F-16C_50' })
+    g.units[1].type = 'F-16C_50'
+    local sr = verbs.unit_payload_set({ name = g.units[1].name, pylon = 3, weapon = '{Mk82AIR}' })
+    assert_true(sr.ok, name .. ': arm pylon ok')
+    return g
+end
+
+local function test_list_settings_happy()
+    local g = _setup_plane_with_fuze_weapon('fz_ls1')
+    local r = verbs.unit_payload_list_settings({ name = g.units[1].name, pylon = 3 })
+    assert_true(r.ok, 'list-settings: ok')
+    assert_eq(r.clsid, '{Mk82AIR}', 'list-settings: clsid resolved from pylon')
+    assert_eq(r.count, 5, 'list-settings: 5 descriptor entries')
+    assert_eq(r.preset.id, 'TEST_PRESET', 'list-settings: preset id')
+    assert_eq(r.preset.version, 2, 'list-settings: preset version')
+    -- first entry is the nose fuze well combo with two values
+    assert_eq(r.settings[1].id, 'NFP_fuze_type_nose', 'list-settings: first id')
+    assert_eq(#r.settings[1].values, 2, 'list-settings: combo values present')
+    assert_true(r.settings[3].read_only, 'list-settings: vane revs flagged read_only')
+end
+
+local function test_list_settings_by_weapon_flag()
+    mock.new_mission()
+    local g = mock.add_plane({ name = 'fz_ls2', unit_type = 'F-16C_50' })
+    g.units[1].type = 'F-16C_50'
+    local r = verbs.unit_payload_list_settings({ name = g.units[1].name, weapon = '{Mk82AIR}' })
+    assert_true(r.ok, 'list-settings by weapon: ok')
+    assert_eq(r.count, 5, 'list-settings by weapon: descriptor returned')
+end
+
+local function test_set_fuze_by_id()
+    local g = _setup_plane_with_fuze_weapon('fz1')
+    local r = verbs.unit_payload_set_fuze({ name = g.units[1].name, pylon = 3, sets = {
+        { key = 'NFP_fuze_type_nose', value = '1' },
+        { key = '01_prfx_function_delay_ctrl_Y', value = '11' },
+    } })
+    assert_true(r.ok, 'set-fuze by id: ok')
+    local s = g.units[1].payload.pylons[3].settings
+    assert_eq(s.NFP_fuze_type_nose, 1, 'set-fuze: nose fuze (number)')
+    assert_eq(s['01_prfx_function_delay_ctrl_Y'], 11, 'set-fuze: tail function delay')
+    -- preset metadata + sibling defaults are filled in from defaults
+    assert_eq(s.NFP_PRESID, 'TEST_PRESET', 'set-fuze: preset id auto-filled')
+    assert_eq(s.NFP_PRESVER, 2, 'set-fuze: preset ver auto-filled')
+    assert_eq(s.NFP_fuze_type_tail, 1, 'set-fuze: untouched sibling kept at default')
+    assert_eq(r.preset.id, 'TEST_PRESET', 'set-fuze: returns preset')
+end
+
+local function test_set_fuze_by_label_and_dispname()
+    local g = _setup_plane_with_fuze_weapon('fz2')
+    -- "Nose Fuze Well" is an unambiguous label; "Plugged" is its dispName.
+    local r = verbs.unit_payload_set_fuze({ name = g.units[1].name, pylon = 3, sets = {
+        { key = 'Nose Fuze Well', value = 'Plugged' },
+    } })
+    assert_true(r.ok, 'set-fuze by label: ok')
+    assert_eq(g.units[1].payload.pylons[3].settings.NFP_fuze_type_nose, 'EMPTY_NOSE',
+              'set-fuze: dispName resolved to combo id (string)')
+end
+
+local function test_set_fuze_ambiguous_label_refused()
+    local g = _setup_plane_with_fuze_weapon('fz3')
+    local r = verbs.unit_payload_set_fuze({ name = g.units[1].name, pylon = 3, sets = {
+        { key = 'Function Delay', value = '11' },  -- collides: nose + tail
+    } })
+    assert_false(r.ok, 'set-fuze ambiguous label: refused')
+    assert_contains(r.error, 'ambiguous', 'set-fuze: ambiguity error')
+end
+
+local function test_set_fuze_readonly_refused()
+    local g = _setup_plane_with_fuze_weapon('fz4')
+    local r = verbs.unit_payload_set_fuze({ name = g.units[1].name, pylon = 3, sets = {
+        { key = '00_prfx_vane_rev_threshold_ctrl_X', value = '9' },
+    } })
+    assert_false(r.ok, 'set-fuze read-only: refused')
+    assert_contains(r.error, 'read-only', 'set-fuze: read-only error')
+end
+
+local function test_set_fuze_unknown_key_refused()
+    local g = _setup_plane_with_fuze_weapon('fz5')
+    local r = verbs.unit_payload_set_fuze({ name = g.units[1].name, pylon = 3, sets = {
+        { key = 'no_such_setting', value = '1' },
+    } })
+    assert_false(r.ok, 'set-fuze unknown key: refused')
+    assert_contains(r.error, 'unknown setting', 'set-fuze: unknown-key error')
+end
+
+local function test_set_fuze_bad_combo_value_refused()
+    local g = _setup_plane_with_fuze_weapon('fz6')
+    local r = verbs.unit_payload_set_fuze({ name = g.units[1].name, pylon = 3, sets = {
+        { key = 'NFP_fuze_type_nose', value = '99' },  -- not a legal combo id
+    } })
+    assert_false(r.ok, 'set-fuze bad combo: refused')
+    assert_contains(r.error, 'not a legal value', 'set-fuze: bad-value error')
+end
+
+local function test_set_fuze_no_weapon_refused()
+    mock.new_mission()
+    local g = mock.add_plane({ name = 'fz7', unit_type = 'F-16C_50' })
+    g.units[1].type = 'F-16C_50'
+    local r = verbs.unit_payload_set_fuze({ name = g.units[1].name, pylon = 2, sets = {
+        { key = 'NFP_fuze_type_nose', value = '1' },
+    } })
+    assert_false(r.ok, 'set-fuze no weapon: refused')
+    assert_contains(r.error, 'no weapon', 'set-fuze: no-weapon error')
+end
+
+local function test_set_fuze_with_weapon_flag()
+    mock.new_mission()
+    local g = mock.add_plane({ name = 'fz8', unit_type = 'F-16C_50' })
+    g.units[1].type = 'F-16C_50'
+    -- pylon 3 empty; --weapon arms it and applies the fuze in one call.
+    local r = verbs.unit_payload_set_fuze({ name = g.units[1].name, pylon = 3,
+        weapon = '{Mk82AIR}', sets = { { key = 'NFP_fuze_type_nose', value = '1' } } })
+    assert_true(r.ok, 'set-fuze --weapon: ok')
+    assert_eq(g.units[1].payload.pylons[3].CLSID, '{Mk82AIR}', 'set-fuze --weapon: armed')
+    assert_eq(g.units[1].payload.pylons[3].settings.NFP_fuze_type_nose, 1, 'set-fuze --weapon: applied')
+end
+
 -- ============================================================
 -- Test runner
 -- ============================================================
@@ -1135,6 +1326,18 @@ local tests = {
     test_link_airbase_unknown_group,
     test_link_airbase_oob_index,
     test_link_airbase_arg_validation,
+    test_link_airbase_preserves_explicit_parking,
+    test_link_airbase_reassigns_when_airbase_differs,
+    test_list_settings_happy,
+    test_list_settings_by_weapon_flag,
+    test_set_fuze_by_id,
+    test_set_fuze_by_label_and_dispname,
+    test_set_fuze_ambiguous_label_refused,
+    test_set_fuze_readonly_refused,
+    test_set_fuze_unknown_key_refused,
+    test_set_fuze_bad_combo_value_refused,
+    test_set_fuze_no_weapon_refused,
+    test_set_fuze_with_weapon_flag,
 }
 
 for _, t in ipairs(tests) do t() end

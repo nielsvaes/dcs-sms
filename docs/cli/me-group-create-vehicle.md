@@ -22,6 +22,7 @@ dcs-sms me group create-vehicle [flags]
 | `--pretty` | bool | `false` | indent JSON output |
 | `--saved-games` | string | `""` | override Saved Games path |
 | `--skill` | string | `Average` | AI skill |
+| `--task` | string | `""` | group task; default "Ground Nothing" |
 | `--timeout` | duration | `30s` | wall-clock timeout |
 | `--type` | string | `""` | vehicle id (e.g. M-1 Abrams, T-72B) |
 

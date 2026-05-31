@@ -159,6 +159,10 @@ function M.group_create_plane(args)
     local livery = args.livery or ''
     local frequency = args.frequency or 251
     local onboard_num = args.onboard_num or '010'
+    -- Group-level task. Overridable at create-time (gh #68 item 3) so callers
+    -- don't need a follow-up `me group set-task`. No validation — the ME
+    -- stores the value verbatim (matches group_set_task).
+    local task = (type(args.task) == 'string' and args.task ~= '') and args.task or 'Nothing'
 
     local group_name = (type(args.name) == 'string' and args.name ~= '') and args.name
                        or (args.type .. ' #001')
@@ -166,7 +170,7 @@ function M.group_create_plane(args)
     local g = {
         name = group_name,
         x = x, y = y,
-        task = 'Nothing',
+        task = task,
         hidden = false,
         hiddenOnPlanner = false,
         hiddenOnMFD = {},
@@ -270,6 +274,8 @@ function M.group_create_helicopter(args)
     local livery = args.livery or ''
     local frequency = args.frequency or 127.5
     local onboard_num = args.onboard_num or '010'
+    -- Group-level task, overridable at create-time (gh #68 item 3).
+    local task = (type(args.task) == 'string' and args.task ~= '') and args.task or 'Transport'
 
     local group_name = (type(args.name) == 'string' and args.name ~= '') and args.name
                        or (args.type .. ' #001')
@@ -277,7 +283,7 @@ function M.group_create_helicopter(args)
     local g = {
         name = group_name,
         x = x, y = y,
-        task = 'Transport',
+        task = task,
         hidden = false,
         hiddenOnPlanner = false,
         hiddenOnMFD = {},
@@ -372,6 +378,8 @@ function M.group_create_vehicle(args)
     local x, y = args.north, args.east
     local heading = math.rad(args.heading_deg or 0)
     local skill = args.skill or 'Average'
+    -- Group-level task, overridable at create-time (gh #68 item 3).
+    local task = (type(args.task) == 'string' and args.task ~= '') and args.task or 'Ground Nothing'
 
     local group_name = (type(args.name) == 'string' and args.name ~= '') and args.name
                        or (args.type .. ' #001')
@@ -379,7 +387,7 @@ function M.group_create_vehicle(args)
     local g = {
         name = group_name,
         x = x, y = y,
-        task = 'Ground Nothing',
+        task = task,
         hidden = false,
         hiddenOnPlanner = false,
         hiddenOnMFD = {},
@@ -478,13 +486,16 @@ function M.group_create_ship(args)
     local heading = math.rad(args.heading_deg or 0)
     local skill = args.skill or 'Average'
 
+    -- Group-level task, overridable at create-time (gh #68 item 3).
+    local task = (type(args.task) == 'string' and args.task ~= '') and args.task or 'CAP'
+
     local group_name = (type(args.name) == 'string' and args.name ~= '') and args.name
                        or (args.type .. ' #001')
 
     local g = {
         name = group_name,
         x = x, y = y,
-        task = 'CAP',
+        task = task,
         hidden = false,
         hiddenOnPlanner = false,
         hiddenOnMFD = {},

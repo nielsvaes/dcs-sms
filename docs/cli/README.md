@@ -144,7 +144,7 @@ Every command on the dcs-sms CLI, grouped by namespace.
 |---|---|
 | [`me unit get`](me-unit-get.md) | return full data for a unit (by --name/--id, or first unit of a group via --group-name/--group-id) |
 | [`me unit list`](me-unit-list.md) | list all units in the open mission |
-| [`me unit payload`](me-unit-payload.md) | manage a unit's per-pylon weapon payload (sub-verbs: set, clear) |
+| [`me unit payload`](me-unit-payload.md) | manage a unit's per-pylon weapon payload (sub-verbs: set, clear, set-fuze, list-settings) |
 | [`me unit set-alt`](me-unit-set-alt.md) | set a unit's altitude in meters |
 | [`me unit set-callsign`](me-unit-set-callsign.md) | set a unit's radio callsign |
 | [`me unit set-chaff`](me-unit-set-chaff.md) | set a unit's chaff count |

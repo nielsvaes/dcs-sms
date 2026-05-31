@@ -64,6 +64,7 @@ type docPage struct {
 	Synopsis string
 	Examples []string
 	Flags    []docFlag
+	SubVerbs []docSubVerb // sub-commands (e.g. payload set / set-fuze), each with its own flags
 }
 
 type docFlag struct {
@@ -71,6 +72,13 @@ type docFlag struct {
 	Type    string
 	Default string
 	Usage   string
+}
+
+// docSubVerb is one sub-command's rendered data (name + synopsis + flags).
+type docSubVerb struct {
+	Name     string
+	Synopsis string
+	Flags    []docFlag
 }
 
 func collectPages() []docPage {
@@ -84,7 +92,7 @@ func collectPages() []docPage {
 	sort.Strings(topNames)
 	for _, name := range topNames {
 		info := commands[name]
-		if info.Synopsis == "" || info.Flags == nil {
+		if info.Synopsis == "" || (info.Flags == nil && len(info.SubCommands) == 0) {
 			continue // hidden
 		}
 		// Skip the special "me" dispatch entry — its sub-commands have their own pages.
@@ -108,7 +116,7 @@ func collectPages() []docPage {
 		sort.Strings(verbs)
 		for _, verb := range verbs {
 			info := meCommands[noun][verb]
-			if info.Synopsis == "" || info.Flags == nil {
+			if info.Synopsis == "" || (info.Flags == nil && len(info.SubCommands) == 0) {
 				continue
 			}
 			pages = append(pages, buildPage("me "+noun+" "+verb, "me "+noun, info))
@@ -125,16 +133,31 @@ func buildPage(name, group string, info cmdInfo) docPage {
 		Synopsis: info.Synopsis,
 		Examples: info.Examples,
 	}
-	fs := info.Flags()
+	if info.Flags != nil {
+		page.Flags = collectFlags(info.Flags())
+	}
+	for _, sc := range info.SubCommands {
+		sv := docSubVerb{Name: sc.Name, Synopsis: sc.Synopsis}
+		if sc.Flags != nil {
+			sv.Flags = collectFlags(sc.Flags())
+		}
+		page.SubVerbs = append(page.SubVerbs, sv)
+	}
+	return page
+}
+
+// collectFlags flattens a FlagSet into the doc model.
+func collectFlags(fs *flag.FlagSet) []docFlag {
+	var out []docFlag
 	fs.VisitAll(func(f *flag.Flag) {
-		page.Flags = append(page.Flags, docFlag{
+		out = append(out, docFlag{
 			Name:    f.Name,
 			Type:    flagType(f),
 			Default: f.DefValue,
 			Usage:   f.Usage,
 		})
 	})
-	return page
+	return out
 }
 
 // flagType returns a short type label for a flag, derived from the
@@ -156,6 +179,8 @@ func flagType(f *flag.Flag) string {
 		return "bool"
 	case "*flag.durationValue":
 		return "duration"
+	case "*main.stringSliceFlag":
+		return "string (repeatable)"
 	}
 	return "value"
 }
@@ -204,21 +229,29 @@ func renderPage(p docPage) string {
 	b.WriteString("[← CLI reference index](README.md)\n\n")
 	fmt.Fprintf(&b, "%s\n\n", p.Synopsis)
 	b.WriteString("## Usage\n\n")
-	fmt.Fprintf(&b, "```\ndcs-sms %s [flags]\n```\n\n", p.Name)
+	if len(p.SubVerbs) > 0 {
+		names := make([]string, len(p.SubVerbs))
+		for i, sv := range p.SubVerbs {
+			names[i] = sv.Name
+		}
+		fmt.Fprintf(&b, "```\ndcs-sms %s <%s> [flags]\n```\n\n", p.Name, strings.Join(names, "|"))
+	} else {
+		fmt.Fprintf(&b, "```\ndcs-sms %s [flags]\n```\n\n", p.Name)
+	}
 
 	if len(p.Flags) > 0 {
 		b.WriteString("## Flags\n\n")
-		b.WriteString("| Name | Type | Default | Description |\n")
-		b.WriteString("|---|---|---|---|\n")
-		for _, f := range p.Flags {
-			def := f.Default
-			if def == "" {
-				def = `""`
-			}
-			fmt.Fprintf(&b, "| `--%s` | %s | `%s` | %s |\n",
-				f.Name, f.Type, def, escapePipe(f.Usage))
+		writeFlagsTable(&b, p.Flags)
+	}
+
+	for _, sv := range p.SubVerbs {
+		fmt.Fprintf(&b, "## `%s`\n\n", sv.Name)
+		if sv.Synopsis != "" {
+			fmt.Fprintf(&b, "%s\n\n", sv.Synopsis)
 		}
-		b.WriteString("\n")
+		if len(sv.Flags) > 0 {
+			writeFlagsTable(&b, sv.Flags)
+		}
 	}
 
 	if len(p.Examples) > 0 {
@@ -231,6 +264,21 @@ func renderPage(p docPage) string {
 	b.WriteString("---\n\n")
 	b.WriteString("[← CLI reference index](README.md)\n")
 	return b.String()
+}
+
+// writeFlagsTable renders a markdown flags table for a flag set.
+func writeFlagsTable(b *strings.Builder, flags []docFlag) {
+	b.WriteString("| Name | Type | Default | Description |\n")
+	b.WriteString("|---|---|---|---|\n")
+	for _, f := range flags {
+		def := f.Default
+		if def == "" {
+			def = `""`
+		}
+		fmt.Fprintf(b, "| `--%s` | %s | `%s` | %s |\n",
+			f.Name, f.Type, def, escapePipe(f.Usage))
+	}
+	b.WriteString("\n")
 }
 
 // escapePipe replaces literal `|` with `\|` so it doesn't break markdown table cells.

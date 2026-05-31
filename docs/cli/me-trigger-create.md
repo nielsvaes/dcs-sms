@@ -14,8 +14,8 @@ dcs-sms me trigger create [flags]
 
 | Name | Type | Default | Description |
 |---|---|---|---|
-| `--action` | value | `""` | bundled action (repeatable): "<predicate> k=v..." |
-| `--condition` | value | `""` | bundled condition (repeatable): "<predicate> k=v..." |
+| `--action` | string (repeatable) | `""` | bundled action (repeatable): "<predicate> k=v..." |
+| `--condition` | string (repeatable) | `""` | bundled condition (repeatable): "<predicate> k=v..." |
 | `--name` | string | `""` | trigger name (defaults to "Trigger <epoch>") |
 | `--pretty` | bool | `false` | indent JSON output |
 | `--saved-games` | string | `""` | override Saved Games path |

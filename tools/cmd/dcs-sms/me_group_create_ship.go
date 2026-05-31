@@ -15,6 +15,7 @@ type meGroupCreateShipOpts struct {
 	Name		string
 	Heading		float64
 	Skill		string
+	Task		string
 	Force		bool
 	Timeout		time.Duration
 	Pretty		bool
@@ -31,6 +32,7 @@ func meGroupCreateShipFlags() (*flag.FlagSet, *meGroupCreateShipOpts) {
 	fs.StringVar(&opts.Name, "name", "", "group name (auto-allocated if empty)")
 	fs.Float64Var(&opts.Heading, "heading", 0, "heading in degrees (0 = north, CW positive)")
 	fs.StringVar(&opts.Skill, "skill", "Average", "AI skill")
+	fs.StringVar(&opts.Task, "task", "", "group task; default \"CAP\"")
 	fs.BoolVar(&opts.Force, "force", false, "skip the water-surface check")
 	fs.DurationVar(&opts.Timeout, "timeout", 30*time.Second, "wall-clock timeout")
 	fs.BoolVar(&opts.Pretty, "pretty", false, "indent JSON output")
@@ -70,7 +72,7 @@ func meGroupCreateShipCmd(args []string, stdout, stderr io.Writer) int {
 
 	luaArgs := fmt.Sprintf(
 		"{ country = %s, type = %s, north = %g, east = %g, name = %s, "+
-			"heading_deg = %g, skill = %s, force = %t }", luaQuote(opts.Country), luaQuote(opts.Type), opts.North, opts.East, luaQuote(opts.Name), opts.Heading, luaQuote(opts.Skill), opts.Force,
+			"heading_deg = %g, skill = %s, task = %s, force = %t }", luaQuote(opts.Country), luaQuote(opts.Type), opts.North, opts.East, luaQuote(opts.Name), opts.Heading, luaQuote(opts.Skill), luaQuote(opts.Task), opts.Force,
 	)
 
 	resp, exitCode := runMeVerb("group_create_ship", luaArgs, opts.Timeout, opts.SavedGames, stderr)
