@@ -1589,9 +1589,9 @@ local function relayout(w, h)
     -- row3 / [+New folder] / [Show all] / [Reload][Undo][Rename][Delete] row.
     -- Sits above the new right-column control stack (sep2 + country + rotation +
     -- 3 naming-row placeholder + place buttons + status bar margin).
-    -- Stack content ~= 211px + status ~30px = ~241px below row3 bottom edge.
-    -- Anchored so place buttons land just above the status bar at any window height.
-    local row3_y   = h - 263
+    -- Stack content = 224 px below row3 bottom edge; status top at h - 73;
+    -- row3_y <= h - 305 keeps an 8 px breath between place buttons and status bar.
+    local row3_y   = h - 305
 
     -- Tree + Grid stretch the same full height between y=77 and row3_y-8.
     -- The "+ New folder" / "Show all" buttons live on the row3_y row (same
@@ -1678,13 +1678,13 @@ local function relayout(w, h)
     cur_y = cur_y + row_pitch
 
     -- Rotation row. Dial visually overlaps the spinbox column intentionally
-    -- (matches the historical layout); spin sits at +60, dial behind it at +120.
+    -- (matches the historical layout); spin sits at +70, dial overlays at +132.
     set(W.rotation_label, stack_x,           cur_y + 10, 60, row_h)
     set(W.rotation_spin,  stack_x + 70,      cur_y + 10, 60, row_h)
     set(W.rotation_dial,  stack_x + 132,     cur_y,      47, 43)
     set(W.rotation_input, stack_x + 70,      cur_y + 10, 60, row_h)
     set(W.rotation_unit,  stack_x + 132,     cur_y + 10, 20, row_h)
-    -- Rotation row eats 48 px of vertical space (dial is taller than text rows).
+    -- Rotation row eats 50 px of vertical space (dial is taller than text rows).
     cur_y = cur_y + 50
 
     -- Naming rows (Name, Prefix, Suffix) -- wired in Task 10. Reserve 3 rows
