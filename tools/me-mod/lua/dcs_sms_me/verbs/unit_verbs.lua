@@ -144,7 +144,12 @@ function M.unit_set_heading(args)
     -- — same path ED's vanilla sp_heading dial uses. Smooth, no flicker,
     -- no ghost left behind. Falls back to a full refresh if the picModel
     -- isn't reachable (disk-loaded group not yet rendered etc.).
-    require('dcs_sms_me.me_refresh').update_unit_heading_view(g, u)
+    local me_refresh = require('dcs_sms_me.me_refresh')
+    me_refresh.update_unit_heading_view(g, u)
+    -- If an ED Group panel is currently showing THIS unit, push the new
+    -- degrees into its sp_heading / d_heading spin widgets so the gizmo
+    -- updates live instead of waiting for the user to re-select.
+    me_refresh.push_unit_heading_to_panel(g, u, args.heading_deg)
     return { ok = true, id = u.unitId, name = u.name,
              heading_deg = args.heading_deg, heading_rad = rad }
 end

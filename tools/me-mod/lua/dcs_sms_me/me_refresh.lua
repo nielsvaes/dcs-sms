@@ -134,6 +134,47 @@ function M.update_unit_heading_view(g, u)
     end
 end
 
+-- Push a heading change into the currently-mounted ED panel's
+-- sp_heading / d_heading spin widgets — but ONLY if that panel is
+-- currently displaying the specific (group, unit) we just edited.
+-- Without this push, the stock heading gizmo keeps showing the old
+-- value until the user reselects the unit/static, which makes
+-- mass_edit's Set Heading / Random buttons feel half-broken.
+--
+-- We deliberately do NOT call the panel's updateHeading() function:
+-- for aircraft on a route (and vehicles/ships in some configurations),
+-- updateHeading recomputes heading from waypoint geometry and
+-- overwrites every unit's heading field with that derived value —
+-- which would clobber the value our verb just wrote. Setting the
+-- spin widget alone is enough to refresh the visible gizmo.
+--
+-- Each panel module ('me_aircraft' / 'me_vehicle' / 'me_ship' /
+-- 'me_static') exposes sp_heading / d_heading as module-level globals
+-- (no `local` on the assignment). Modules where the panel hasn't been
+-- mounted yet leave them nil, hence the type-guard.
+function M.push_unit_heading_to_panel(g, u, deg)
+    if not (g and u and type(deg) == 'number') then return end
+    local panels = { 'me_aircraft', 'me_vehicle', 'me_ship', 'me_static' }
+    for _, name in ipairs(panels) do
+        local ok, mod = pcall(require, name)
+        if ok and mod and mod.vdata and mod.vdata.group == g then
+            local cur = mod.vdata.unit and mod.vdata.unit.cur
+            local active = cur and mod.vdata.group.units
+                            and mod.vdata.group.units[cur]
+            if active == u then
+                if mod.sp_heading and mod.sp_heading.setValue then
+                    pcall(mod.sp_heading.setValue, mod.sp_heading,
+                          math.floor(deg * 100 + 0.5) / 100)
+                end
+                if mod.d_heading and mod.d_heading.setValue then
+                    pcall(mod.d_heading.setValue, mod.d_heading,
+                          math.floor(deg))
+                end
+            end
+        end
+    end
+end
+
 -- Group-panel refresh: re-read the currently-selected group's data
 -- back into the ME's right-side panel widgets, so checkboxes / combos
 -- / fields reflect any external mutation (e.g. one we just made via a

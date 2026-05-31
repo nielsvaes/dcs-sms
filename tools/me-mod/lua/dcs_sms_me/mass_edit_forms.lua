@@ -20,6 +20,7 @@ local toggle_group_flags      = require('dcs_sms_me.mass_edit_forms.toggle_group
 local set_coalition_airbase             = require('dcs_sms_me.mass_edit_forms.set_coalition_airbase')
 local export_import_warehouse_airbase   = require('dcs_sms_me.mass_edit_forms.export_import_warehouse_airbase')
 local toggle_static_flags               = require('dcs_sms_me.mass_edit_forms.toggle_static_flags')
+local set_heading_static                = require('dcs_sms_me.mass_edit_forms.set_heading_static')
 
 local auto_name_unit            = require('dcs_sms_me.mass_edit_forms.auto_name_unit')
 local find_replace_unit_name    = require('dcs_sms_me.mass_edit_forms.find_replace_unit_name')
@@ -78,6 +79,7 @@ M.by_scope = {
         add_suffix_group_name,
         set_country,
         toggle_static_flags,
+        set_heading_static,
     },
     waypoint = {},
     zone     = {},
