@@ -209,5 +209,58 @@ do
           'got ' .. tostring(g.units[1].name))
 end
 
+-- Case F1: Prefix on a placement record with zones.
+do
+    mock.new_mission(); renames = {}
+    local rec = {
+        groups = {},
+        zones = {
+            { orig_name = 'ZoneA', runtime_id = 100, zone_obj = { name = 'ZoneA' } },
+            { orig_name = 'ZoneB', runtime_id = 101, zone_obj = { name = 'ZoneB' } },
+        },
+        drawings = {},
+        errors = {},
+    }
+    local result = naming.apply(rec, { prefix = 'P_' })
+    check('F1: zone[1].name -> P_ZoneA', rec.zones[1].zone_obj.name == 'P_ZoneA',
+          'got ' .. tostring(rec.zones[1].zone_obj.name))
+    check('F1: zone[2].name -> P_ZoneB', rec.zones[2].zone_obj.name == 'P_ZoneB')
+    check('F1: renamed_zones = 2', result.renamed_zones == 2,
+          'got ' .. tostring(result.renamed_zones))
+end
+
+-- Case F2: Suffix with keep_num on drawings.
+do
+    mock.new_mission(); renames = {}
+    local rec = {
+        groups = {}, zones = {},
+        drawings = {
+            { orig_name = 'Mark-1', drawing_obj = { name = 'Mark-1' } },
+        },
+        errors = {},
+    }
+    local result = naming.apply(rec, { suffix = '_X', keep_num = true })
+    check('F2: drawing -> Mark_X-1 (keep num)',
+          rec.drawings[1].drawing_obj.name == 'Mark_X-1',
+          'got ' .. tostring(rec.drawings[1].drawing_obj.name))
+    check('F2: renamed_drawings = 1', result.renamed_drawings == 1)
+end
+
+-- Case F3: Name does NOT apply to zones/drawings (per spec D3).
+do
+    mock.new_mission(); renames = {}
+    local rec = {
+        groups = {},
+        zones    = { { orig_name = 'Z', runtime_id = 1, zone_obj    = { name = 'Z' } } },
+        drawings = { { orig_name = 'D',                 drawing_obj = { name = 'D' } } },
+        errors = {},
+    }
+    local result = naming.apply(rec, { name = 'NEW' })
+    check('F3: zone unchanged', rec.zones[1].zone_obj.name == 'Z')
+    check('F3: drawing unchanged', rec.drawings[1].drawing_obj.name == 'D')
+    check('F3: renamed_zones = 0', result.renamed_zones == 0)
+    check('F3: renamed_drawings = 0', result.renamed_drawings == 0)
+end
+
 if failures > 0 then print(failures .. ' failure(s)'); os.exit(1) end
 print('All prefab_naming tests passed.')

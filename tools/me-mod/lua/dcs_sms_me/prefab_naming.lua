@@ -41,6 +41,72 @@ local function entities_from_groups(rec)
     return out
 end
 
+-- Resolve the live zone entity from a placement-record entry. prefab_ops
+-- stores {orig_name, runtime_id}; we also accept {zone_obj=...} when
+-- callers (or tests) have a direct reference. Returns the live table or
+-- nil if no entity can be reached.
+local function resolve_zone(entry)
+    if type(entry) ~= 'table' then return nil end
+    if type(entry.zone_obj) == 'table' then return entry.zone_obj end
+    -- Best-effort lookup via TriggerZoneController. Defensive: missing
+    -- API -> return nil and let the caller log a failure. Live DCS exposes
+    -- getZone(id); test VM does not.
+    local ok, ctrl = pcall(require, 'Mission.TriggerZoneController')
+    if not ok or type(ctrl) ~= 'table' then return nil end
+    if type(ctrl.getZone) == 'function' and entry.runtime_id then
+        local got_ok, zone = pcall(ctrl.getZone, entry.runtime_id)
+        if got_ok and type(zone) == 'table' then return zone end
+    end
+    return nil
+end
+
+-- Resolve the live drawing entity from a placement-record entry. prefab_ops
+-- stores {orig_name, drawing_obj}; the drawing_obj IS the live table.
+local function resolve_drawing(entry)
+    if type(entry) ~= 'table' then return nil end
+    if type(entry.drawing_obj) == 'table' then return entry.drawing_obj end
+    return nil
+end
+
+-- Apply a text transform to each zone/drawing entry's .name. Each entity
+-- gets resolved via the resolver; nil-resolution counts as a failure but
+-- does not abort the batch. Returns {changed, failed}. Live DCS refresh
+-- hooks (panel.loadFromMission for drawings, TriggerZoneController for
+-- zones) are best-effort: we pcall them; failure leaves .name written
+-- but ME visual state unrefreshed until the next manual interaction.
+local function apply_text_transform(entries, resolver, transform_fn)
+    local changed, failed = 0, 0
+    for _, entry in ipairs(entries or {}) do
+        local e = resolver(entry)
+        if e and type(e.name) == 'string' then
+            local old = e.name
+            local new = transform_fn(old)
+            if new ~= old then
+                e.name = new
+                changed = changed + 1
+            end
+        else
+            failed = failed + 1
+        end
+    end
+    return changed, failed
+end
+
+-- Refresh hooks are pcall'd best-effort. Failures degrade silently.
+local function refresh_drawings()
+    pcall(function()
+        local panel = require('me_draw_panel')
+        if type(panel) == 'table' and type(panel.getObjects) == 'function' then
+            -- Some panels expose loadFromMission(toData()) to round-trip
+            -- the .name change through the renderer. Calling it without
+            -- args is a no-op on builds that don't support it.
+            if type(panel.loadFromMission) == 'function' then
+                pcall(panel.loadFromMission)
+            end
+        end
+    end)
+end
+
 function M.apply(rec, opts)
     opts = opts or {}
     local result = {
@@ -65,20 +131,39 @@ function M.apply(rec, opts)
         result.failed = result.failed + (r.failed or 0)
     end
 
-    -- Pass 2: Prefix (groups + statics — zones + drawings added in Task 6).
+    -- Pass 2: Prefix.
     if type(opts.prefix) == 'string' and opts.prefix ~= '' then
         local add_prefix = require('dcs_sms_me.mass_edit_forms.add_prefix_group_name')
         local r = add_prefix._apply(group_entities, opts.prefix)
         result.renamed_groups = result.renamed_groups + (r.changed or 0)
         result.failed = result.failed + (r.failed or 0)
+        -- Zones + drawings: direct walk via internal helpers.
+        local fn = function(old) return opts.prefix .. old end
+        local z_changed, z_failed = apply_text_transform(rec.zones, resolve_zone, fn)
+        local d_changed, d_failed = apply_text_transform(rec.drawings, resolve_drawing, fn)
+        result.renamed_zones    = result.renamed_zones    + z_changed
+        result.renamed_drawings = result.renamed_drawings + d_changed
+        result.failed           = result.failed + z_failed + d_failed
+        if d_changed > 0 then refresh_drawings() end
     end
 
-    -- Pass 3: Suffix (groups + statics — zones + drawings added in Task 6).
+    -- Pass 3: Suffix.
     if type(opts.suffix) == 'string' and opts.suffix ~= '' then
         local add_suffix = require('dcs_sms_me.mass_edit_forms.add_suffix_group_name')
         local r = add_suffix._apply(group_entities, opts.suffix, { keep_num = opts.keep_num == true })
         result.renamed_groups = result.renamed_groups + (r.changed or 0)
         result.failed = result.failed + (r.failed or 0)
+        -- Zones + drawings: identical keep_num semantics via the shared transform.
+        local transforms = require('dcs_sms_me.mass_edit_transforms')
+        local fn = function(old)
+            return transforms.add_suffix(old, { text = opts.suffix, keep_num = opts.keep_num == true })
+        end
+        local z_changed, z_failed = apply_text_transform(rec.zones, resolve_zone, fn)
+        local d_changed, d_failed = apply_text_transform(rec.drawings, resolve_drawing, fn)
+        result.renamed_zones    = result.renamed_zones    + z_changed
+        result.renamed_drawings = result.renamed_drawings + d_changed
+        result.failed           = result.failed + z_failed + d_failed
+        if d_changed > 0 then refresh_drawings() end
     end
 
     -- Pass 4: Auto-name units (only if any of name/prefix/suffix ran). Reads
