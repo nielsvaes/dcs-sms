@@ -1,0 +1,81 @@
+package main
+
+import (
+	"flag"
+	"fmt"
+	"io"
+	"time"
+)
+
+type meGroupSetUncontrollableOpts struct {
+	Name       string
+	ID         int
+	Enabled    bool
+	Timeout    time.Duration
+	Pretty     bool
+	SavedGames string
+}
+
+func meGroupSetUncontrollableFlags() (*flag.FlagSet, *meGroupSetUncontrollableOpts) {
+	opts := &meGroupSetUncontrollableOpts{}
+	fs := flag.NewFlagSet("me group set-uncontrollable", flag.ContinueOnError)
+	fs.StringVar(&opts.Name, "name", "", "group name (mutually exclusive with --id)")
+	fs.IntVar(&opts.ID, "id", 0, "group id (mutually exclusive with --name)")
+	fs.BoolVar(&opts.Enabled, "enabled", false, "set GAME MASTER ONLY (true) or clear it (false); pass explicitly")
+	fs.DurationVar(&opts.Timeout, "timeout", 30*time.Second, "wall-clock timeout")
+	fs.BoolVar(&opts.Pretty, "pretty", false, "indent JSON output")
+	fs.StringVar(&opts.SavedGames, "saved-games", "", "override Saved Games path")
+	return fs, opts
+}
+
+func init() {
+	registerMeInfo("group", "set-uncontrollable", cmdInfo{
+		Run:      meGroupSetUncontrollableCmd,
+		Flags:    flagsOnly(meGroupSetUncontrollableFlags),
+		Synopsis: "toggle a group's GAME MASTER ONLY (g.uncontrollable) flag",
+	})
+}
+
+// meGroupSetUncontrollableCmd implements `dcs-sms me group set-uncontrollable --name|--id <X> --enabled=true|false`.
+//
+// Toggles g.uncontrollable -- the ME's "GAME MASTER ONLY" checkbox
+// (me_aircraft.lua:125 / me_vehicle.lua:100 / me_ship.lua:107).
+// Distinct from g.uncontrolled (the "UNCONTROLLED" checkbox) -- both
+// fields exist on the same group dict and toggle independently.
+func meGroupSetUncontrollableCmd(args []string, stdout, stderr io.Writer) int {
+	fs, opts := meGroupSetUncontrollableFlags()
+	fs.SetOutput(stderr)
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	hasName := opts.Name != ""
+	hasID := opts.ID != 0
+	if hasName == hasID {
+		fmt.Fprintln(stderr, "dcs-sms me group set-uncontrollable: exactly one of --name or --id is required")
+		return 2
+	}
+	enabledSet := false
+	fs.Visit(func(f *flag.Flag) {
+		if f.Name == "enabled" {
+			enabledSet = true
+		}
+	})
+	if !enabledSet {
+		fmt.Fprintln(stderr, "dcs-sms me group set-uncontrollable: --enabled=true|false is required (pass explicitly)")
+		return 2
+	}
+
+	var idClause string
+	if hasName {
+		idClause = fmt.Sprintf("name = %q", opts.Name)
+	} else {
+		idClause = fmt.Sprintf("id = %d", opts.ID)
+	}
+	luaArgs := fmt.Sprintf("{ %s, enabled = %t }", idClause, opts.Enabled)
+
+	resp, exitCode := runMeVerb("group_set_uncontrollable", luaArgs, opts.Timeout, opts.SavedGames, stderr)
+	if exitCode != 0 {
+		return exitCode
+	}
+	return emitMeResponse(resp, opts.Pretty, stdout)
+}

@@ -115,6 +115,265 @@ Verify the refactor preserved Prefab Manager behaviour exactly:
 - [ ] Resize window → tree stays at 200 px wide; file grid widens.
 - [ ] Reload (Ctrl+Shift+R) or close/re-open Prefab Manager → tree refreshes from disk.
 
+## Mass Edit (v0.10.0+)
+
+The Mass Edit window is being rebuilt around an action-panel model
+(see `docs/superpowers/specs/2026-05-18-me-mass-edit-rework-design.md`).
+PR-by-PR each form is added; this section will grow as forms land.
+
+### Right-pane scroll (v0.10.0+)
+
+The right pane is wrapped in a ScrollPane so all stacked forms are
+reachable regardless of window height.
+
+- [ ] Open Mass Edit on Group tab at the default window height. Verify
+      a scrollbar appears on the right pane and all 6 forms (Rename,
+      Find & replace, Add prefix, Add suffix, Set country, Visibility &
+      control) can be reached by scrolling.
+- [ ] Switch to Unit tab, then back to Group. The right pane scroll
+      position resets to top.
+- [ ] A thin vertical splitter handle sits in the gutter between the
+      tree pane and the form pane. Click + drag it left and right —
+      the tree and form panes resize live, clamped between a usable
+      minimum form width (~340) and a usable minimum tree width
+      (~220). Releasing the mouse stops the drag. Resizing the whole
+      window afterwards keeps the user's chosen split.
+- [ ] Each consecutive pair of forms in the right pane is separated
+      by a thin dark horizontal line with a small bit of vertical
+      breathing room above and below. The line is hidden when the
+      scope has 0 or 1 forms (e.g. Unit / Waypoint / Zone / Drawing).
+- [ ] Resize the window taller until all 6 forms fit. The scrollbar
+      disappears.
+- [ ] Hide a form (e.g. via Ctrl+Shift+R reload while the window is
+      open) and verify no empty gap is left in the scroll content area.
+      (If gaps appear, hidden forms still contribute to the pane's
+      content height — file as a follow-up.)
+
+### Scope tab strip (v0.10.0+)
+
+- [ ] **Scope tab strip:** Opening the Mass Edit window shows the five scope tabs (Group / Unit / Waypoint / Zone / Drawing) anchored to the left pane and equally sharing its width. The currently-mounted scope has a filled teal background and white text; the other four read as dim grey text on the panel background with no chrome. Clicking an inactive tab switches scope and the teal moves to the clicked tab; clicking the already-active tab does nothing visible.
+
+### Airbase scope (v0.10.0+)
+
+- [ ] **Airbase tab lists all airbases.** Clicking the Airbase scope tab populates the treeview with every map airfield in the mission, with columns Name / Coalition (tinted red/blue/yellow) / North / East. Sorting by clicking any column header works as on other scopes.
+- [ ] **Marquee drag on F10 map bulk-checks.** With the Mass Edit window open (any scope), drag a rectangle on the F10 map covering several airbases. Switch to the Airbase scope — the airbases inside the rectangle are checked. Drawing a second rectangle UNIONS more airbases into the checked set rather than replacing.
+- [ ] **Set Coalition form.** Pick a coalition in the combo, click Set — every checked airbase flips coalition; the F10 map color updates immediately. Undo (Ctrl+Z) restores prior per-airbase coalitions.
+- [ ] **Export/Import warehouse.** Check exactly one airbase, type a name like "Cold War Loadout", click Save — file appears in `<Saved Games>\DCS\dcs-sms\airbase-warehouses\<name>.lua`. Check several other airbases, pick the saved entry in the Saved combo, click Apply — the loaded warehouse splats onto every checked airbase. Click Delete — the file is removed and the combo refreshes.
+
+### Rename groups
+
+- [ ] The Rename groups form is the topmost form in the Group scope's right pane.
+- [ ] Hovering the Rename button shows a tooltip: `Use {n} for sequence, e.g. "Foo-{n}"`.
+- [ ] Check 3 groups, type `X-{n}` in the Name field, click Rename. Names become `X-01`, `X-02`, `X-03` in name-ascending order (alphabetical by previous name, not by check order). Footer toast: `3 renamed`.
+- [ ] Type `Foo` (no `{n}` token) and click Rename with the same 3 groups checked. All three get a name based on `Foo` — DCS auto-disambiguates the collision. Toast: `3 renamed`.
+- [ ] Click Rename with the Name field empty. Toast: `Name is empty` (warning). No names mutate.
+- [ ] Click Rename with nothing checked. Toast: `Nothing selected` (warning).
+- [ ] Press `Ctrl+Z` while the window has focus. The most recent rename reverts.
+- [ ] After a rename, the entity list refreshes and shows the new names.
+
+### Find & replace in group names
+
+- [ ] DCS-SMS → Mass Edit opens the window.
+- [ ] Window title includes a `[loaded HH:MM:SS]` suffix (dev aid; remove when stable).
+- [ ] The Group scope tab is active by default. The other four scope tabs (Unit, Waypoint, Zone, Drawing) are visible but render only a "No forms yet for this scope" label in the right pane when clicked.
+- [ ] The left pane lists every group in the mission. Switching to a mission with several groups: the list populates with all of them. No dependency on the marquee tool.
+- [ ] The name-filter EditBox above the list narrows it (case-insensitive substring match).
+- [ ] Sort headers work — clicking Name / Country / Type / # Units sorts asc / desc.
+- [ ] Checkboxes in column 0 toggle independently. Whole-row click also toggles.
+- [ ] The right pane shows exactly one form: "Find & replace in group names".
+- [ ] All widgets are skinned (visual match against Prefab Manager — same blue navy theme).
+- [ ] Type `Foo` in Find, `Bar` in Replace. Check 2 groups whose names contain `Foo`. Click `Replace`. Names update to substitute Foo→Bar. Footer toast reads `2 renamed`.
+- [ ] Groups whose names did NOT contain `Foo` remain unchanged.
+- [ ] Press `Ctrl+Z` while the Mass Edit window has focus. The two renamed groups revert to their original names.
+- [ ] Click `Refresh`. The list re-walks the mission; any external rename (e.g. via ME group panel) is picked up.
+
+### Auto-name units
+
+Single-button form. For each checked group, renames every unit to
+`<groupname>-<idx>` (idx is the 1-based position in the group's
+units array). Writes via `Mission.renameUnit` so DCS's per-unit
+collision detection applies.
+
+- [ ] The Auto-name units form sits directly under `Rename groups`
+      in the Group scope's right pane (rename-the-group + sync-the-
+      units is a natural one-two flow). It's a single `Auto name units`
+      button that spans the full form width.
+- [ ] Check a group named `Viper-1` with two oddly-named units. Click
+      `Auto name units`. Units become `Viper-1-1` / `Viper-1-2`. Toast:
+      `2 units renamed`.
+- [ ] Click `Auto name units` with nothing checked. Toast: `Nothing
+      selected`.
+- [ ] Click `Auto name units` on a group whose units are ALREADY
+      named correctly. Toast: `No changes` (warning); no mutation.
+- [ ] Press `Ctrl+Z` after a successful auto-name. Every unit name
+      is restored.
+- [ ] Hover the button — tooltip explains the rename pattern.
+
+### Set country
+
+- [ ] The Set country form sits below Find & replace and above Visibility & control in the Group scope's right pane.
+- [ ] The country dropdown lists every country present in the mission. Each entry is coalition-tinted (red, blue, or neutral). Countries that have no entities in the current mission are NOT listed.
+- [ ] After picking a country, the closed dropdown shows the country name with the matching coalition tint — no blank closed display.
+- [ ] Check 2 groups currently in USA. Pick `Russia` in the dropdown. Click `Set`. Both groups move to Russia and to the red coalition. Footer toast: `2 country set`.
+- [ ] Click `Set` with nothing picked in the dropdown. Toast: `Pick a country` (warning).
+- [ ] Click `Set` with nothing checked. Toast: `Nothing selected` (warning).
+- [ ] Check a group currently in Russia. Pick `Russia`. Click `Set`. Toast: `Already in Russia` (info). No mutation.
+- [ ] Check two groups, one in USA and one in Russia. Pick `Russia`. Click. Toast contains `1 country set` and `1 unchanged`.
+- [ ] Ctrl+Z reverts the most recent country-change.
+
+### Visibility & control (toggle_group_flags)
+
+- [ ] The Visibility & control form is the bottom form in the Group scope's right pane (below Set country).
+- [ ] Form shows six state buttons in 2 rows × 3 columns: `Hidden on map`, `Hidden on planner`, `Hidden on MFD` (top row); `Game Master Only`, `Uncontrolled`, `Late activation` (bottom row).
+- [ ] LEAVE-state buttons render with neutral text; ON cycles to green text; OFF cycles to red text.
+- [ ] All six buttons default to LEAVE state (suffix `—`) on first mount. All three states share the same `dtc_button` skin — only the label suffix changes.
+- [ ] Click `Hidden on map —` once → label becomes `Hidden on map ON`. Click again → `Hidden on map OFF`. Click again → back to `—`.
+- [ ] Click `Apply` with nothing checked in the left pane → toast `Nothing selected` (warning). No mutation.
+- [ ] Click `Apply` with all six buttons at LEAVE → toast `Nothing to apply` (warning). No mutation.
+- [ ] Check 2 plane groups. Set `Hidden on map` to ON. Click Apply. Both groups disappear from the map; their list-pane Type cell unchanged. Toast: `2 flag changes` (success).
+- [ ] If a group's right-side panel was open when Apply ran, the panel's `HIDDEN ON MAP` checkbox now reflects the new state without needing to reselect the group.
+- [ ] All six state buttons reset to LEAVE after the successful apply.
+- [ ] Re-check the same 2 planes. Set `Hidden on map` to OFF. Click Apply. Map markers return.
+- [ ] Check 1 plane + 1 vehicle. Set `Uncontrolled` to ON. Click Apply. Plane's `uncontrolled` flips on; vehicle untouched. Toast: `1 flag change · 1 not applicable`.
+- [ ] Check 1 static group. Set `Hidden on map` to ON and `Uncontrolled` to ON. Click Apply. Static is hidden; `uncontrolled` skipped for it. Toast: `1 flag change · 1 not applicable`.
+- [ ] Check 2 planes. Set `Late activation` and `Hidden on MFD` both to ON in the same form (don't apply between). Click Apply. Both fields flip on both planes. Toast: `4 flag changes`.
+- [ ] Press Ctrl+Z after the previous step. All four mutations are reverted (both planes back to their pre-apply state on both fields). Toast: `Undo successful`.
+- [ ] Save the .miz and reopen. The flag values persist in the saved file.
+- [ ] `dcs-sms me group set-hidden-on-planner --name <plane> --hidden=true` (CLI sanity check): flag flips on the named plane.
+- [ ] `dcs-sms me group set-hidden-on-mfd --name <plane> --hidden=true`: same.
+- [ ] `dcs-sms me group set-uncontrollable --name <plane> --enabled=true`: GAME MASTER ONLY checkbox in the ME's right panel ticks on for that group.
+
+### Entity list multi-select (shift-click + bulk buttons + scroll preserve)
+
+These items cover the left-pane selection ergonomics; they apply to every scope tab (not just Group). Use a mission populated with >50 entities so scroll behavior is observable — `tools/cmd/dcs-sms/exec --target gui --file ...` with a bulk-create snippet works.
+
+- [ ] Click any row's text cell (not the checkbox). Mirrors the vanilla ME Unit List: the row's group becomes the **single** map selection, the right-side **group properties panel opens** with that group's fields editable, and the F10 camera **pans** onto it (zoom is left untouched). The row's checkbox is **not** toggled — batch inclusion is via the checkbox column only. The clicked row also becomes the anchor for a follow-up shift-click.
+- [ ] On Unit scope, clicking a unit row opens the panel with **that unit** active (not the group's first unit).
+- [ ] Shift-click a row's text 10 rows below the anchor. The shift-click still range-fills the checkboxes (Explorer/GTK semantics) — the camera does NOT pan and the map selection is NOT replaced. Anchor is preserved across repeated shift-clicks.
+- [ ] Click a row 30 rows below the anchor without holding shift. Camera pans there, that group becomes the map selection, and the new anchor is set. Shift-click 5 rows above → range-fill from the new anchor.
+- [ ] Click a checkbox directly (not the row text). The row toggles and the anchor moves to that row. A follow-up shift-click on another row's text body extends from the just-clicked checkbox row.
+- [ ] Type a name-substring filter that hides the current anchor. Shift-click extends only within the visible (filtered) rows, treating the off-screen anchor as missing → behaves like a plain click.
+- [ ] `Select all` button checks every row passing the current name filter. Hidden (filter-excluded) rows are untouched.
+- [ ] `Invert` button flips the checked state of every visible row. Hidden rows are untouched.
+- [ ] `Clear` button wipes the scope's selection entirely (including any rows currently filtered out). The shift-click anchor is reset; the next click is a fresh anchor.
+- [ ] Scroll to the bottom of a long list. Click a checkbox or row body. The list stays scrolled to roughly that position (within a row or two) — does NOT jump back to row 0.
+- [ ] Switch scope tabs (Group → Unit → Group). The prior tab's tree widget is detached from the window — the new tab's grid is the only one rendered. Repeated switching across all 5 scope tabs should not visibly slow the window over a long session (no orphan-grid accumulation).
+
+### Map selection sync (group scope)
+
+The Group-scope bulk-button strip has two extra buttons — `From map`
+(pull map selection into Mass Edit checkboxes) and `Highlight` (push
+checked groups onto the map selection). Replace semantics in both
+directions; group scope only.
+
+- [ ] Open Mass Edit on Group tab. Select 3 groups on the map (marquee).
+      Click `From map`. The same 3 groups are now checked in Mass Edit;
+      toast reads `Fetched 3 groups from map`.
+- [ ] Uncheck one and check two different ones (now 4 checked). Click
+      `Highlight`. The 4 checked groups are now marqueed on the map and the
+      right-side group panel reflects the new selection; toast reads
+      `Pushed 4 groups to map`.
+- [ ] Switch to Unit tab. Both `From map` and `Highlight` disappear; only
+      `Select all` / `Invert` / `Clear` remain. Switch back to Group —
+      both reappear.
+- [ ] With an empty map selection, click `From map`. Toast reads
+      `Map selection empty`; the existing Mass Edit checkboxes are
+      **unchanged** (no wipe).
+- [ ] Select a group on the map, then in Mass Edit clear all
+      checkboxes, then click `Highlight`. Toast reads
+      `Nothing checked to push`; the map's existing selection is
+      **unchanged** (no `unselectAll` call).
+- [ ] Hot-reload via `dcs-sms.exe reload-me-mod` while the window is
+      open. `From map` and `Highlight` still work.
+
+### Add prefix to group names
+
+Single-input form. Prepends the typed text to every checked group's
+name. Writes through DCS's collision-safe rename path (`check_group_name`
+auto-disambiguates duplicates with `-1` / `-2` suffixes). Per-form undo.
+
+- [ ] Open Mass Edit on Group tab. Check 3 groups with distinct names
+      (e.g. `Alpha`, `Bravo`, `Charlie`). In the `Add prefix to group
+      names` form, type `BLUE-`. Click `Add` (prefix form). All 3 names become
+      `BLUE-Alpha` / `BLUE-Bravo` / `BLUE-Charlie`. Toast reads
+      `3 prefixed`.
+- [ ] With two groups both named `Foo` checked, type `X-` and click
+      `Add` (prefix form). The two names become `X-Foo` and `X-Foo-1` (DCS
+      auto-disambiguation through `check_group_name`).
+- [ ] With nothing checked, click `Add` (prefix form). Toast reads
+      `Nothing selected`. No mutation.
+- [ ] With groups checked but the text box empty, click `Add` (prefix form).
+      Toast reads `Text is empty`. Names unchanged.
+- [ ] After a successful prefix run, press `Ctrl+Z`. Every prior name
+      is restored exactly (no residual `-1` suffixes leaking through
+      the undo path).
+
+### Add suffix to group names
+
+Mirror of the prefix form — appends the typed text instead of
+prepending. Same write path, same undo behaviour.
+
+- [ ] Open Mass Edit on Group tab. Check 3 groups with distinct names
+      (e.g. `Alpha`, `Bravo`, `Charlie`). In the `Add suffix to group
+      names` form, type `-TEST`. Click `Add` (suffix form). All 3 names become
+      `Alpha-TEST` / `Bravo-TEST` / `Charlie-TEST`. Toast reads
+      `3 suffixed`.
+- [ ] With two groups both named `Foo` checked, type `-DEL` and click
+      `Add` (suffix form). The two names become `Foo-DEL` and `Foo-DEL-1`
+      (DCS auto-disambiguation).
+- [ ] With nothing checked, click `Add` (suffix form). Toast reads
+      `Nothing selected`.
+- [ ] With groups checked but the text box empty, click `Add` (suffix form).
+      Toast reads `Suffix is empty`. Names unchanged.
+- [ ] After a successful suffix run, press `Ctrl+Z`. Every prior name
+      is restored exactly.
+- [ ] Keep Num toggle (**ON by default**). With groups named `Viper-1`,
+      `Hornet_2`, `Eagle` checked, type `Sfx` and click `Add` (suffix form).
+      Names become `ViperSfx-1`, `HornetSfx_2`, `EagleSfx` (the toggle
+      inserts the suffix BEFORE a trailing `-<digits>` or `_<digits>`
+      block; falls back to plain append when no trailing number is
+      present). Hovering the toggle shows a tooltip explaining the
+      behavior.
+- [ ] Toggle `Keep Num` OFF and rerun the same input on `Viper-1` →
+      becomes `Viper-1Sfx` (plain append).
+
+## Unit scope (v0.10.0+)
+
+Open Mass Edit, switch to the **Unit** tab. Confirm the treeview shows
+Name · Type · Category · Skill · Coalition · Group with Coalition column
+tinted red/blue/neutral per the unit's group country.
+
+### Form gating
+
+- [ ] With zero units checked: all 9 forms in the right pane are grayed out
+      (Apply buttons + inputs disabled).
+- [ ] Check 1 tank: planes-only forms (Set onboard #, Set fuel %) and
+      planes/helos forms (Set livery) gray out. Skill, rename forms,
+      heading remain interactive.
+- [ ] Check 1 plane: every form is interactive.
+- [ ] Check 1 plane + 1 tank: planes-only / planes-helos forms stay
+      interactive (the plane is applicable); on Apply, the tank is
+      silently skipped and the toast shows "· 1 not applicable". Set
+      livery additionally grays out whenever the checked planes/helos
+      span more than one airframe type.
+
+### Per-form happy path (one tap each)
+
+- [ ] **Find & replace in unit names:** check 2+ units, Find="-1" Replace="-A" → names update; toast "2 renamed".
+- [ ] **Add prefix:** check 2 units, Prefix="[P] " → names update; toast "2 renamed".
+- [ ] **Add suffix:** check 2 units, Suffix="-Lead", Keep Num OFF → names get suffix appended.
+- [ ] **Auto-name:** check 3 units, Base="Falcon" Start="5" → units become Falcon-5, Falcon-6, Falcon-7.
+- [ ] **Set skill:** check 2 units, pick "Excellent" → skill changes; toast "2 skill set".
+- [ ] **Set onboard #:** check 3 planes (only), Start="010" → 010 / 011 / 012; click Random → all change to distinct 3-digit numbers.
+- [ ] **Set livery:** check 2 planes of same airframe, pick a livery → both planes update.
+- [ ] **Set heading (absolute):** check 2 units, type 90 → both units face east; close + reopen ME unit panel to confirm.
+- [ ] **Set heading (delta):** with the same selection, type 45 in Delta → both units now face 135°.
+- [ ] **Set fuel %:** check a plane, type 50 → toast "1 fuel set". If "used current-fuel fallback" appears, max_fuel resolver didn't recognize the airframe (file a follow-up).
+
+### Undo
+
+For each form above: run the apply, hit Ctrl+Z (or whatever the ME's undo key is), verify the unit reverts. Single-slot undo: only the last apply is undoable (matches existing form behavior).
+
 ## v0.15.0 — waypoint task verbs (gh #69)
 
 - [ ] **Add a Bombing waypoint task via `me waypoint add-task`.**

@@ -14,7 +14,7 @@
 -- All builders return a freshly cloned skin table so callers can mutate
 -- without affecting the cached Skin module copy.
 
-local Skin = require('Skin')
+local Skin;  do local ok, m = pcall(require, 'Skin'); if ok then Skin = m end end
 
 local M = {}
 
@@ -45,6 +45,65 @@ function M.button()
     return s
 end
 
+-- Tinted button variants for tri-state buttons (tri_state_button.lua).
+-- Builds on M.button() and overrides the label color in every state so the
+-- text reads green / red across hover / pressed / released alike. Bkg image
+-- stays the same (btnmean2) — only the label tint changes.
+local function button_colored(hex)
+    local s = M.button()
+    if not (s and s.skinData and s.skinData.states) then return s end
+    for _, state_name in pairs({'released', 'hover', 'pressed', 'disabled', 'checked'}) do
+        local st = s.skinData.states[state_name]
+        if type(st) == 'table' then
+            for _, layer in pairs(st) do
+                if type(layer) == 'table' and type(layer.text) == 'table' then
+                    layer.text.color = hex
+                end
+            end
+        end
+    end
+    return s
+end
+
+function M.button_on()  return button_colored('0x44dd44ff') end  -- green
+function M.button_off() return button_colored('0xff5555ff') end  -- red
+
+-- Translucent button variant: clones M.button() and scales every
+-- 0xRRGGBBAA hex color in the skin tree by an alpha multiplier (default
+-- 0.75 = 75% opacity). Used for inline clear-buttons (clearable_edit)
+-- and other affordances that should sit visually softer than the
+-- standard chunky dtc_button.
+local function scale_hex_alpha(hex_str, factor)
+    if type(hex_str) ~= 'string' or #hex_str ~= 10 then return hex_str end
+    if not hex_str:match('^0x%x+$') then return hex_str end
+    local rgb       = hex_str:sub(1, 8)
+    local alpha_hex = hex_str:sub(9, 10)
+    local alpha = tonumber(alpha_hex, 16)
+    if not alpha then return hex_str end
+    local new_alpha = math.floor(alpha * factor + 0.5)
+    if new_alpha > 255 then new_alpha = 255 end
+    if new_alpha < 0   then new_alpha = 0   end
+    return rgb .. string.format('%02x', new_alpha)
+end
+
+local function scale_all_alpha(node, factor, depth)
+    if type(node) ~= 'table' or (depth or 0) > 10 then return end
+    for k, v in pairs(node) do
+        if type(v) == 'string' then
+            node[k] = scale_hex_alpha(v, factor)
+        elseif type(v) == 'table' then
+            scale_all_alpha(v, factor, (depth or 0) + 1)
+        end
+    end
+end
+
+function M.button_translucent(opacity)
+    local s = M.button()
+    if not (s and s.skinData and s.skinData.states) then return s end
+    scale_all_alpha(s.skinData.states, tonumber(opacity) or 0.75)
+    return s
+end
+
 function M.grid()
     local s = Skin.gridSkin_Multiplayer_roleNew and Skin.gridSkin_Multiplayer_roleNew() or nil
     if not s then return nil end
@@ -59,6 +118,27 @@ end
 
 function M.grid_header()
     return Skin.gridHeaderCellSkinNew and Skin.gridHeaderCellSkinNew() or nil
+end
+
+-- ScrollPane skin that pairs the modern-blue pane background from
+-- me_managerDTC.dlg's scrollPane_modul_noinserts with the thin "tools"
+-- scrollbar definition that grid4mulnew.skin.lua (gridSkin_Multiplayer_-
+-- roleNew) defines inline. The stock noinserts skin references
+-- vertScrollBarSkinSV by name — that's the dark-gray legacy look that
+-- visually clashes with the grid's lighter scrollbar.
+--
+-- We can't override one named skin from another with a stock name —
+-- skin_names.lua doesn't ship a thin-scrollbar pane preset. So we
+-- runtime-clone noinserts and inject the grid's vertScrollBar table.
+function M.scroll_pane()
+    local pane = Skin.scrollPane_modul_noinserts and Skin.scrollPane_modul_noinserts() or nil
+    if not (pane and pane.skinData and pane.skinData.skins) then return pane end
+
+    local grid = Skin.gridSkin_Multiplayer_roleNew and Skin.gridSkin_Multiplayer_roleNew() or nil
+    if grid and grid.skinData and grid.skinData.skins and grid.skinData.skins.vertScrollBar then
+        pane.skinData.skins.vertScrollBar = grid.skinData.skins.vertScrollBar
+    end
+    return pane
 end
 
 -- Icon-bearing Static skin: clone staticSkin and inject a 64x64 picture into
@@ -88,6 +168,15 @@ function M.static_yellow() return static_colored('0xffd700ff') end  -- warning
 function M.static_red()    return static_colored('0xff5555ff') end  -- error (softened from pure red)
 function M.static_green()  return static_colored('0x44dd44ff') end  -- placement / success
 
+-- Coalition-tinted Static variants. Render the cell's text in the
+-- coalition color so the group treeview's Country column visually echoes
+-- the colored marker the country ComboList already shows on its
+-- ListBoxItem entries. Hex values match the existing dtc palette where
+-- possible (red = static_red's hex; neutral = static_yellow's hex).
+function M.coal_red()     return static_colored('0xff5555ff') end
+function M.coal_blue()    return static_colored('0x5599ffff') end
+function M.coal_neutral() return static_colored('0xffd700ff') end
+
 -- Thin horizontal-rule skin for sectioning the prefab manager. dxgui has
 -- no native separator widget, so we override a Static's released-state bkg
 -- with a darker tone — when the Static is sized 1px tall and stretched
@@ -111,6 +200,106 @@ function M.separator()
         },
         version = 1,
     }
+end
+
+-- Vertical drag-handle skin for the mass_edit pane splitter. Same
+-- structure as separator(), but a lighter neutral color so the user
+-- sees a visible grab bar between the panes (dxgui has no setCursor
+-- API so we can't show a horizontal-resize cursor on hover — the
+-- visible bar IS the affordance).
+function M.splitter()
+    return {
+        skinData = {
+            states = {
+                released = {
+                    [1] = {
+                        bkg = {
+                            center_center = '0x6c6e70ff',
+                            file          = '',
+                            insets = { bottom = 0, left = 0, right = 0, top = 0 },
+                        },
+                    },
+                },
+            },
+            type = 'Static',
+        },
+        version = 1,
+    }
+end
+
+-- ToggleButton skin for the Mass Edit window's scope tab strip
+-- (Group/Unit/Waypoint/Zone/Drawing). Clones toggleButtonSkin_ME for the
+-- working 9-slice + chunky button image structure (a hand-rolled bkg with
+-- only center_center renders blank under the ToggleButton renderer — the
+-- 9 corner colors are tint multipliers ON the image, not solid fills).
+-- Then per-state recoloring: released tabs scale every bkg slice to
+-- transparent so the chrome disappears and only text remains; pressed
+-- (used by ToggleButton as the sticky-active visual) tints every slice
+-- to the grid's row-selection teal, giving the active tab a teal chunky-
+-- beveled fill that rhymes with selection elsewhere in the window.
+local TAB_BKG_SLICES = {
+    'left_top',    'center_top',    'right_top',
+    'left_center', 'center_center', 'right_center',
+    'left_bottom', 'center_bottom', 'right_bottom',
+}
+
+local function set_tab_bkg_tint(state, tint_hex)
+    if type(state) ~= 'table' then return end
+    for _, layer in pairs(state) do
+        if type(layer) == 'table' and type(layer.bkg) == 'table' then
+            for _, slice in ipairs(TAB_BKG_SLICES) do
+                layer.bkg[slice] = tint_hex
+            end
+        end
+    end
+end
+
+local function set_tab_text_color(state, color_hex)
+    if type(state) ~= 'table' then return end
+    for _, layer in pairs(state) do
+        if type(layer) == 'table' and type(layer.text) == 'table' then
+            layer.text.color = color_hex
+        end
+    end
+end
+
+-- M.tab and M.tab_off are a skin-swap pair driven by set_tab_state in
+-- mass_edit.lua. dxgui's ToggleButton renderer doesn't pick a distinct
+-- visual for the sticky-on state — it always draws `released` unless the
+-- mouse is over (`hover`) or held down (`pressed`). So a single skin can't
+-- distinguish active-vs-inactive when the mouse isn't on the tab. We swap
+-- the skin instead: tab_off renders text-only on all states (inactive), tab
+-- renders chunky cream-button + gold text on all states (active), matching
+-- the gold-on-cream affordance Keep Num shows when sticky-ON.
+function M.tab()
+    local s = M.button()
+    if not (s and s.skinData and s.skinData.states) then return nil end
+    local states = s.skinData.states
+    -- Active: cream chunky bkg + gold text in every state. Leave the bkg
+    -- tint at the default 0xffffffff multiplier so the btnmean2 image
+    -- renders at full intensity; only repaint the text in the gold
+    -- (0xf7b940ff) that the base skin uses on pressed-layer-2.
+    set_tab_text_color(states.released, '0xf7b940ff')
+    set_tab_text_color(states.hover,    '0xf7b940ff')
+    set_tab_text_color(states.pressed,  '0xf7b940ff')
+    return s
+end
+
+function M.tab_off()
+    local s = M.button()
+    if not (s and s.skinData and s.skinData.states) then return nil end
+    local states = s.skinData.states
+    -- Inactive: zero alpha on the bkg tint in every state hides the chunky
+    -- button entirely on hover/press too, so the only affordance on hover
+    -- is a gold text-color shift (the chunky button image multiplied by a
+    -- low-alpha tint reads as a muddy gray rather than a clean highlight).
+    set_tab_bkg_tint  (states.released, '0xffffff00')
+    set_tab_text_color(states.released, '0x9faab2ff')
+    set_tab_bkg_tint  (states.hover,    '0xffffff00')
+    set_tab_text_color(states.hover,    '0xf7b940ff')
+    set_tab_bkg_tint  (states.pressed,  '0xffffff00')
+    set_tab_text_color(states.pressed,  '0x9faab2ff')
+    return s
 end
 
 -- ME's static-panel dial visual: clone dialSkin_ME and swap the picture

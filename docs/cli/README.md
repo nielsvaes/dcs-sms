@@ -97,10 +97,13 @@ Every command on the dcs-sms CLI, grouped by namespace.
 | [`me group set-formation`](me-group-set-formation.md) | set a group's formation |
 | [`me group set-frequency`](me-group-set-frequency.md) | set a group's radio frequency in MHz |
 | [`me group set-hidden`](me-group-set-hidden.md) | toggle whether a group is hidden in the ME view |
+| [`me group set-hidden-on-mfd`](me-group-set-hidden-on-mfd.md) | toggle a group's HIDDEN ON MFD flag |
+| [`me group set-hidden-on-planner`](me-group-set-hidden-on-planner.md) | toggle a group's HIDDEN ON PLANNER flag |
 | [`me group set-late-activation`](me-group-set-late-activation.md) | toggle a group's lateActivation flag (deferred spawn) |
 | [`me group set-name`](me-group-set-name.md) | rename a group |
 | [`me group set-pos`](me-group-set-pos.md) | move a group to a new north/east coordinate |
 | [`me group set-task`](me-group-set-task.md) | set a group's role/task (e.g. CAP, CAS, Escort) |
+| [`me group set-uncontrollable`](me-group-set-uncontrollable.md) | toggle a group's GAME MASTER ONLY (g.uncontrollable) flag |
 | [`me group set-uncontrolled`](me-group-set-uncontrolled.md) | toggle a group's uncontrolled flag (spawns without AI controller) |
 
 ## me resources

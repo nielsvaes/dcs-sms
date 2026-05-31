@@ -145,4 +145,377 @@ function M.snapshot()
     return result
 end
 
+-- ---------------------------------------------------------------------------
+-- snapshot_drilled — Mass Edit's scope-aware entry point.
+--
+-- Builds an entity pool for the requested scope, drilled from the current
+-- marquee. When the marquee is empty, falls back to walking the whole
+-- mission table so the user can still use the Mass Edit window.
+--
+-- Returns {
+--   ok           = bool,
+--   error?       = string,
+--   scope        = '<scope>',
+--   source       = 'marquee' | 'mission',
+--   pool         = [entity_ref, ...],
+--   parent_map   = { [entity_ref] = group_ref }  -- identity for group scope
+-- }
+-- ---------------------------------------------------------------------------
+
+local VALID_SCOPES = { group = true, unit = true, waypoint = true, zone = true, drawing = true, airbase = true, static = true }
+
+-- Module-local cache so airbase entries returned by snapshot_mission('airbase')
+-- are STABLE table references across calls — required because W.checked in
+-- mass_edit.lua is keyed by entry table ref, not by id, and a marquee can
+-- check airbases between rebuilds. Keyed by airdrome_number (integer).
+local _airbase_entry_cache = {}
+
+local function walk_mission_groups(callback)
+    local Mission = require('me_mission')
+    local mission = Mission and Mission.mission
+    if not mission or type(mission.coalition) ~= 'table' then return end
+    for _, side in pairs(mission.coalition) do
+        if type(side) == 'table' and type(side.country) == 'table' then
+            for _, country in ipairs(side.country) do
+                for _, cat in ipairs({ 'plane', 'helicopter', 'vehicle', 'ship', 'static' }) do
+                    local bucket = country[cat]
+                    if type(bucket) == 'table' and type(bucket.group) == 'table' then
+                        for _, g in ipairs(bucket.group) do
+                            callback(g, cat)
+                        end
+                    end
+                end
+            end
+        end
+    end
+end
+
+-- Build a {group_ref -> category} index by walking the whole mission once.
+-- snapshot_drilled uses this so both the marquee path (group refs from
+-- M.snapshot) and the mission-walk path (no surrounding container in scope)
+-- can attach the right category to each entity. Marquee groups come from
+-- Mission.getGroup(id) which returns the same ref the mission tree stores,
+-- so identity-keying works for both paths.
+local function build_category_index()
+    local index = {}
+    walk_mission_groups(function(g, cat) index[g] = cat end)
+    return index
+end
+
+function M.snapshot_drilled(scope)
+    if not VALID_SCOPES[scope] then
+        return { ok = false, error = 'unknown scope: ' .. tostring(scope),
+                 scope = tostring(scope), source = 'marquee',
+                 pool = {}, parent_map = {} }
+    end
+
+    local marquee = M.snapshot()
+    local out = {
+        ok = true, scope = scope, source = 'marquee',
+        pool = {}, parent_map = {}, categories = {},
+    }
+
+    -- Source: marquee groups if any; otherwise the whole mission tree.
+    local groups = {}
+    if marquee.ok and type(marquee.groups) == 'table' and #marquee.groups > 0 then
+        for _, g in ipairs(marquee.groups) do groups[#groups + 1] = g end
+    else
+        out.source = 'mission'
+        walk_mission_groups(function(g) groups[#groups + 1] = g end)
+    end
+
+    -- One mission walk for category resolution — keyed by group identity.
+    -- Both the marquee path (Mission.getGroup returns the canonical ref)
+    -- and the mission-walk path will find their groups here.
+    local cat_by_group = build_category_index()
+    local function cat_of(g) return cat_by_group[g] or 'unknown' end
+
+    if scope == 'group' then
+        -- Group scope excludes statics — they live in the dedicated
+        -- 'static' scope. Without this filter, every static group (each
+        -- a single-unit group in the ME data model) would show up in
+        -- the group treeview and the static scope, which double-counts
+        -- them and clutters the group view.
+        for _, g in ipairs(groups) do
+            local cat = cat_of(g)
+            if cat ~= 'static' then
+                out.pool[#out.pool + 1] = g
+                out.parent_map[g] = g
+                out.categories[g] = cat
+            end
+        end
+        return out
+    end
+
+    if scope == 'static' then
+        -- Static scope is the mirror of group scope but filtered to
+        -- category=='static' only. Statics are single-unit groups in
+        -- the ME data model so each pool entry is a static-group ref
+        -- (parent_map[g] = g, matching group-scope identity).
+        for _, g in ipairs(groups) do
+            local cat = cat_of(g)
+            if cat == 'static' then
+                out.pool[#out.pool + 1] = g
+                out.parent_map[g] = g
+                out.categories[g] = cat
+            end
+        end
+        return out
+    end
+
+    if scope == 'unit' then
+        -- Unit scope, like group scope, excludes statics — they're
+        -- managed exclusively from the dedicated 'static' scope.
+        for _, g in ipairs(groups) do
+            local cat = cat_of(g)
+            if cat ~= 'static' and type(g.units) == 'table' then
+                for _, u in ipairs(g.units) do
+                    out.pool[#out.pool + 1] = u
+                    out.parent_map[u] = g
+                    out.categories[u] = cat
+                end
+            end
+        end
+        return out
+    end
+
+    if scope == 'waypoint' then
+        for _, g in ipairs(groups) do
+            if type(g.route) == 'table' and type(g.route.points) == 'table' then
+                local cat = cat_of(g)
+                for _, wp in ipairs(g.route.points) do
+                    out.pool[#out.pool + 1] = wp
+                    out.parent_map[wp] = g
+                    out.categories[wp] = cat
+                end
+            end
+        end
+        return out
+    end
+
+    if scope == 'zone' then
+        if marquee.ok and type(marquee.zones) == 'table' and #marquee.zones > 0 then
+            for _, z in ipairs(marquee.zones) do
+                out.pool[#out.pool + 1] = z
+                out.parent_map[z] = z
+            end
+        else
+            out.source = 'mission'
+            local Mission = require('me_mission')
+            local mission = Mission and Mission.mission
+            local zones = mission and mission.triggers and mission.triggers.zones
+            if type(zones) == 'table' then
+                for _, z in ipairs(zones) do
+                    out.pool[#out.pool + 1] = z
+                    out.parent_map[z] = z
+                end
+            end
+        end
+        return out
+    end
+
+    if scope == 'drawing' then
+        if marquee.ok and type(marquee.drawings) == 'table' and #marquee.drawings > 0 then
+            for _, d in ipairs(marquee.drawings) do
+                out.pool[#out.pool + 1] = d
+                out.parent_map[d] = d
+            end
+        else
+            out.source = 'mission'
+            local Mission = require('me_mission')
+            local mission = Mission and Mission.mission
+            local layers = mission and mission.drawings and mission.drawings.layers
+            if type(layers) == 'table' then
+                for _, layer in ipairs(layers) do
+                    if type(layer.objects) == 'table' then
+                        for _, d in ipairs(layer.objects) do
+                            out.pool[#out.pool + 1] = d
+                            out.parent_map[d] = d
+                        end
+                    end
+                end
+            end
+        end
+        return out
+    end
+
+    return out  -- unreachable
+end
+
+-- Build (or refresh) the airbase pool. Each entry is a stable table keyed
+-- in _airbase_entry_cache by airdrome_number — same airbase always returns
+-- the same Lua table so W.checked[entry] = true survives subsequent
+-- rebuilds. Coalition is re-read from mission.AirportsEquipment on every
+-- call (it's the live source of truth and can change between rebuilds).
+local function build_airbase_pool()
+    local pool = {}
+
+    local ok_ac, AC = pcall(require, 'Mission.AirdromeController')
+    if not ok_ac or not AC or type(AC.getAirdromes) ~= 'function' then
+        return pool
+    end
+    local got_ok, airdromes = pcall(AC.getAirdromes)
+    if not got_ok or type(airdromes) ~= 'table' then return pool end
+
+    local Mission = require('me_mission')
+    local mission = Mission and Mission.mission
+    local airports = mission and mission.AirportsEquipment
+                              and mission.AirportsEquipment.airports
+                              or {}
+
+    for _, ad in ipairs(airdromes) do
+        local id   = type(ad.getAirdromeNumber) == 'function' and ad:getAirdromeNumber() or nil
+        local name = type(ad.getName)           == 'function' and ad:getName()           or nil
+        if type(id) == 'number' and type(name) == 'string' then
+            local entry = _airbase_entry_cache[id]
+            if not entry then
+                entry = { id = id, name = name }
+                _airbase_entry_cache[id] = entry
+            end
+            -- Refresh mutable fields on the cached entry every call.
+            entry.name      = name
+            entry.coalition = (airports[id] and type(airports[id].coalition) == 'string')
+                              and airports[id].coalition
+                              or 'neutrals'
+            entry.north     = type(ad.x) == 'number' and ad.x or 0
+            entry.east      = type(ad.y) == 'number' and ad.y or 0
+            pool[#pool + 1] = entry
+        end
+    end
+    return pool
+end
+
+-- Exposed for the marquee callback in mass_edit.lua: returns the cached
+-- entry table for the given airdrome_number, OR nil if not yet snapshotted.
+-- Does NOT trigger a snapshot itself.
+function M.airbase_entry_by_id(airdrome_number)
+    return _airbase_entry_cache[airdrome_number]
+end
+
+-- Exposed for test cleanup and for the marquee callback's lazy-snapshot path.
+function M._snapshot_airbases_now()
+    return build_airbase_pool()
+end
+
+-- ---------------------------------------------------------------------------
+-- snapshot_mission — like snapshot_drilled but always walks the full mission
+-- tree (no marquee dependency, no fallback path). Used by Mass Edit, which
+-- selects entities via in-window checkboxes rather than the ME's marquee.
+--
+-- Returns the same shape as snapshot_drilled (ok, scope, source, pool,
+-- parent_map, categories). source is always 'mission'.
+-- ---------------------------------------------------------------------------
+
+function M.snapshot_mission(scope)
+    if not VALID_SCOPES[scope] then
+        return { ok = false, error = 'unknown scope: ' .. tostring(scope),
+                 scope = tostring(scope), source = 'mission',
+                 pool = {}, parent_map = {}, categories = {} }
+    end
+
+    local out = {
+        ok = true, scope = scope, source = 'mission',
+        pool = {}, parent_map = {}, categories = {},
+    }
+
+    local cat_by_group = build_category_index()
+    local function cat_of(g) return cat_by_group[g] or 'unknown' end
+
+    if scope == 'group' then
+        -- Mirror snapshot_drilled: statics live exclusively in the
+        -- 'static' scope. Without this filter, every static (each a
+        -- single-unit group) would double-count between group + static.
+        walk_mission_groups(function(g)
+            local cat = cat_of(g)
+            if cat ~= 'static' then
+                out.pool[#out.pool + 1] = g
+                out.parent_map[g] = g
+                out.categories[g] = cat
+            end
+        end)
+        return out
+    end
+
+    if scope == 'static' then
+        walk_mission_groups(function(g)
+            local cat = cat_of(g)
+            if cat == 'static' then
+                out.pool[#out.pool + 1] = g
+                out.parent_map[g] = g
+                out.categories[g] = cat
+            end
+        end)
+        return out
+    end
+
+    if scope == 'unit' then
+        walk_mission_groups(function(g)
+            local cat = cat_of(g)
+            if cat ~= 'static' and type(g.units) == 'table' then
+                for _, u in ipairs(g.units) do
+                    out.pool[#out.pool + 1] = u
+                    out.parent_map[u] = g
+                    out.categories[u] = cat
+                end
+            end
+        end)
+        return out
+    end
+
+    if scope == 'waypoint' then
+        walk_mission_groups(function(g)
+            if type(g.route) == 'table' and type(g.route.points) == 'table' then
+                local cat = cat_of(g)
+                for _, wp in ipairs(g.route.points) do
+                    out.pool[#out.pool + 1] = wp
+                    out.parent_map[wp] = g
+                    out.categories[wp] = cat
+                end
+            end
+        end)
+        return out
+    end
+
+    if scope == 'zone' then
+        local Mission = require('me_mission')
+        local mission = Mission and Mission.mission
+        local zones = mission and mission.triggers and mission.triggers.zones
+        if type(zones) == 'table' then
+            for _, z in ipairs(zones) do
+                out.pool[#out.pool + 1] = z
+                out.parent_map[z] = z
+            end
+        end
+        return out
+    end
+
+    if scope == 'drawing' then
+        local Mission = require('me_mission')
+        local mission = Mission and Mission.mission
+        local layers = mission and mission.drawings and mission.drawings.layers
+        if type(layers) == 'table' then
+            for _, layer in ipairs(layers) do
+                if type(layer.objects) == 'table' then
+                    for _, d in ipairs(layer.objects) do
+                        out.pool[#out.pool + 1] = d
+                        out.parent_map[d] = d
+                    end
+                end
+            end
+        end
+        return out
+    end
+
+    if scope == 'airbase' then
+        local pool = build_airbase_pool()
+        for _, e in ipairs(pool) do
+            out.pool[#out.pool + 1] = e
+            out.parent_map[e] = e
+        end
+        return out
+    end
+
+    return out
+end
+
 return M

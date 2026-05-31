@@ -46,6 +46,34 @@ local function _check_unit_type(verb_name, type_id)
     return nil
 end
 
+-- _check_unit_type — guard against bad type strings reaching the .miz.
+-- DCS's save serializer (me_mission.lua:setRequiredModules) derefs
+-- me_db.unit_by_type[type]._origin without nil-checking, so an unknown
+-- type that the ME accepted at create-time silently produces a group
+-- that crashes File→Save with a Lua traceback the user can't undo.
+-- We reject up front instead.
+--
+-- Returns nil on success, { ok=false, error=... } on rejection. Returns
+-- nil (accept) when me_db_api isn't loadable — that happens in the Lua
+-- mock test harness, which would otherwise reject every test type.
+-- Production DCS always has me_db_api by the time the bridge dispatches.
+local function _check_unit_type(verb_name, type_id)
+    local ok_db, DB = pcall(require, 'me_db_api')
+    if not ok_db or type(DB) ~= 'table' or type(DB.unit_by_type) ~= 'table' then
+        return nil
+    end
+    if DB.unit_by_type[type_id] == nil then
+        return { ok = false,
+                 error = verb_name .. ': unknown unit type "' .. type_id ..
+                         '" — not in me_db_api.unit_by_type. Creating it would '
+                         .. 'crash File→Save (me_mission.lua:setRequiredModules '
+                         .. 'derefs unitDef._origin without a nil-check). '
+                         .. 'Check the spelling against the canonical DCS unit DB '
+                         .. '(e.g. framework/constants/units.lua).' }
+    end
+    return nil
+end
+
 -- ============================================================
 -- Group lifecycle verbs
 -- ============================================================
@@ -1023,6 +1051,79 @@ function M.group_set_uncontrolled(args)
     return { ok = true, id = g.groupId, name = g.name, uncontrolled = g.uncontrolled }
 end
 
+-- group_set_hidden_on_planner — toggle g.hiddenOnPlanner. ME-side this
+-- is the "HIDDEN ON PLANNER" checkbox on the aircraft / heli group
+-- panel (see me_aircraft.lua:104). Separate from g.hidden ("HIDDEN ON
+-- MAP") — a group can be planner-hidden but map-visible, or the
+-- reverse.
+function M.group_set_hidden_on_planner(args)
+    if type(args) ~= 'table' then
+        return { ok = false, error = 'group_set_hidden_on_planner requires args (table)' }
+    end
+    local has_name = type(args.name) == 'string' and args.name ~= ''
+    local has_id = type(args.id) == 'number'
+    if has_name == has_id then
+        return { ok = false, error = 'group_set_hidden_on_planner requires exactly one of args.name or args.id' }
+    end
+    if type(args.hidden) ~= 'boolean' then
+        return { ok = false, error = 'group_set_hidden_on_planner requires args.hidden (boolean)' }
+    end
+    local g = find_group_in_mission(has_name and args.name or nil, has_id and args.id or nil)
+    if not g then
+        return { ok = false, error = 'group not found' }
+    end
+    g.hiddenOnPlanner = args.hidden
+    return { ok = true, id = g.groupId, name = g.name, hidden_on_planner = g.hiddenOnPlanner }
+end
+
+-- group_set_hidden_on_mfd — toggle g.hiddenOnMFD. ME-side this is the
+-- "HIDDEN ON MFD" checkbox; the ME GUI writes a plain boolean
+-- (me_aircraft.lua:3356), overwriting the {} that new-group templates
+-- use as the initial value. We honour that: store a boolean.
+function M.group_set_hidden_on_mfd(args)
+    if type(args) ~= 'table' then
+        return { ok = false, error = 'group_set_hidden_on_mfd requires args (table)' }
+    end
+    local has_name = type(args.name) == 'string' and args.name ~= ''
+    local has_id = type(args.id) == 'number'
+    if has_name == has_id then
+        return { ok = false, error = 'group_set_hidden_on_mfd requires exactly one of args.name or args.id' }
+    end
+    if type(args.hidden) ~= 'boolean' then
+        return { ok = false, error = 'group_set_hidden_on_mfd requires args.hidden (boolean)' }
+    end
+    local g = find_group_in_mission(has_name and args.name or nil, has_id and args.id or nil)
+    if not g then
+        return { ok = false, error = 'group not found' }
+    end
+    g.hiddenOnMFD = args.hidden
+    return { ok = true, id = g.groupId, name = g.name, hidden_on_mfd = g.hiddenOnMFD }
+end
+
+-- group_set_uncontrollable — toggle g.uncontrollable. The ME labels
+-- this "GAME MASTER ONLY" (me_aircraft.lua:125, me_vehicle.lua:100,
+-- me_ship.lua:107). Distinct from g.uncontrolled — both fields exist
+-- on the same group dict, both are independent checkboxes.
+function M.group_set_uncontrollable(args)
+    if type(args) ~= 'table' then
+        return { ok = false, error = 'group_set_uncontrollable requires args (table)' }
+    end
+    local has_name = type(args.name) == 'string' and args.name ~= ''
+    local has_id = type(args.id) == 'number'
+    if has_name == has_id then
+        return { ok = false, error = 'group_set_uncontrollable requires exactly one of args.name or args.id' }
+    end
+    if type(args.enabled) ~= 'boolean' then
+        return { ok = false, error = 'group_set_uncontrollable requires args.enabled (boolean)' }
+    end
+    local g = find_group_in_mission(has_name and args.name or nil, has_id and args.id or nil)
+    if not g then
+        return { ok = false, error = 'group not found' }
+    end
+    g.uncontrollable = args.enabled
+    return { ok = true, id = g.groupId, name = g.name, uncontrollable = g.uncontrollable }
+end
+
 -- group_set_frequency — set g.frequency in MHz.
 function M.group_set_frequency(args)
     if type(args) ~= 'table' then
@@ -1359,8 +1460,11 @@ function M.group_set_country(args)
         end
     end
 
-    -- Step 9: refresh map objects (color update reflects immediately).
-    refresh_group_view(g)
+    -- Step 9: heavyweight refresh — country change flips coalition color,
+    -- which the lightweight refresh path doesn't pick up. recreate_group_view
+    -- forces a symbol re-render so the new color shows without waiting for
+    -- the user to click the group.
+    require('dcs_sms_me.me_refresh').recreate_group_view(g)
 
     return { ok = true, id = g.groupId, name = g.name,
              country = newCountry.name, side = newSide,

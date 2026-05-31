@@ -204,6 +204,67 @@ do
           #restore_calls == 0, 'got ' .. tostring(#restore_calls))
 end
 
+-- ---------------------------------------------------------------------------
+-- Generic handler-based API.
+-- ---------------------------------------------------------------------------
+
+-- register_handler + record_generic + dispatch.
+do
+    local captured = nil
+    undo.register_handler('test_handler', function(payload)
+        captured = payload
+        return true
+    end)
+    undo.record_generic('test_handler', { foo = 'bar', n = 42 })
+    check('has_record() true after record_generic', undo.has_record() == true)
+    local ok = undo.undo()
+    check('generic undo returns ok', ok == true)
+    check('generic handler received payload',
+          captured ~= nil and captured.foo == 'bar' and captured.n == 42)
+    check('slot cleared after generic undo', undo.has_record() == false)
+end
+
+-- record_generic with unknown handler logs but does not crash; slot stays
+-- empty so undo() returns the standard 'nothing to undo' error.
+do
+    undo.clear()
+    local ok = pcall(undo.record_generic, 'unknown_handler', {})
+    check('record_generic with unknown handler does not throw', ok == true)
+    check('slot still empty after unknown handler', undo.has_record() == false)
+end
+
+-- record_generic replaces existing slot (single-slot semantics preserved).
+do
+    local handlerA_calls, handlerB_calls = 0, 0
+    undo.register_handler('handlerA', function(p) handlerA_calls = handlerA_calls + 1; return true end)
+    undo.register_handler('handlerB', function(p) handlerB_calls = handlerB_calls + 1; return true end)
+    undo.record_generic('handlerA', {})
+    undo.record_generic('handlerB', {})
+    undo.undo()
+    check('second record_generic overwrites first',
+          handlerA_calls == 0 and handlerB_calls == 1)
+end
+
+-- The existing prefab path (via M.record) is preserved — still routes to
+-- the prefab handler. We re-stub _remove and replay the original test
+-- behaviour to confirm.
+do
+    removed = { group = {}, zone = {}, drawing = {} }
+    prefab_ops._remove.group   = function(obj) removed.group[#removed.group + 1] = obj; return true end
+    prefab_ops._remove.zone    = function(id)  removed.zone[#removed.zone + 1] = id; return true end
+    prefab_ops._remove.drawing = function(obj) removed.drawing[#removed.drawing + 1] = obj; return true end
+
+    local g = { __id = 999 }
+    undo.record({
+        prefab_name = 'preserved_path',
+        groups   = { { orig_name = 'G', runtime_id = 999, group_obj = g } },
+        zones    = {}, drawings = {}, errors = {},
+    })
+    undo.undo()
+    check('existing M.record() still routes to prefab handler',
+          #removed.group == 1 and removed.group[1] == g)
+end
+
 if failures > 0 then
     print(string.format('%d failure(s)', failures))
     os.exit(1)

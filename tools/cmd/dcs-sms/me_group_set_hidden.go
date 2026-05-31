@@ -42,9 +42,11 @@ func init() {
 // --hidden MUST be passed (--hidden=true or --hidden=false) so we can
 // distinguish "user wants false" from "user forgot".
 //
-// Note: this only sets the master `hidden` field. The ME also has
-// `hiddenOnPlanner` and `hiddenOnMFD` (per-coalition) toggles. Those aren't
-// exposed yet — add separate verbs if you need to flip them independently.
+// Note: this sets only the master `hidden` field (the ME's "HIDDEN ON MAP"
+// checkbox). The ME has two sibling per-group flags exposed by separate
+// verbs:
+//   * `me group set-hidden-on-planner` — g.hiddenOnPlanner
+//   * `me group set-hidden-on-mfd`     — g.hiddenOnMFD
 func meGroupSetHiddenCmd(args []string, stdout, stderr io.Writer) int {
 	fs, opts := meGroupSetHiddenFlags()
 	fs.SetOutput(stderr)

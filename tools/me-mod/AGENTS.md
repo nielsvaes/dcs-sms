@@ -49,7 +49,7 @@ The full set of nouns and verbs (see [`../../docs/cli/`](../../docs/cli/) for fl
 | Noun | Verbs |
 |---|---|
 | **`file`** | `new`, `open`, `save`, `save-as` |
-| **`group`** | `list`, `get`, `create-plane`, `create-helicopter`, `create-vehicle`, `create-ship`, `create-static`, `remove`, `add-unit`, `remove-unit`, `set-name`, `set-task`, `set-hidden`, `set-frequency`, `set-pos`, `set-country`, `set-formation`, `set-late-activation`, `set-uncontrolled`, `focus` |
+| **`group`** | `list`, `get`, `create-plane`, `create-helicopter`, `create-vehicle`, `create-ship`, `create-static`, `remove`, `add-unit`, `remove-unit`, `set-name`, `set-task`, `set-hidden`, `set-hidden-on-planner`, `set-hidden-on-mfd`, `set-frequency`, `set-pos`, `set-country`, `set-formation`, `set-late-activation`, `set-uncontrolled`, `set-uncontrollable`, `focus` |
 | **`unit`** | `list`, `get`, `set-name`, `set-skill`, `set-livery`, `set-pos`, `set-heading`, `set-alt`, `set-onboard-num`, `set-callsign`, `set-loadout`, `set-fuel`, `set-chaff`, `set-flare`, `set-gun`, `set-parking`, `payload` |
 | **`zone`** | `list`, `get`, `create`, `remove`, `set-name`, `set-pos`, `set-radius`, `set-color`, `set-hidden`, `set-link`, `set-vertices` |
 | **`drawing`** | `list`, `get`, `remove`, `create-circle`, `create-oval`, `create-rect`, `create-arrow`, `create-line`, `create-polygon`, `create-chevron`, `create-textbox`, `create-icon`, `set-name`, `set-pos`, `set-angle`, `set-color`, `set-fill-color`, `set-thickness`, `set-text` |
@@ -371,7 +371,7 @@ For verb logic that involves heavy ME-internal API surface (the trigger panel, t
 
 ## 2.9 The `sms_window` chrome (for new tool windows)
 
-If you're adding a new floating window (Prefab Manager is the first; mass-rename tool, force-build tool, etc. are plausible follow-ups), don't roll your own chrome — use `sms_window`.
+If you're adding a new floating window (Prefab Manager and Mass Edit are the current users; force-build tool, payload sweeper, etc. are plausible follow-ups), don't roll your own chrome — use `sms_window`.
 
 The handle provides:
 - Branded title bar (`Coconut Cockpit · DCS-SMS — <name> v<version>`).
@@ -380,6 +380,8 @@ The handle provides:
 - Auto-hide on `File > New` / `File > Open`.
 - `Ctrl+Z` wired to the project-wide undo bus.
 - Resize with min-size clamp and footer reposition.
+
+Two concrete examples live in the tree: [`prefab_manager.lua`](./lua/dcs_sms_me/prefab_manager.lua) (library list + place modes + narrow undo) and [`mass_edit.lua`](./lua/dcs_sms_me/mass_edit.lua) (scope tabs + property registry-driven editing + best-effort apply with single-undo restore). Read either before writing a new tool window.
 
 Usage:
 
