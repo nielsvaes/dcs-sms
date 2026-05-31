@@ -832,6 +832,7 @@ end
 local exit_place_pending           -- forward declaration; assigned below
 local run_airbase_apply            -- forward decl: referenced by the click-place closure
 local selected_country_coalition   -- forward decl: referenced by the click-place closure
+local read_naming_opts             -- forward decl: referenced by the click-place closure
 
 -- Sentinel label for the "use prefab's saved countries" combobox entry.
 -- Selected by default after every populate (so users get original-country
@@ -1267,9 +1268,9 @@ end
 
 -- Read the sticky naming-form values from the widgets. Empty strings are
 -- normalized to nil so prefab_naming.apply's has_any check treats them
--- correctly. Keep Num is a tri-state-ish toggle but we read just the
+-- correctly. Keep Num is a ToggleButton (default ON) -- we just read its
 -- bool state.
-local function read_naming_opts()
+read_naming_opts = function()
     local function read_text(handle)
         if not (handle and handle.getText) then return nil end
         local ok, v = pcall(handle.getText, handle)
@@ -1294,7 +1295,6 @@ local function read_naming_opts()
     }
 end
 
--- Read the currently-selected country from the dropdown. Returns nil when
 local function on_place_click()
     if W.place_pending then
         -- Acting as Cancel.
