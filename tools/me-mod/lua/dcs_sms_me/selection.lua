@@ -342,11 +342,57 @@ function M.snapshot_drilled(scope)
     return out  -- unreachable
 end
 
+-- Plane stand size thresholds in metres on the longer side
+-- (max(WIDTH, LENGTH)). A stand is bucketed once into S / M / L by the
+-- largest dimension that contains it:
+--   <= SMALL_MAX  → small  (fighter-class: F-16, F-15, Su-27 family)
+--   <= MEDIUM_MAX → medium (A-10, AWACS, mid-size cargo)
+--   else          → large  (KC-135, B-52, C-17, B-1 etc.)
+-- Values picked to align roughly with DCS's own term_type bands.
+local STAND_SMALL_MAX  = 35
+local STAND_MEDIUM_MAX = 55
+
+-- Walk an airdrome's parking stand list once and summarise four counts:
+-- plane stands bucketed S / M / L by the longer side, plus the count of
+-- helo-capable stands. Returns 0/0/0/0 when ME parking APIs aren't
+-- available (test VM or older DCS builds). Stand records expose per-spot
+-- FOR_AIRPLANES / FOR_HELICOPTERS / WIDTH / LENGTH params, same source
+-- the verb-side airbase_get inspects (see airbase_verbs._airbase_stands).
+local function airbase_parking_stats(ad)
+    if not ad or type(ad.getRoadnet) ~= 'function' then return 0, 0, 0, 0 end
+    local rn_ok, rn = pcall(function() return ad:getRoadnet() end)
+    if not rn_ok or not rn then return 0, 0, 0, 0 end
+    local mp_ok, mp = pcall(require, 'me_parking')
+    if not mp_ok or type(mp) ~= 'table' or type(mp.getStandList) ~= 'function' then
+        return 0, 0, 0, 0
+    end
+    local sl_ok, stands = pcall(mp.getStandList, rn)
+    if not sl_ok or type(stands) ~= 'table' then return 0, 0, 0, 0 end
+    local small, medium, large, helos = 0, 0, 0, 0
+    for _, s in pairs(stands) do
+        local p = s and s.params or nil
+        if type(p) == 'table' then
+            if (tonumber(p.FOR_AIRPLANES) or 0) ~= 0 then
+                local d = math.max(tonumber(p.WIDTH) or 0, tonumber(p.LENGTH) or 0)
+                if     d <= STAND_SMALL_MAX  then small  = small  + 1
+                elseif d <= STAND_MEDIUM_MAX then medium = medium + 1
+                else                              large  = large  + 1 end
+            end
+            if (tonumber(p.FOR_HELICOPTERS) or 0) ~= 0 then
+                helos = helos + 1
+            end
+        end
+    end
+    return small, medium, large, helos
+end
+
 -- Build (or refresh) the airbase pool. Each entry is a stable table keyed
 -- in _airbase_entry_cache by airdrome_number — same airbase always returns
 -- the same Lua table so W.checked[entry] = true survives subsequent
 -- rebuilds. Coalition is re-read from mission.AirportsEquipment on every
 -- call (it's the live source of truth and can change between rebuilds).
+-- Parking stats are computed once on cache-miss and reused thereafter —
+-- they're theatre-level and don't change as the mission edits unfold.
 local function build_airbase_pool()
     local pool = {}
 
@@ -379,6 +425,13 @@ local function build_airbase_pool()
                               or 'neutrals'
             entry.north     = type(ad.x) == 'number' and ad.x or 0
             entry.east      = type(ad.y) == 'number' and ad.y or 0
+            -- Parking stats are theatre-static — compute once per entry
+            -- and reuse on subsequent rebuilds. Bail-out paths inside
+            -- airbase_parking_stats return zeros without raising.
+            if entry.plane_small == nil then
+                entry.plane_small, entry.plane_medium, entry.plane_large,
+                entry.helo_count = airbase_parking_stats(ad)
+            end
             pool[#pool + 1] = entry
         end
     end

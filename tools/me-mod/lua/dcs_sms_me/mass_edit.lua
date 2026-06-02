@@ -448,6 +448,15 @@ local SCOPE_COLUMNS = {
         { key = 'check',     label = '',          width = 28,  type = 'check'  },
         { key = 'name',      label = 'Name',      width = 180, type = 'string' },
         { key = 'coalition', label = 'Coalition', width = 80,  type = 'string' },
+        -- Plane stands bucketed by the longer side of their parking
+        -- footprint (<=35m / <=55m / else), plus the helo-capable
+        -- stand count. Small ≈ fighter; Med ≈ A-10 / AWACS / mid-cargo;
+        -- Large ≈ KC-135 / B-52 / C-17. See selection.airbase_parking_stats
+        -- for the thresholds.
+        { key = 'helos',     label = 'Helos',     width = 55,  type = 'number' },
+        { key = 'small',     label = 'Small',     width = 55,  type = 'number' },
+        { key = 'medium',    label = 'Med',       width = 55,  type = 'number' },
+        { key = 'large',     label = 'Large',     width = 55,  type = 'number' },
         { key = 'north',     label = 'North',     width = 90,  type = 'number' },
         { key = 'east',      label = 'East',      width = 90,  type = 'number' },
     },
@@ -501,10 +510,14 @@ local function row_values(scope, entity, group)
         return { name = tostring(entity.name or ''),
                  layer = tostring((entity.layer and entity.layer.name) or '') }
     elseif scope == 'airbase' then
-        local n = tonumber(entity.north) or 0
-        local e = tonumber(entity.east)  or 0
+        local n  = tonumber(entity.north) or 0
+        local e  = tonumber(entity.east)  or 0
         return { name      = tostring(entity.name or ''),
                  coalition = tostring(entity.coalition or ''),
+                 helos     = tonumber(entity.helo_count)   or 0,
+                 small     = tonumber(entity.plane_small)  or 0,
+                 medium    = tonumber(entity.plane_medium) or 0,
+                 large     = tonumber(entity.plane_large)  or 0,
                  north     = math.floor(n + (n >= 0 and 0.5 or -0.5)),
                  east      = math.floor(e + (e >= 0 and 0.5 or -0.5)) }
     elseif scope == 'static' then
