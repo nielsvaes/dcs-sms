@@ -41,6 +41,23 @@ local function add_top_level_menu()
     local ok_req_menu, Menu        = pcall(require, 'Menu')
     local ok_req_item, MenuBarItem = pcall(require, 'MenuBarItem')
     if not (ok_req_menu and Menu and ok_req_item and MenuBarItem) then return false end
+    -- MenuSeparatorItem is optional — older DCS builds may not ship it.
+    -- When unavailable we just skip the separator and lay items out flush.
+    local MenuSeparatorItem; do
+        local ok, m = pcall(require, 'MenuSeparatorItem')
+        if ok then MenuSeparatorItem = m end
+    end
+    -- MsgWindow drives the "Remember this setting?" prompt on the
+    -- External execution toggle. Optional — when unavailable we just
+    -- skip the prompt and treat the toggle as session-only.
+    local MsgWindow; do
+        local ok, m = pcall(require, 'MsgWindow')
+        if ok then MsgWindow = m end
+    end
+    -- Persistent settings layer for the External execution remember-me
+    -- prompt. Lazy require so a test VM without lfs doesn't crash menu
+    -- install (load returns defaults on failure).
+    local me_settings = require('dcs_sms_me.me_settings')
 
     -- Build the popup menu and copy the existing customize-menu skin so
     -- our menu's background, fonts, and item spacing match the rest of
@@ -138,12 +155,35 @@ local function add_top_level_menu()
         log.write('sms.me', log.ERROR, 'About menu:newItem failed: ' .. tostring(about_err))
     end
 
+    -- Visual separator between the action items above (Prefab Manager,
+    -- Mass Edit, About) and the External-execution toggle below — the
+    -- latter is a session-level setting, not a feature entry, so a
+    -- divider clarifies the grouping. Skipped silently on DCS builds
+    -- that don't expose MenuSeparatorItem.
+    if MenuSeparatorItem and MenuSeparatorItem.new and menu.insertItem then
+        pcall(function() menu:insertItem(MenuSeparatorItem.new()) end)
+    end
+
     -- "External execution: ON/OFF" toggle — controls _G.DCS_SMS_GUI_BRIDGE_ENABLED
     -- which the dcs-sms hook checks before honoring target=gui requests.
-    -- Default off at every DCS launch (session-only; no persistence).
+    -- Off-by-default per DCS launch UNLESS the user previously opted into
+    -- the remember-this-setting prompt (me_settings.gui_bridge == true);
+    -- in that case we auto-enable here so the user doesn't have to toggle
+    -- after every restart.
+    local initial_remembered = false
+    pcall(function()
+        local s = me_settings.load()
+        if s and s.gui_bridge == true then
+            initial_remembered = true
+            _G.DCS_SMS_GUI_BRIDGE_ENABLED = true
+        end
+    end)
+
     local exec_item
     local ok_exec, exec_err = pcall(function()
-        exec_item = menu:newItem('External execution: OFF')
+        exec_item = menu:newItem(initial_remembered
+            and 'External execution: ON'
+            or  'External execution: OFF')
     end)
     if ok_exec and exec_item then
         pcall(function()
@@ -154,12 +194,11 @@ local function add_top_level_menu()
                 exec_item:setSkin(sibling_item:getSkin())
             end
         end)
-        exec_item.func = function()
-            _G.DCS_SMS_GUI_BRIDGE_ENABLED = not (_G.DCS_SMS_GUI_BRIDGE_ENABLED == true)
-            local on = _G.DCS_SMS_GUI_BRIDGE_ENABLED == true
+
+        -- Update the item label after a toggle. Menu items expose either
+        -- :setText or a `text` field across DCS versions — try both.
+        local function update_label(on)
             local label = on and 'External execution: ON' or 'External execution: OFF'
-            -- Menu items expose either :setText or a `text` field across DCS
-            -- versions — try both for forward-compat.
             pcall(function()
                 if type(exec_item.setText) == 'function' then
                     exec_item:setText(label)
@@ -167,7 +206,45 @@ local function add_top_level_menu()
                     exec_item.text = label
                 end
             end)
+        end
+
+        -- Ask the user after every toggle whether to persist the new
+        -- state. Yes -> write the current (post-toggle) value to disk so
+        -- the next DCS launch starts in that state. No -> leave the
+        -- saved file untouched (the session state still reflects the
+        -- toggle that just happened; only future launches are unaffected).
+        local function prompt_remember(on)
+            if not MsgWindow then return end
+            local state_label = on and 'ON' or 'OFF'
+            pcall(function()
+                local handler = MsgWindow.question(
+                    'Remember "External execution: ' .. state_label ..
+                    '" across DCS restarts?\n\n' ..
+                    'When remembered, the bridge auto-applies at startup ' ..
+                    'so you don\'t need to toggle it each launch.',
+                    'DCS-SMS', 'Yes', 'No')
+                function handler:onChange(button_label)
+                    if button_label == 'Yes' then
+                        local s = me_settings.load()
+                        s.gui_bridge = on
+                        if me_settings.save(s) then
+                            log.write('sms.me', log.INFO,
+                                'External execution preference: remembered (' ..
+                                state_label .. ')')
+                        end
+                    end
+                    return false  -- MsgWindow closes after our callback
+                end
+                handler:show()
+            end)
+        end
+
+        exec_item.func = function()
+            _G.DCS_SMS_GUI_BRIDGE_ENABLED = not (_G.DCS_SMS_GUI_BRIDGE_ENABLED == true)
+            local on = _G.DCS_SMS_GUI_BRIDGE_ENABLED == true
+            update_label(on)
             log.write('sms.me', log.INFO, 'gui bridge ' .. (on and 'enabled' or 'disabled'))
+            prompt_remember(on)
         end
     else
         log.write('sms.me', log.ERROR, 'External-execution menu:newItem failed: ' .. tostring(exec_err))
