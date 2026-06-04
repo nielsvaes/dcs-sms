@@ -13,8 +13,17 @@ local M = {}
 
 -- ---- pure chord matcher ----
 
+-- Keyed by lower-cased key name. DCS's keyboard callback (and KeyNames.txt)
+-- spell the modifiers "left shift" / "right ctrl" / "alt gr" etc.; the short
+-- LCtrl/LShift forms are kept as aliases for the unit tests and the global
+-- backend. match_chord lower-cases the incoming name before the lookup, so any
+-- casing resolves.
 local MODIFIERS = {
-    LCtrl = 'Ctrl', RCtrl = 'Ctrl', LShift = 'Shift', RShift = 'Shift', LAlt = 'Alt', RAlt = 'Alt',
+    ['left ctrl']  = 'Ctrl',  ['right ctrl']  = 'Ctrl',
+    ['left shift'] = 'Shift', ['right shift'] = 'Shift',
+    ['left alt']   = 'Alt',   ['right alt']   = 'Alt',  ['alt gr'] = 'Alt',
+    -- short aliases
+    lctrl = 'Ctrl', rctrl = 'Ctrl', lshift = 'Shift', rshift = 'Shift', lalt = 'Alt', ralt = 'Alt',
 }
 
 function M.new_chord_state()
@@ -22,9 +31,12 @@ function M.new_chord_state()
 end
 
 -- Feed one key event. Returns a chord string ('Ctrl+Shift+r', 'm', …) on a
--- non-modifier key DOWN, else nil. Modifier order is canonical: Ctrl, Shift, Alt.
+-- non-modifier key DOWN, else nil. A modifier key alone never yields a chord —
+-- it only updates hold-state — so "Shift" can't be bound on its own. Modifier
+-- order is canonical: Ctrl, Shift, Alt.
 function M.match_chord(state, keyName, keyState)
-    local mod = MODIFIERS[keyName]
+    local lname = (type(keyName) == 'string') and keyName:lower() or keyName
+    local mod = MODIFIERS[lname]
     if mod then
         state[mod] = (keyState == 'down')
         return nil

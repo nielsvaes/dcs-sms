@@ -34,6 +34,26 @@ check('Ctrl+Shift canonical order', B.match_chord(st3, 'r', 'down') == 'Ctrl+Shi
 local st4 = B.new_chord_state()
 check('modifier down alone -> nil', B.match_chord(st4, 'LAlt', 'down') == nil)
 
+-- DCS's real keyboard-callback modifier names ("left shift" / "right ctrl" /
+-- "alt gr", any casing) must be recognised — the actual capture overlay sees
+-- these, not the LCtrl short forms.
+local st5 = B.new_chord_state()
+check('"left shift" alone -> nil', B.match_chord(st5, 'left shift', 'down') == nil)
+check('left shift held + m -> Shift+m', B.match_chord(st5, 'm', 'down') == 'Shift+m')
+B.match_chord(st5, 'left shift', 'up')
+check('left shift released, then m -> m', B.match_chord(st5, 'm', 'down') == 'm')
+
+local st6 = B.new_chord_state()
+B.match_chord(st6, 'LEFT CTRL', 'down')   -- casing-insensitive
+B.match_chord(st6, 'left alt', 'down')
+check('Ctrl+Alt canonical order from real names', B.match_chord(st6, 'x', 'down') == 'Ctrl+Alt+x')
+
+local st7 = B.new_chord_state()
+check('"alt gr" treated as Alt', (function()
+    B.match_chord(st7, 'alt gr', 'down')
+    return B.match_chord(st7, 'g', 'down') == 'Alt+g'
+end)())
+
 check('get returns a backend with attach/detach', (function()
     local be = B.get('perkey'); return type(be) == 'table' and type(be.attach) == 'function' and type(be.detach) == 'function'
 end)())
