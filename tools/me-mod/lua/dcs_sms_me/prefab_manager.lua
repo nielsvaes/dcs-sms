@@ -1717,14 +1717,16 @@ local function relayout(w, h)
 
     -- Splitter sits centered in the SPLIT_GUTTER strip between tree and
     -- grid, with SPLITTER_MARGIN of breathing room on each side. Y spans
-    -- from the top of the search row (51) down to the bottom of row3
-    -- (row3_y + 22), so it only covers the BODY columns — the bottom
-    -- strip below sep2 stays full-width. Range is updated every relayout
-    -- so window resizes shrink the max clamp before the user can drag
-    -- past RIGHT_MIN.
+    -- from the top of the search row (51) down to the bottom of the folder
+    -- tree (body_y + tree_h) so the drag handle runs the full height of the
+    -- folder browser, alongside the right-column form stack — not just the
+    -- grid rows. It stays in the gutter column, so it never overlaps the
+    -- tree, the New folder / Show all buttons, or the right-side form
+    -- widgets. Range is updated every relayout so window resizes shrink the
+    -- max clamp before the user can drag past RIGHT_MIN.
     local splitter_x        = 10 + W.tree_w + SPLITTER_MARGIN
     local splitter_y_top    = 51
-    local splitter_y_bottom = row3_y + 22
+    local splitter_y_bottom = body_y + tree_h
     local splitter_h        = math.max(60, splitter_y_bottom - splitter_y_top)
     if W.splitter and W.splitter.set_bounds then
         W.splitter:set_bounds(splitter_x, splitter_y_top, SPLIT, splitter_h)

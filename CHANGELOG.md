@@ -120,6 +120,11 @@ This is the first tag after a long quiet period — `sms.version` had been froze
   "Selected: 0". Action messages that carry their own count (apply,
   Fetch from map) still take precedence over the bare count.
 
+**Changed**
+- Prefab Manager: the draggable tree/grid divider now runs the full height of
+  the folder browser instead of stopping at the Reload / Undo row, giving a
+  much larger drag target.
+
 **Fixed**
 - Mass Edit airbase marquee no longer freezes the ME for several seconds on
   dense maps (e.g. Germany Cold War). The marquee callback used to call
