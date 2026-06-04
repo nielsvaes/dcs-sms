@@ -223,12 +223,31 @@ local function get_categories_for_active_scope()
     return W.categories or {}
 end
 
+-- Footer "Selected: N" text. Zero (or nil) -> blank so "Selected: 0" never
+-- shows and a stale count is cleared once the last box is unchecked.
+local function selection_status_text(n)
+    if type(n) ~= 'number' or n <= 0 then return '' end
+    return 'Selected: ' .. n
+end
+
+-- Push the active scope's checked count to the window footer. Driven from
+-- recompute_form_gating so every check/uncheck path (click, shift-range,
+-- marquee, bulk buttons, scope switch) updates it through one chokepoint.
+-- Handlers with their own toast (apply, fetch-from-map) call set_status
+-- AFTER recompute_form_gating so their message wins over the bare count.
+local function update_selection_status()
+    if not (W.sms_window and W.sms_window.set_status) then return end
+    local text = selection_status_text(#get_checked_for_active_scope())
+    pcall(W.sms_window.set_status, W.sms_window, text, 'info')
+end
+
 -- Recompute per-form gating based on the active scope's checked set.
 -- Calls panel:set_enabled(applicable > 0) on every panel in the active
 -- scope. Panels without set_enabled are left untouched — every shipped
 -- unit/group/airbase form implements gating, this fallback is just a
 -- safety net for any future panel added without it.
 local function recompute_form_gating()
+    update_selection_status()
     local panels = W.form_panels[W.scope] or {}
     if #panels == 0 then return end
     local checked = get_checked_for_active_scope()
@@ -248,10 +267,13 @@ end
 local function on_after_apply(result)
     rebuild_pool()
     M.rebuild_treeview()
+    -- recompute_form_gating refreshes the "Selected: N" footer; set the apply
+    -- toast AFTER it so the action's message ("5 airbases set to blue") wins
+    -- over the bare count until the next checkbox change.
+    recompute_form_gating()
     if result and result.toast and W.sms_window and W.sms_window.set_status then
         pcall(W.sms_window.set_status, W.sms_window, result.toast, result.sev or 'info')
     end
-    recompute_form_gating()
 end
 
 local function show_forms_for_active_scope()
@@ -1232,16 +1254,18 @@ local function build_window()
             else
                 r = map_sync.compute_fetch(W, snap)
             end
-            if r.toast then toast(r.toast, r.sev) end
             -- compute_fetch* already mutated W on success; rebuild
             -- reflects the new check state, and gating recomputes so
             -- unit-scope forms (set_onboard_num_unit etc.) flip from
             -- "0 applicable" to "N applicable" without the user having
-            -- to manually toggle a checkbox first.
+            -- to manually toggle a checkbox first. The fetch toast is set
+            -- AFTER recompute_form_gating so its message ("Fetched N from
+            -- map") wins over the "Selected: N" footer the recompute writes.
             if r.ok and not r.empty then
                 M.rebuild_treeview()
                 recompute_form_gating()
             end
+            if r.toast then toast(r.toast, r.sev) end
         end)
     end
 
@@ -1469,5 +1493,7 @@ M._on_refresh_clicked = on_refresh_clicked
 M._reset_checked_airbase = function() W.checked.airbase = {} end
 M._install_airbase_marquee_for_test = install_airbase_marquee
 M._get_checked_airbase = function() return W.checked.airbase end
+M._selection_status_text = selection_status_text
+M._update_selection_status = update_selection_status
 
 return M

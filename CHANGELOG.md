@@ -114,8 +114,11 @@ This is the first tag after a long quiet period — `sms.version` had been froze
   It's equivalent to saving under the same name — it respects the *Fixed (place
   at origin)* toggle and any captured airbase data — but skips name entry. The
   entry is hidden on rows with a load error.
-
-### [0.16.1] — 2026-06-04
+- Mass Edit footer now shows **Selected: N** whenever the checked count
+  changes (click, shift-range, marquee, Select all / Invert / Clear, scope
+  switch). Zero selected blanks the indicator rather than showing
+  "Selected: 0". Action messages that carry their own count (apply,
+  Fetch from map) still take precedence over the bare count.
 
 **Fixed**
 - Mass Edit airbase marquee no longer freezes the ME for several seconds on
