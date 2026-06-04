@@ -129,6 +129,28 @@ local function add_top_level_menu()
         log.write('sms.me', log.ERROR, 'Mass Edit menu:newItem failed: ' .. tostring(me_err))
     end
 
+    -- "Hotkeys" entry — opens the ME Hotkeys binding window.
+    local hotkeys_item
+    local ok_hk, hk_err = pcall(function() hotkeys_item = menu:newItem('Hotkeys') end)
+    if ok_hk and hotkeys_item then
+        pcall(function()
+            local sibling_item = sibling_menu
+                and (sibling_menu.missionOptions or sibling_menu.mapOptions
+                     or sibling_menu.setPosition  or sibling_menu.logbook)
+            if sibling_item and sibling_item.getSkin and hotkeys_item.setSkin then
+                hotkeys_item:setSkin(sibling_item:getSkin())
+            end
+        end)
+        hotkeys_item.func = function()
+            local ok2, err = pcall(function() require('dcs_sms_me.me_hotkeys').toggle_window() end)
+            if not ok2 then
+                log.write('sms.me', log.ERROR, 'Hotkeys toggle failed: ' .. tostring(err))
+            end
+        end
+    else
+        log.write('sms.me', log.ERROR, 'Hotkeys menu:newItem failed: ' .. tostring(hk_err))
+    end
+
     -- Sibling "About" menu entry. Same skin-clone pattern as the Prefab
     -- Manager item; opens the about-dialog via require('dcs_sms_me.about').
     local about_item

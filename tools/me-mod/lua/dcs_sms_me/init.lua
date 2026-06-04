@@ -32,6 +32,11 @@ local ok, err = pcall(function()
     -- Manager window — runs from the moment the ME starts.
     local bridge = require('dcs_sms_me.bridge')
     bridge.install()
+
+    -- Install custom ME hotkeys: load saved overrides, attach bindings to the
+    -- toolbar window. Independent of any tool window.
+    local me_hotkeys = require('dcs_sms_me.me_hotkeys')
+    me_hotkeys.install()
 end)
 if not ok then
     log.write('sms.me', log.ERROR, 'init failed: ' .. tostring(err))

@@ -1,0 +1,56 @@
+-- me_hotkeys.lua — facade/singleton tying the ME-Hotkey layers together.
+--
+-- Builds one engine from the registry + saved overrides + selected backend,
+-- applies it on bootstrap, and exposes toggle_window() for the menu. Pure
+-- delegation; no dxgui at load (the window is required lazily on toggle).
+
+local actions    = require('dcs_sms_me.me_hotkey_actions')
+local config      = require('dcs_sms_me.me_hotkey_config')
+local engine_mod  = require('dcs_sms_me.me_hotkey_engine')
+local backend_mod = require('dcs_sms_me.me_hotkey_backend')
+
+local M = {}
+local _engine
+
+local function build()
+    return engine_mod.new({
+        actions      = actions.list(),
+        backend      = backend_mod.get(config.BACKEND_MODE),
+        overrides    = config.load(),
+        ed_conflicts = actions.ED_CONFLICTS,
+        normalize    = actions.normalize_key,
+    })
+end
+
+function M.engine()
+    if not _engine then _engine = build() end
+    return _engine
+end
+
+-- Called from init.lua on bootstrap (and on dev-reload). Rebuilds the engine
+-- from disk and attaches the bindings. Note: on dev-reload the previous
+-- generation's attachments persist on the toolbar window (perkey backend can't
+-- recover lost tokens), so a double-attach is possible until a full DCS
+-- restart — acceptable per the spec (bootstrap-level changes may need restart).
+function M.install()
+    local ok, err = pcall(function()
+        _engine = build()
+        _engine:apply()
+    end)
+    if ok then
+        log.write('sms.me', log.INFO, 'ME Hotkeys installed')
+    else
+        log.write('sms.me', log.ERROR, 'ME Hotkeys install failed: ' .. tostring(err))
+    end
+end
+
+function M.persist()
+    pcall(function() config.save(M.engine():overrides_delta()) end)
+end
+
+function M.toggle_window()
+    local ok, err = pcall(function() require('dcs_sms_me.me_hotkey_window').toggle() end)
+    if not ok then log.write('sms.me', log.ERROR, 'ME Hotkeys window failed: ' .. tostring(err)) end
+end
+
+return M
