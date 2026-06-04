@@ -412,21 +412,22 @@ For each form above: run the apply, hit Ctrl+Z (or whatever the ME's undo key is
 
 ## ME Hotkeys
 
-- [ ] **DCS-SMS → Hotkeys** opens the window; rows are grouped by category
-      (Map/Selection, Object-add, Panel).
-- [ ] Press `m` in the ME with no field focused → **Multi Select** activates.
+- [ ] **DCS-SMS → Hotkeys** opens the window; an Action | Binding table groups
+      actions under category rows (Map/Selection, Object-add, Panel).
+- [ ] Click a category row → it collapses/expands (▶ / ▼ glyph); rebinding a row
+      afterwards does NOT re-expand a collapsed category.
+- [ ] Press each default key with no field focused → the matching action fires
+      (e.g. `t` Triggers, `w` Weather, `d` Draw, `k` Camera, `r` Ruler,
+      `l` Unit List, `left` pans the map).
 - [ ] Open a unit name field and type a word containing `m` → it types normally
-      (does NOT trigger Multi Select). **[spike Q4 — make-or-break]**
-- [ ] Click a binding, press a new key → the row updates and the reset arrow (↩)
-      appears.
+      (does NOT trigger Multi Select).
+- [ ] Double-click a row, press a new key → the row updates and the action turns
+      amber italic (changed from default); category headers are bold, action
+      rows sit indented beneath them.
 - [ ] Re-assign a key already used by another row → it moves to the new row; the
       old row shows `(unbound)`.
-- [ ] Ctrl+click a modified row → it resets to its default; the ↩ arrow
-      disappears.
+- [ ] Select a modified row, click **↩ Reset selected** → it returns to its
+      default and the amber italic clears.
 - [ ] Click **Reset all** → every row returns to its default.
 - [ ] Restart the ME → bindings persist (overrides reloaded from
       `<Saved Games>\DCS\dcs-sms\me_hotkeys.lua`).
-- [ ] Spike (`research/me-hotkey-spike.md`): confirm Q1 (per-key replace vs
-      stack) and Q4 (single-letter vs text input). If a re-registered key stacks
-      with ED's instead of replacing it, set `BACKEND_MODE = 'global'` in
-      `me_hotkey_config.lua` and re-test.

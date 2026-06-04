@@ -110,12 +110,18 @@ This is the first tag after a long quiet period — `sms.version` had been froze
 **Added**
 - **ME Hotkeys tool** — a new **DCS-SMS → Hotkeys** window to bind keyboard
   shortcuts to native Mission-Editor actions (Multi Select, the object-add
-  tools, panel toggles). Keyless actions get single-letter defaults while
-  native actions keep their existing editor keys; an Unreal-style
-  reset-to-default arrow (↩) marks changed bindings, and overrides persist
-  across sessions. Ships with the `perkey` backend pending the live-ME spike
-  (`research/me-hotkey-spike.md`), which decides whether a re-registered key
-  replaces ED's or whether `BACKEND_MODE` should flip to `global`.
+  tools, map navigation, panel toggles). An **Action | Binding** table groups
+  actions under collapsible category rows: single-click a row to select it,
+  double-click to capture a new key, **↩ Reset selected** reverts one row and
+  **Reset all** reverts everything. Keyless actions get single-letter defaults;
+  the object-add and pan keys keep their native ED bindings. Overrides persist across sessions in
+  `Saved Games\DCS\dcs-sms\me_hotkeys.lua`. Uses the `perkey` backend — typing a
+  bound letter inside an ME text field types normally (verified live), so it
+  never hijacks keyboard input.
+  - Every action fires through the editor's own
+    `me_toolbar.toolbarCallback(toggleButton…)` / `me_map_window.onChange_…`
+    entry points (the same path ED's native a/h/s/u/o hotkeys use), rather than
+    poking guessed panel modules.
 
 ### [0.17.0] — 2026-06-04
 

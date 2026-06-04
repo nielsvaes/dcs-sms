@@ -285,9 +285,9 @@ Apply is refused across theatres (a Caucasus airbase prefab can't be applied on 
 
 ## ⌨️ ME Hotkeys
 
-**DCS-SMS → Hotkeys** opens a window listing native Mission-Editor actions grouped by category (Map/Selection, Object-add, Panel toggles). Click a row's binding to capture a new key; **Ctrl+click** a row to reset it to its default. A reset arrow (↩) marks any binding changed from its default. Bindings persist across sessions in `<Saved Games>\DCS\dcs-sms\me_hotkeys.lua`.
+**DCS-SMS → Hotkeys** opens a window with an **Action | Binding** table of native Mission-Editor actions grouped under collapsible category rows (Map/Selection, Object-add, Panel toggles) — click a category row to fold it away. **Single-click** a row to select it, **double-click** to capture a new key. The footer has **↩ Reset selected** (reverts the selected row) and **Reset all** (reverts everything); any binding changed from its default shows in **amber italic**. Bindings persist across sessions in `<Saved Games>\DCS\dcs-sms\me_hotkeys.lua`.
 
-Defaults use single letters where free (e.g. `m` for Multi Select, `d` for Draw); native actions keep their existing editor keys.
+Defaults use single letters where free (e.g. `m` for Multi Select, `d` for Draw); the object-add and pan keys keep their existing editor keys. Every action fires through the editor's own toolbar/map entry points, so a bound key does exactly what clicking the matching toolbar button does.
 
 ## 🔌 External execution toggle
 
