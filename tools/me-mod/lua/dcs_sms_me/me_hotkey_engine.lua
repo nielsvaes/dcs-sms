@@ -35,17 +35,21 @@ end
 
 function Engine:_action(id) return self._by_id[id] end
 
--- current key string, or nil when unbound.
+-- current key string, or nil when unbound. A disabled action reports no key
+-- (and ignores any override) so it's inert until re-enabled — its real
+-- default_key field is left untouched so re-enabling restores it.
 function Engine:current_key(id)
+    local a = self:_action(id)
+    if a and a.disabled then return nil end
     local ov = self._overrides[id]
     if ov == '' then return nil end
     if ov ~= nil then return ov end
-    local a = self:_action(id)
     return a and a.default_key or nil
 end
 
 function Engine:default_key(id)
     local a = self:_action(id)
+    if a and a.disabled then return nil end
     return a and a.default_key or nil
 end
 
@@ -64,6 +68,7 @@ end
 
 -- Should this action be attached to the backend right now?
 function Engine:_should_attach(a)
+    if a.disabled then return false end
     local cur = self:current_key(a.id)
     if cur == nil then return false end                       -- unbound
     if a.ed_key and self._normalize(cur) == self._normalize(a.ed_key) then
@@ -118,7 +123,7 @@ end
 -- Returns { displaced = { id=, label= } | { ed = label } | nil }.
 function Engine:bind(id, key)
     local a = self:_action(id)
-    if not a then return { displaced = nil } end
+    if not a or a.disabled then return { displaced = nil } end
     local nk = self._normalize(key)
 
     -- find a managed holder to displace
@@ -165,6 +170,7 @@ function Engine:rows()
             current_key = self:current_key(a.id),
             default_key = a.default_key,
             modified = self:is_modified(a.id),
+            disabled = a.disabled or false,
         }
     end
     return rows

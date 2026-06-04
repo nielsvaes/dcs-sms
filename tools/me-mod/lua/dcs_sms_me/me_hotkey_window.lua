@@ -79,6 +79,7 @@ local FONT_OBLIQUE  = 'DejaVuLGCSansCondensed-Oblique.ttf'
 local COLOR_DEFAULT  = '0xc8c8c8ff'  -- stock light grey
 local COLOR_CATEGORY = '0xffffffff'  -- brighter white for the bold headers
 local COLOR_MODIFIED = '0xffc24dff'  -- amber — a binding changed from its default
+local COLOR_DISABLED = '0x707070ff'  -- dim grey — action not yet available
 local ACTION_INDENT  = 38            -- px the action rows sit right of the category
                                      -- (must clear the "▼ " glyph so they nest)
 
@@ -88,6 +89,7 @@ local CELL_STYLES = {
     category  = { font = FONT_BOLD,    color = COLOR_CATEGORY },
     action    = { font = FONT_REGULAR, color = COLOR_DEFAULT,  offset = ACTION_INDENT },
     modified  = { font = FONT_OBLIQUE, color = COLOR_MODIFIED, offset = ACTION_INDENT },
+    disabled  = { font = FONT_REGULAR, color = COLOR_DISABLED, offset = ACTION_INDENT },
 }
 
 -- Build a fresh static skin with the given kind's font/colour/indent baked in.
@@ -210,15 +212,20 @@ local function render()
         if not W.collapsed[cat] then
             for _, row in ipairs(rows) do
                 if row.category == cat then
-                    local style = row.modified and 'modified' or 'action'
-                    local key = disp_key(row.current_key)
+                    local style, key
+                    if row.disabled then
+                        style, key = 'disabled', '—'
+                    else
+                        style = row.modified and 'modified' or 'action'
+                        key   = disp_key(row.current_key)
+                    end
                     pcall(function()
                         W.grid:insertRow(nil)
                         W.grid:setCell(0, r, make_cell(row.label, style, row.label))
-                        W.grid:setCell(1, r, make_cell(key, 'default'))
+                        W.grid:setCell(1, r, make_cell(key, row.disabled and 'disabled' or 'default'))
                     end)
-                    W._row_meta[r] = { kind = 'action', id = row.id }
-                    if row.id == W.selected_id then selected_row = r end
+                    W._row_meta[r] = { kind = 'action', id = row.id, disabled = row.disabled }
+                    if (not row.disabled) and row.id == W.selected_id then selected_row = r end
                     r = r + 1
                 end
             end
@@ -336,7 +343,7 @@ local function build_body()
             if meta.kind == 'cat' then
                 W.collapsed[meta.cat] = not W.collapsed[meta.cat]
                 render()
-            elseif meta.kind == 'action' then
+            elseif meta.kind == 'action' and not meta.disabled then
                 pcall(function() self:selectRow(row) end)
                 select_action(meta.id)
             end
@@ -345,8 +352,8 @@ local function build_body()
             if button ~= 1 then return end
             local meta = row_at(self, mx, my)
             -- Category collapse is handled by the single-click that precedes the
-            -- double; only action rows act on the double (open capture).
-            if meta and meta.kind == 'action' then start_capture(meta.id) end
+            -- double; only enabled action rows act on the double (open capture).
+            if meta and meta.kind == 'action' and not meta.disabled then start_capture(meta.id) end
         end
 
         render()

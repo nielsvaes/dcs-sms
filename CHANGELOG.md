@@ -122,6 +122,16 @@ This is the first tag after a long quiet period — `sms.version` had been froze
     `me_toolbar.toolbarCallback(toggleButton…)` / `me_map_window.onChange_…`
     entry points (the same path ED's native a/h/s/u/o hotkeys use), rather than
     poking guessed panel modules.
+  - Key combinations (Ctrl/Shift/Alt + key) are supported, both in the capture
+    overlay and as defaults.
+  - Covers the whole **main-menu bar** too — File / Edit / View / Flight /
+    Campaign / Dynamic Mission / Misc categories, firing each entry's menu func.
+    New/Open/Save/Fly/Record/DTC/Center/Remove ride ED's existing keys; the rest
+    (Save As, Open Backup, Prepare Mission, the static-template load/save, …) get
+    modifier-combo defaults. (Exit is intentionally not bindable.)
+  - The **Dynamic Mission** entries ship **disabled** (greyed out, no key,
+    not bindable) since ED's Dynamic Campaign is still in development — their
+    defaults are pre-wired so dropping the `disabled` flag re-enables them.
 
 ### [0.17.0] — 2026-06-04
 
