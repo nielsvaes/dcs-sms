@@ -169,7 +169,7 @@ You do **not** have:
 | `new_mission_hook.lua` | Monkey-patches `File > New` / `File > Open` so any open Prefab Manager window auto-hides. |
 | `sms_window.lua` | Reusable handle/factory for tool windows — branded title bar, footer status bar, resize clamp, Ctrl+Z to undo bus, File-New auto-hide. The Prefab Manager rides on it; future tool windows should too. |
 | `prefab_manager.lua` | The Prefab Manager window (uses `sms_window`). Library list, place-at-click / place-at-original, rotation, country override, undo. |
-| `context_menu.lua` | Right-click context menus for the Prefab Manager. Owns the dxgui `Menu` construction and the clipboard probe. Used by the file-row menu (Move to… / Copy file contents / Copy place snippet / Show in Explorer) and the tree-node menu (New subfolder / Rename / Delete). |
+| `context_menu.lua` | Right-click context menus for the Prefab Manager. Owns the dxgui `Menu` construction and the clipboard probe. Used by the file-row menu (Update Prefab with selection / Move to… / Copy file contents / Copy place snippet / Show in Explorer) and the tree-node menu (New subfolder / Rename / Delete). |
 | `prefab_distill.lua`, `prefab_ops.lua` | Prefab save/load/placement core. |
 | `serializer.lua` | Lua-table serializer used to write prefab files. |
 | `warehouse_ops.lua`, `ship_warehouse.lua` | Airbase + per-ship warehouse capture for the Prefab Manager. |

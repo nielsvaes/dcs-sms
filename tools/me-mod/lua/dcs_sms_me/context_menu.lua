@@ -153,20 +153,30 @@ end
 --   hooks        { on_move = function(row), on_status = function(text, sev) }
 --
 -- Entries (error rows hide all but Show in Explorer):
+--   Update Prefab with selection
 --   Move to...
 --   (separator)
 --   Copy file contents
 --   Copy place snippet
 --   Show in Explorer
+--
+-- hooks: { on_update(row), on_move(row), on_status(text, sev) }
 -- ---------------------------------------------------------------------------
 
-function M.show_for_file_row(x, y, row, hooks)
-    if not row then return false end
+-- Build the file-row entry list. Extracted from show_for_file_row so the
+-- entry set (labels, visibility, hook wiring) is unit-testable without a
+-- live dxgui Menu — show_for_file_row just feeds the result to build_menu.
+function M._file_row_entries(row, hooks)
     hooks = hooks or {}
     local function status(text, sev) if hooks.on_status then hooks.on_status(text, sev) end end
 
     local is_error = row.error ~= nil
-    local entries = {
+    return {
+        {
+            label = 'Update Prefab with selection',
+            visible = not is_error,
+            on_click = function() if hooks.on_update then hooks.on_update(row) end end,
+        },
         {
             label = 'Move to...',
             visible = not is_error,
@@ -215,8 +225,11 @@ function M.show_for_file_row(x, y, row, hooks)
             end,
         },
     }
+end
 
-    local menu = build_menu(entries)
+function M.show_for_file_row(x, y, row, hooks)
+    if not row then return false end
+    local menu = build_menu(M._file_row_entries(row, hooks))
     return popup_menu(menu, x, y)
 end
 

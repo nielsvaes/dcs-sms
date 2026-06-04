@@ -121,4 +121,30 @@ do
     _G.Gui = nil
 end
 
+-- File-row menu must offer "Update Prefab with selection" on normal rows,
+-- wired to hooks.on_update with the row, and must hide it on error rows
+-- (matching the convention where error rows expose only Show in Explorer).
+do
+    package.loaded['dcs_sms_me.context_menu'] = nil
+    local cm = require('dcs_sms_me.context_menu')
+
+    local function find(entries, label)
+        for _, e in ipairs(entries) do if e.label == label then return e end end
+        return nil
+    end
+
+    local updated
+    local row = { name = 'Tomcats', path = '/x/Tomcats.prefab', folder = 'CAP' }
+    local entries = cm._file_row_entries(row, { on_update = function(r) updated = r end })
+
+    local upd = find(entries, 'Update Prefab with selection')
+    check('update entry present on normal row', upd ~= nil and upd.visible ~= false)
+    if upd then upd.on_click() end
+    check('update entry fires on_update with row', updated == row)
+
+    local erow = { name = 'Broken', path = '/x/Broken.prefab', error = 'boom' }
+    local eupd = find(cm._file_row_entries(erow, {}), 'Update Prefab with selection')
+    check('update entry hidden on error row', eupd ~= nil and eupd.visible == false)
+end
+
 io.write('All context_menu clipboard tests passed.\n')

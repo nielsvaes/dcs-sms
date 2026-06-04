@@ -105,6 +105,16 @@ This is the first tag after a long quiet period — `sms.version` had been froze
 
 ## ME-mod
 
+### [0.17.0] — 2026-06-04
+
+**Added**
+- Prefab Manager: right-clicking a prefab row now offers **Update Prefab with
+  selection**, which overwrites that prefab with the current ME selection
+  after a confirm (`This will overwrite "<name>" with your current selection.`).
+  It's equivalent to saving under the same name — it respects the *Fixed (place
+  at origin)* toggle and any captured airbase data — but skips name entry. The
+  entry is hidden on rows with a load error.
+
 ### [0.16.1] — 2026-06-04
 
 **Fixed**

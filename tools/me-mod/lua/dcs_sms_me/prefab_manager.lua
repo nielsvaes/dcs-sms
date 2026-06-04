@@ -791,6 +791,25 @@ local function on_save_click()
     end)
 end
 
+-- Right-click "Update Prefab with selection": overwrite an existing prefab
+-- with the current ME selection. Identical to a same-name Save (respects the
+-- Fixed toggle and any captured airbases) but skips name entry and gates on a
+-- prefab-specific confirm. The menu entry is hidden on error rows, so row is
+-- expected to be a healthy prefab; we still guard defensively.
+local function on_update_prefab(row)
+    if not row or row.error then return end
+    show_overlay(
+        'This will overwrite "' .. tostring(row.name) .. '" with your current selection.',
+        {
+            { label = 'Update', on_click = function()
+                do_save(row.name, read_fixed_check(), W.pending_airbases, row.folder or '')
+            end },
+            { label = 'Cancel', on_click = function() set_status('Update cancelled.') end },
+        },
+        'warning',
+        'Update Prefab')
+end
+
 local populate_country_combo  -- forward decl: defined below, called from on_reload_click
 
 local function on_reload_click()
@@ -2549,6 +2568,7 @@ function M.show()
                         if not r then return end
                         local context_menu = require('dcs_sms_me.context_menu')
                         context_menu.show_for_file_row(x, y, r, {
+                            on_update = function(rr)     on_update_prefab(rr) end,
                             on_move   = function(rr)     open_move_modal(rr) end,
                             on_status = function(t, sev) set_status(t, sev) end,
                         })
