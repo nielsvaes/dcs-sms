@@ -113,5 +113,21 @@ do
     check('rows[1] is a1 with current m', rows[1].id == 'a1' and rows[1].current_key == 'm')
 end
 
+-- colliding overrides (corrupt config): two ids on the same key must not cross-detach.
+-- Registry-earlier id (a2) wins; resetting the winner must NOT kill the key for a3.
+do
+    local eng, be = new_engine({ a2 = 'y', a3 = 'y' })
+    eng:apply()
+    -- a1 stays at 'm'; the colliding pair must yield exactly ONE owner at 'y'
+    check('collision: y attached after apply', be.attached('y'))
+    check('collision: total attachments are m + one y', be.count() == 2)
+    -- registry order a1,a2,a3 -> a2 is the winner that owns the backend key
+    check('collision: winner a2 is live owner', eng._live.a2 ~= nil)
+    check('collision: loser a3 not live', eng._live.a3 == nil)
+    -- reset the winner away; a3 still wants 'y', so 'y' must stay wired
+    eng:reset('a2')
+    check('collision: y still attached after winner reset', be.attached('y'))
+end
+
 if failures > 0 then print(failures .. ' failure(s)'); os.exit(1) end
 print('All me_hotkey_engine tests passed.')

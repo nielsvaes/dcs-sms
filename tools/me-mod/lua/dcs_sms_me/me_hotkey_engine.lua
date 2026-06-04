@@ -80,10 +80,21 @@ end
 -- Reconcile backend attachments with desired state.
 function Engine:apply()
     if not self._backend then return end
-    -- desired: id -> key
+    -- desired: id -> key. At most one id may claim a given normalized key, so
+    -- _live never holds two ids on one backend key (which would let a detach for
+    -- one silently kill the binding the other still wants). Registry order wins:
+    -- iterate self._actions and skip any later id whose key is already claimed.
     local desired = {}
+    local claimed = {}  -- normalized key -> true
     for _, a in ipairs(self._actions) do
-        if self:_should_attach(a) then desired[a.id] = self:current_key(a.id) end
+        if self:_should_attach(a) then
+            local key = self:current_key(a.id)
+            local nk = self._normalize(key)
+            if not claimed[nk] then
+                claimed[nk] = true
+                desired[a.id] = key
+            end
+        end
     end
     -- detach anything live that is gone or changed
     for id, rec in pairs(self._live) do
