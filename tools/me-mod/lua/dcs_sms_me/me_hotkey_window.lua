@@ -81,14 +81,22 @@ local function capture_chord(on_done, on_cancel)
     local w, h = 360, 120
     local overlay, cb
     local state = backend.new_chord_state()
+    local done = false
     local function teardown()
+        if done then return end
+        done = true
+        W._capture_teardown = nil
         pcall(function() if cb and Gui and Gui.RemoveKeyboardCallback then Gui.RemoveKeyboardCallback(cb) end end)
         pcall(function() if overlay and overlay.setVisible then overlay:setVisible(false) end end)
     end
+    W._capture_teardown = teardown
     pcall(function()
         overlay = Window.new((screen_w - w) / 2, (screen_h - h) / 2, w, h, 'Press a key…')
         overlay:setSkin((Skin.windowSkinME and Skin.windowSkinME()) or Skin.windowSkin())
         overlay:setVisible(true); overlay:setZOrder(260)
+        -- If the overlay is dismissed via its window X (not Esc / a completed
+        -- chord), still tear down the keyboard grab so it can't leak.
+        pcall(function() overlay.onClose = function() teardown(); pcall(on_cancel or function() end) end end)
         local lbl = Static.new()
         lbl:setBounds(16, 16, w - 32, 40)
         lbl:setText('Press a key (or Esc to cancel)…')
@@ -260,6 +268,7 @@ local function build_body()
 end
 
 function M.show()
+    if W._capture_teardown then pcall(W._capture_teardown) end
     if W.sms_window then W.sms_window:show(); refresh(); return end
     W.sms_window = sms_window.new({
         title = 'ME Hotkeys',
@@ -275,7 +284,10 @@ function M.show()
     refresh()
 end
 
-function M.hide() if W.sms_window then W.sms_window:hide() end end
+function M.hide()
+    if W._capture_teardown then pcall(W._capture_teardown) end
+    if W.sms_window then W.sms_window:hide() end
+end
 
 function M.toggle()
     if W.sms_window then W.sms_window:toggle(); refresh() else M.show() end
