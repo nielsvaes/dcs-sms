@@ -105,6 +105,18 @@ This is the first tag after a long quiet period — `sms.version` had been froze
 
 ## ME-mod
 
+### [0.18.0] — 2026-06-04
+
+**Added**
+- **ME Hotkeys tool** — a new **DCS-SMS → Hotkeys** window to bind keyboard
+  shortcuts to native Mission-Editor actions (Multi Select, the object-add
+  tools, panel toggles). Keyless actions get single-letter defaults while
+  native actions keep their existing editor keys; an Unreal-style
+  reset-to-default arrow (↩) marks changed bindings, and overrides persist
+  across sessions. Ships with the `perkey` backend pending the live-ME spike
+  (`research/me-hotkey-spike.md`), which decides whether a re-registered key
+  replaces ED's or whether `BACKEND_MODE` should flip to `global`.
+
 ### [0.17.0] — 2026-06-04
 
 **Added**

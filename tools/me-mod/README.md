@@ -283,6 +283,12 @@ Apply is refused across theatres (a Caucasus airbase prefab can't be applied on 
 - **Undo** — `Ctrl-Z` with the Manager window focused undoes the most recent placement (groups, zones, drawings, and airbase splices all restored together).
 - **Library** — Reload (rescan disk), Rename, Delete, live name+theatre search, click-to-sort columns.
 
+## ⌨️ ME Hotkeys
+
+**DCS-SMS → Hotkeys** opens a window listing native Mission-Editor actions grouped by category (Map/Selection, Object-add, Panel toggles). Click a row's binding to capture a new key; **Ctrl+click** a row to reset it to its default. A reset arrow (↩) marks any binding changed from its default. Bindings persist across sessions in `<Saved Games>\DCS\dcs-sms\me_hotkeys.lua`.
+
+Defaults use single letters where free (e.g. `m` for Multi Select, `d` for Draw); native actions keep their existing editor keys.
+
 ## 🔌 External execution toggle
 
 Under the **DCS-SMS** top menu in the Mission Editor, a third item "External execution: ON/OFF" controls whether the dcs-sms hook honors `--target gui` requests from the `dcs-sms.exe` CLI (or any other external tool writing to the mailbox).

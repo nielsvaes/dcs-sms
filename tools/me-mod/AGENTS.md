@@ -168,6 +168,12 @@ You do **not** have:
 | `marquee_hook.lua` | Monkey-patches the ME's selection-rect handler so we observe the most recent rect. |
 | `new_mission_hook.lua` | Monkey-patches `File > New` / `File > Open` so any open Prefab Manager window auto-hides. |
 | `sms_window.lua` | Reusable handle/factory for tool windows — branded title bar, footer status bar, resize clamp, Ctrl+Z to undo bus, File-New auto-hide. The Prefab Manager rides on it; future tool windows should too. |
+| `me_hotkeys.lua` | Facade/singleton for the ME Hotkeys tool — builds the engine from registry + saved overrides + backend, applies bindings on bootstrap, exposes `toggle_window()`. |
+| `me_hotkey_actions.lua` | Bindable-action registry: id/label/category/default_key/ed_key + lazy `invoke` thunks + the ED-native conflict map. |
+| `me_hotkey_config.lua` | Override-delta persistence (`me_hotkeys.lua` file under the dcs-sms root) + `BACKEND_MODE`. |
+| `me_hotkey_engine.lua` | Pure keymap diff/state engine (bind/unbind/reset/modified/rows/apply) over an injected backend. |
+| `me_hotkey_backend.lua` | dxgui attach/detach backends (`perkey` toolbar-window hotkeys, `global` keyboard chokepoint) + the pure chord matcher. |
+| `me_hotkey_window.lua` | The ME Hotkeys window (sms_window + grid + capture overlay + reset arrows). |
 | `prefab_manager.lua` | The Prefab Manager window (uses `sms_window`). Library list, place-at-click / place-at-original, rotation, country override, undo. |
 | `context_menu.lua` | Right-click context menus for the Prefab Manager. Owns the dxgui `Menu` construction and the clipboard probe. Used by the file-row menu (Update Prefab with selection / Move to… / Copy file contents / Copy place snippet / Show in Explorer) and the tree-node menu (New subfolder / Rename / Delete). |
 | `prefab_distill.lua`, `prefab_ops.lua` | Prefab save/load/placement core. |

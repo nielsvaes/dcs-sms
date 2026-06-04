@@ -409,3 +409,24 @@ For each form above: run the apply, hit Ctrl+Z (or whatever the ME's undo key is
       Confirm fields include `weaponType`, `expend`, `altitude`, etc.
 
 - [ ] **Round-trip save: write tasks, save .miz, reload, confirm tasks persist.**
+
+## ME Hotkeys
+
+- [ ] **DCS-SMS → Hotkeys** opens the window; rows are grouped by category
+      (Map/Selection, Object-add, Panel).
+- [ ] Press `m` in the ME with no field focused → **Multi Select** activates.
+- [ ] Open a unit name field and type a word containing `m` → it types normally
+      (does NOT trigger Multi Select). **[spike Q4 — make-or-break]**
+- [ ] Click a binding, press a new key → the row updates and the reset arrow (↩)
+      appears.
+- [ ] Re-assign a key already used by another row → it moves to the new row; the
+      old row shows `(unbound)`.
+- [ ] Ctrl+click a modified row → it resets to its default; the ↩ arrow
+      disappears.
+- [ ] Click **Reset all** → every row returns to its default.
+- [ ] Restart the ME → bindings persist (overrides reloaded from
+      `<Saved Games>\DCS\dcs-sms\me_hotkeys.lua`).
+- [ ] Spike (`research/me-hotkey-spike.md`): confirm Q1 (per-key replace vs
+      stack) and Q4 (single-letter vs text input). If a re-registered key stacks
+      with ED's instead of replacing it, set `BACKEND_MODE = 'global'` in
+      `me_hotkey_config.lua` and re-test.
