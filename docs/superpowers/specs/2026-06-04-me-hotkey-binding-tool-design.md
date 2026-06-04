@@ -331,6 +331,32 @@ only override-of-existing-ED-keys quality varies, exactly as scoped.
 - **Chord coverage** — `parseHotKey` supports `Ctrl/Alt/Shift + <key>`; verify our
   capture produces strings `parseHotKey` accepts (e.g. numpad `+` is `[\\+]`).
 
+## 9a. Decisions (autonomous, made during planning/implementation)
+
+Recorded per the autonomous-build workflow — these are judgement calls the user
+may want to revisit:
+
+1. **Backend default = `perkey`.** The live-ME spike (§6) couldn't run in the
+   build session (ME bridge was off), so the engine is built mechanism-agnostic
+   with both backends and defaults to `perkey` (correct if a re-registered key
+   replaces ED's). Flip `me_hotkey_config.BACKEND_MODE` to `'global'` if the
+   spike shows stacking. See `research/me-hotkey-spike.md`.
+2. **UI is a 2-column Grid with category *header rows*, not a collapsible
+   TreeView.** dxgui's TreeView is single-column; the Grid gives the
+   Action | Binding columns the spec asked for, with categories rendered as
+   non-interactive group rows. Collapsibility was dropped as YAGNI for ~25 rows.
+3. **Reset affordance.** The Unreal-style per-row reset is delivered as a `↩`
+   glyph on modified rows + **Ctrl+click a row to reset** + a **Reset all**
+   footer button, rather than an individually-clickable arrow *widget* per row
+   (Grid cells aren't separate clickable widgets, and a custom scrolling
+   row-of-widgets layout was judged too risky to write blind). This is the most
+   likely thing to revisit after the first live look — a true per-row arrow
+   button is a follow-up if wanted.
+4. **dev-reload double-attach caveat.** On `dcs-sms dev-reload`, the previous
+   generation's hotkey attachments persist on the toolbar window (the `perkey`
+   backend can't recover lost callback refs), so a binding may fire twice until
+   a full DCS restart. Normal use (cold ME start) is unaffected.
+
 ## 10. Out of scope / future
 
 - dcs-sms own-tool actions as bindable entries (one registry block away).
