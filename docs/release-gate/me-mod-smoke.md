@@ -418,8 +418,13 @@ For each form above: run the apply, hit Ctrl+Z (or whatever the ME's undo key is
       afterwards does NOT re-expand a collapsed category.
 - [ ] Press each default key with no field focused → the matching action fires
       (e.g. `t` Triggers, `w` Weather, `d` Draw, `r` Ruler, `l` Unit List,
-      `left` pans the map). Main-menu categories (File/Edit/View/Flight/…) fire
-      their menu entry; `Ctrl+Shift+S` triggers File → Save As.
+      `left` pans the map).
+- [ ] Each main-menu category fires its entries (the `menuBar.<menu>.menu.<item>`
+      paths are silent no-ops if mis-keyed, so verify per menu): **File** Save As
+      `Ctrl+Shift+S` / Open Backup `Ctrl+Shift+O`; **Edit** Load/Save Static
+      Template; **View** Beacons/Metric/Imperial/Icons; **Flight** Prepare
+      `Ctrl+Shift+P` / Replay; **Campaign** Campaign/Builder; **Misc**
+      Credits/Encyclopedia.
 - [ ] Search box filters by name, category or key: `ctrl` narrows to Ctrl
       combos, `shift+s` finds Save As, `pan` the pan actions; matches inside a
       collapsed category still surface; `×` clears.

@@ -176,11 +176,16 @@ function Engine:rows()
     return rows
 end
 
--- The persistable delta: exactly self._overrides (only non-default entries,
--- by construction — bind clears the override when the key equals the default).
+-- The persistable delta: self._overrides minus any disabled action (which can
+-- never be (re)bound, so a leftover override would otherwise persist forever as
+-- a stale entry). Non-default by construction — bind clears the override when
+-- the key equals the default.
 function Engine:overrides_delta()
     local out = {}
-    for k, v in pairs(self._overrides) do out[k] = v end
+    for k, v in pairs(self._overrides) do
+        local a = self:_action(k)
+        if not (a and a.disabled) then out[k] = v end
+    end
     return out
 end
 
