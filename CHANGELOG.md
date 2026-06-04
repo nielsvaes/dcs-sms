@@ -105,6 +105,19 @@ This is the first tag after a long quiet period — `sms.version` had been froze
 
 ## ME-mod
 
+### [0.16.1] — 2026-06-04
+
+**Fixed**
+- Mass Edit airbase marquee no longer freezes the ME for several seconds on
+  dense maps (e.g. Germany Cold War). The marquee callback used to call
+  `rebuild_treeview`, which tore down and reallocated a checkbox plus a
+  cell-per-column for *every* airbase in the pool on each drag-release —
+  hundreds of dxgui widgets synchronously. It now flips the affected rows'
+  existing checkboxes in place (`setState`), matching the per-click path. Row
+  order is name-based and unaffected by checked state, so no re-sort is needed;
+  a full rebuild only happens on the cold-start case where no live checkboxes
+  exist yet.
+
 ### [0.16.0] — 2026-05-31
 
 Closes the remaining gaps from gh #68 (items 1, 3, 4, 5; item 2 shipped in

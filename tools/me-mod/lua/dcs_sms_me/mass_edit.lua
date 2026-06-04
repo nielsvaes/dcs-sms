@@ -386,6 +386,11 @@ local function install_airbase_marquee()
         for _, e in ipairs(pool) do by_name[e.name] = e end
 
         local changed = false
+        local on_airbase_scope = (W.scope == 'airbase')
+        local checkboxes = W._checkbox_by_entity or {}
+        -- An empty map means the airbase tree was never built this session, so
+        -- there are no live checkboxes to flip — fall back to one rebuild.
+        local tree_built = on_airbase_scope and next(checkboxes) ~= nil
         for _, hit in ipairs(hits) do
             local entry = nil
             if hit.airdrome_number_at_save and selection.airbase_entry_by_id then
@@ -393,12 +398,22 @@ local function install_airbase_marquee()
             end
             if not entry then entry = by_name[hit.name] end
             if entry then
+                if W.checked.airbase[entry] ~= true then changed = true end
                 W.checked.airbase[entry] = true
-                changed = true
+                -- Flip the existing checkbox in place instead of tearing down
+                -- and recreating every row's widgets. Row order is name-based
+                -- and unaffected by checked state (sort_rows ignores the check
+                -- column), so no re-sort is needed. The old rebuild_treeview
+                -- path here froze the ME for seconds on dense maps because it
+                -- reallocated a checkbox + a cell-per-column for every airbase.
+                local cb = tree_built and checkboxes[entry] or nil
+                if cb and cb.setState then pcall(cb.setState, cb, true) end
             end
         end
-        if changed and W.scope == 'airbase' and M.rebuild_treeview then
-            pcall(M.rebuild_treeview)
+        if changed and on_airbase_scope then
+            if not tree_built and M.rebuild_treeview then
+                pcall(M.rebuild_treeview)
+            end
             recompute_form_gating()
         end
     end)
@@ -724,6 +739,10 @@ end
 M._build_tree_widget = build_tree_widget
 
 function M.rebuild_treeview()
+    -- entity -> live checkbox widget for the current pass. The airbase marquee
+    -- callback flips these in place instead of forcing a full rebuild. Reset
+    -- here because removeAllRows below destroys the previous pass's widgets.
+    W._checkbox_by_entity = {}
     local rows = {}
     for _, e in ipairs(W.pool) do
         local g = W.parent_map[e] or e
@@ -763,6 +782,7 @@ function M.rebuild_treeview()
             if c.key == 'check' then
                 local cb = make_checkbox(r.checked)
                 if cb then
+                    W._checkbox_by_entity[r.entity] = cb
                     if cb.addChangeCallback then
                         local entity = r.entity
                         pcall(cb.addChangeCallback, cb, function(box)
