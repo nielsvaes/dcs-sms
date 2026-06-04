@@ -80,7 +80,10 @@ local ACTIONS = {
     { id='map.pan_right',    label='Pan right',    category='Map/Selection', default_key='right', ed_key='right', invoke=call_map('onChange_Right') },
     { id='map.coord_system', label='Coord system', category='Map/Selection', default_key='Alt+Y', ed_key=nil,     invoke=call_map('onChange_CoordsSys') },
     { id='map.ruler',        label='Ruler / Tape', category='Map/Selection', default_key='r',     ed_key=nil,     invoke=toolbar_button('toggleButtonTape') },
-    { id='map.camera',       label='Camera',       category='Map/Selection', default_key='k',     ed_key=nil,     invoke=toolbar_button('toggleButtonCamera') },
+    -- Camera: disabled for now. toggleButtonCamera (free-camera mode) freezes the
+    -- ME when you fly the mission and then return to the editor. Left here in case
+    -- the underlying issue gets sorted — re-enable by uncommenting.
+    -- { id='map.camera',    label='Camera',       category='Map/Selection', default_key='k',     ed_key=nil,     invoke=toolbar_button('toggleButtonCamera') },
 
     -- Object-add (ED native single letters — kept on ED's own binding)
     { id='object.airplane',   label='Airplane',   category='Object-add', default_key='a', ed_key='a', invoke=toolbar_button('toggleButtonAirplane') },
@@ -88,17 +91,20 @@ local ACTIONS = {
     { id='object.ship',       label='Ship',       category='Object-add', default_key='s', ed_key='s', invoke=toolbar_button('toggleButtonShip') },
     { id='object.vehicle',    label='Vehicle',    category='Object-add', default_key='u', ed_key='u', invoke=toolbar_button('toggleButtonVehicle') },
     { id='object.static',     label='Static',     category='Object-add', default_key='o', ed_key='o', invoke=toolbar_button('toggleButtonStatic') },
+    { id='object.trigger_zone', label='Create Trigger Zone', category='Object-add', default_key='z', ed_key=nil, invoke=toolbar_button('toggleButtonZone') },
 
     -- Panel toggles (keyless — free single letters)
-    { id='panel.triggers',  label='Triggers',  category='Panel', default_key='t', ed_key=nil, invoke=toolbar_button('toggleButtonTrigRules') },
-    { id='panel.weather',   label='Weather',   category='Panel', default_key='w', ed_key=nil, invoke=toolbar_button('toggleButtonWeather') },
-    { id='panel.briefing',  label='Briefing',  category='Panel', default_key='b', ed_key=nil, invoke=toolbar_button('toggleButtonBriefing') },
-    { id='panel.unit_list', label='Unit List', category='Panel', default_key='l', ed_key=nil, invoke=toolbar_button('toggleButtonUnitList') },
-    { id='panel.draw',      label='Draw',      category='Panel', default_key='d', ed_key=nil, invoke=toolbar_button('toggleButtonDraw') },
-    { id='panel.bullseye',  label='Bullseye',  category='Panel', default_key='e', ed_key=nil, invoke=toolbar_button('toggleButtonBullsEye') },
-    { id='panel.goals',     label='Goals',     category='Panel', default_key='g', ed_key=nil, invoke=toolbar_button('toggleButtonGoal') },
-    { id='panel.roles',     label='Roles',     category='Panel', default_key='j', ed_key=nil, invoke=toolbar_button('toggleButtonRoles') },
-    { id='panel.templates', label='Templates', category='Panel', default_key='p', ed_key=nil, invoke=toolbar_button('toggleButtonTemplate') },
+    { id='panel.triggers',     label='Triggers',              category='Panel', default_key='t', ed_key=nil, invoke=toolbar_button('toggleButtonTrigRules') },
+    { id='panel.weather',      label='Weather',               category='Panel', default_key='w', ed_key=nil, invoke=toolbar_button('toggleButtonWeather') },
+    { id='panel.briefing',     label='Briefing',              category='Panel', default_key='b', ed_key=nil, invoke=toolbar_button('toggleButtonBriefing') },
+    { id='panel.unit_list',    label='Unit List',             category='Panel', default_key='l', ed_key=nil, invoke=toolbar_button('toggleButtonUnitList') },
+    { id='panel.draw',         label='Draw',                  category='Panel', default_key='d', ed_key=nil, invoke=toolbar_button('toggleButtonDraw') },
+    { id='panel.bullseye',     label='Bullseye',              category='Panel', default_key='e', ed_key=nil, invoke=toolbar_button('toggleButtonBullsEye') },
+    { id='panel.goals',        label='Goals',                 category='Panel', default_key='g', ed_key=nil, invoke=toolbar_button('toggleButtonGoal') },
+    { id='panel.roles',        label='Roles',                 category='Panel', default_key='j', ed_key=nil, invoke=toolbar_button('toggleButtonRoles') },
+    { id='panel.templates',    label='Templates',             category='Panel', default_key='p', ed_key=nil, invoke=toolbar_button('toggleButtonTemplate') },
+    { id='panel.map_options',  label='Map Options',           category='Panel', default_key='n', ed_key=nil, invoke=toolbar_button('toggleButtonMap') },
+    { id='panel.zone_list',    label='View Trigger Zone List', category='Panel', default_key='v', ed_key=nil, invoke=toolbar_button('toggleButtonTrigZonesList') },
 }
 
 local BY_ID = {}
