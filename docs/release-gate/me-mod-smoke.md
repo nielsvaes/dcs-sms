@@ -417,13 +417,18 @@ For each form above: run the apply, hit Ctrl+Z (or whatever the ME's undo key is
 - [ ] Click a category row → it collapses/expands (▶ / ▼ glyph); rebinding a row
       afterwards does NOT re-expand a collapsed category.
 - [ ] Press each default key with no field focused → the matching action fires
-      (e.g. `t` Triggers, `w` Weather, `d` Draw, `k` Camera, `r` Ruler,
-      `l` Unit List, `left` pans the map).
+      (e.g. `t` Triggers, `w` Weather, `d` Draw, `r` Ruler, `l` Unit List,
+      `left` pans the map). Main-menu categories (File/Edit/View/Flight/…) fire
+      their menu entry; `Ctrl+Shift+S` triggers File → Save As.
+- [ ] Search box filters by name, category or key: `ctrl` narrows to Ctrl
+      combos, `shift+s` finds Save As, `pan` the pan actions; matches inside a
+      collapsed category still surface; `×` clears.
+- [ ] Dynamic Mission rows are greyed with `—`, can't be selected or bound.
 - [ ] Open a unit name field and type a word containing `m` → it types normally
       (does NOT trigger Multi Select).
-- [ ] Double-click a row, press a new key → the row updates and the action turns
-      amber italic (changed from default); category headers are bold, action
-      rows sit indented beneath them.
+- [ ] Double-click a row, hold Shift and press a letter → it captures `Shift+…`
+      (a modifier alone does NOT bind); the action turns amber italic (changed
+      from default); category headers are bold, action rows sit indented.
 - [ ] Re-assign a key already used by another row → it moves to the new row; the
       old row shows `(unbound)`.
 - [ ] Select a modified row, click **↩ Reset selected** → it returns to its

@@ -291,6 +291,8 @@ Defaults use single letters where free (e.g. `m` for Multi Select, `d` for Draw)
 
 The list also covers the whole **main-menu bar** — File, Edit, View, Flight, Campaign, Dynamic Mission and Misc categories — so menu entries that ship without a shortcut (Save As, Open Backup, Prepare Mission, the static-template load/save, …) get one. Key combinations work too: capture `Ctrl+Shift+S`, `Alt+3`, etc. by holding the modifier(s) and pressing the key. (Exit is deliberately not bindable, to avoid an accidental editor exit.)
 
+The **search box** at the top filters the list by name, category, or bound key — type `ctrl` to see everything on a Ctrl combo, `shift+s` to find Save As, `pan` for the pan actions. A filter force-expands the categories so matches inside collapsed groups still show.
+
 ## 🔌 External execution toggle
 
 Under the **DCS-SMS** top menu in the Mission Editor, a third item "External execution: ON/OFF" controls whether the dcs-sms hook honors `--target gui` requests from the `dcs-sms.exe` CLI (or any other external tool writing to the mailbox).

@@ -29,14 +29,17 @@ local GridHeaderCell;do local ok, m = pcall(require, 'GridHeaderCell');if ok the
 
 local dtc_skins; do local ok, m = pcall(require, 'dcs_sms_me.dtc_skins'); if ok then dtc_skins = m end end
 
-local sms_window = require('dcs_sms_me.sms_window')
-local backend    = require('dcs_sms_me.me_hotkey_backend')
-local actions    = require('dcs_sms_me.me_hotkey_actions')
+local sms_window    = require('dcs_sms_me.sms_window')
+local backend       = require('dcs_sms_me.me_hotkey_backend')
+local actions       = require('dcs_sms_me.me_hotkey_actions')
+local clearable_edit = require('dcs_sms_me.clearable_edit')
 
 local M = {}
 local W = {
     sms_window  = nil,
     grid        = nil,
+    search      = nil,  -- clearable_edit filter box
+    filter_text = '',   -- live filter (matches label / category / bound key)
     collapsed   = {},   -- category name -> true when folded shut
     selected_id = nil,  -- currently-selected action id (drives Reset selected)
     _row_meta   = {},   -- grid row index -> { kind='cat', cat=… } | { kind='action', id=… }
@@ -137,6 +140,16 @@ local function disp_key(k)
     return tostring(k):upper()
 end
 
+-- Does a row match the active filter? Plain-text (case-insensitive) substring
+-- against the label, the category, and the current bound key — so "save",
+-- "file", "ctrl+s" or "shift" all narrow the list. Empty query matches all.
+local function row_matches(row, q)
+    if q == '' then return true end
+    local hay = ((row.label or '') .. ' ' .. (row.category or '') .. ' ' ..
+                 (row.current_key or '')):lower()
+    return hay:find(q, 1, true) ~= nil
+end
+
 -- ---- capture overlay: grab the next chord, then on_done(chord)/on_cancel() ----
 local function capture_chord(on_done, on_cancel)
     local screen_w, screen_h = 1920, 1080
@@ -199,19 +212,30 @@ local function render()
     local selected_row = nil
     local e = eng(); if not e then return end
     local rows = e:rows()
+    local q = (W.filter_text or ''):lower()
+    local filtering = q ~= ''
     local r = 0
     for _, cat in ipairs(actions.CATEGORIES) do
-        local glyph = W.collapsed[cat] and '▶' or '▼'
-        pcall(function()
-            W.grid:insertRow(nil)
-            W.grid:setCell(0, r, make_cell(glyph .. '  ' .. cat, 'category'))
-            W.grid:setCell(1, r, make_cell('', 'default'))
-        end)
-        W._row_meta[r] = { kind = 'cat', cat = cat }
-        r = r + 1
-        if not W.collapsed[cat] then
-            for _, row in ipairs(rows) do
-                if row.category == cat then
+        -- Collect this category's matching rows first so an empty category is
+        -- dropped entirely while a filter is active.
+        local cat_rows = {}
+        for _, row in ipairs(rows) do
+            if row.category == cat and row_matches(row, q) then cat_rows[#cat_rows + 1] = row end
+        end
+        if not (filtering and #cat_rows == 0) then
+            -- While filtering, force-expand so matches inside a folded category
+            -- still surface.
+            local expanded = filtering or (not W.collapsed[cat])
+            local glyph = expanded and '▼' or '▶'
+            pcall(function()
+                W.grid:insertRow(nil)
+                W.grid:setCell(0, r, make_cell(glyph .. '  ' .. cat, 'category'))
+                W.grid:setCell(1, r, make_cell('', 'default'))
+            end)
+            W._row_meta[r] = { kind = 'cat', cat = cat }
+            r = r + 1
+            if expanded then
+                for _, row in ipairs(cat_rows) do
                     local style, key
                     if row.disabled then
                         style, key = 'disabled', '—'
@@ -289,6 +313,7 @@ local function row_at(self, x, y)
 end
 
 local FOOTER_H = 36
+local SEARCH_H = 30   -- search box band above the grid (22px field + gap)
 
 -- Column-0 (Action) width as a fraction of the content area; column 1 takes the
 -- rest. Shared by build_body's initial insertColumn and relayout.
@@ -300,8 +325,9 @@ end
 -- Reposition every body widget to the current content rect. Wired to
 -- sms_window's on_resize so the grid + footer track window resizes.
 local function relayout(x, y, w, h)
+    if W.search then pcall(function() W.search:set_bounds(x, y, w, 22) end) end
     if W.grid then
-        pcall(function() if W.grid.setBounds then W.grid:setBounds(x, y, w, h - FOOTER_H) end end)
+        pcall(function() if W.grid.setBounds then W.grid:setBounds(x, y + SEARCH_H, w, h - SEARCH_H - FOOTER_H) end end)
         local c0, c1 = col_widths(w)
         pcall(function()
             if W.grid.setColumnWidth then W.grid:setColumnWidth(0, c0); W.grid:setColumnWidth(1, c1) end
@@ -315,6 +341,21 @@ local function build_body()
     local raw = W.sms_window:raw()
     local x, y, w, h = W.sms_window:get_content_bounds()
     local footer_h = FOOTER_H
+
+    -- Search box at the top — filters the list by name, category or bound key.
+    W.search = clearable_edit.new(raw, {
+        on_change = function(text)
+            W.filter_text = text or ''
+            render()
+        end,
+    })
+    pcall(function()
+        if W.search then
+            W.search:set_bounds(x, y, w, 22)
+            local eb = W.search.widget and W.search:widget()
+            if eb and eb.setHintText then pcall(function() eb:setHintText('Search name or key…') end) end
+        end
+    end)
 
     if Grid and GridHeaderCell then
         W.grid = Grid.new()
@@ -332,7 +373,7 @@ local function build_body()
             pcall(function() W.grid:insertColumn(c.width, hc) end)
         end
 
-        pcall(function() if W.grid.setBounds then W.grid:setBounds(x, y, w, h - footer_h) end end)
+        pcall(function() if W.grid.setBounds then W.grid:setBounds(x, y + SEARCH_H, w, h - SEARCH_H - footer_h) end end)
 
         -- Grid's built-in onMouseDown/onMouseDoubleClick are empty stubs the
         -- construct wires to mouse + double-click events; override both.

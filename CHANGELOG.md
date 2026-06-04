@@ -132,6 +132,9 @@ This is the first tag after a long quiet period — `sms.version` had been froze
   - The **Dynamic Mission** entries ship **disabled** (greyed out, no key,
     not bindable) since ED's Dynamic Campaign is still in development — their
     defaults are pre-wired so dropping the `disabled` flag re-enables them.
+  - A **search box** filters the list by name, category or bound key
+    (`ctrl`, `shift+s`, `pan`, …); an active filter force-expands the
+    categories so matches inside collapsed groups still show.
 
 ### [0.17.0] — 2026-06-04
 
