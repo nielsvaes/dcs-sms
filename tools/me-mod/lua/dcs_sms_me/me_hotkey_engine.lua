@@ -35,6 +35,19 @@ end
 
 function Engine:_action(id) return self._by_id[id] end
 
+-- Swap the action set (user scripts added / edited / removed) WITHOUT discarding
+-- _live / _overrides / _backend. The next apply() then reconciles in place —
+-- detaching removed actions' keys, attaching new ones, leaving unchanged keys
+-- alone. Rebuilding a fresh engine instead (as the facade once did on every
+-- script save) orphans the live backend attachments — their detach tokens live
+-- in THIS engine's _live — so every save re-registered every hotkey on the
+-- toolbar window and they all stopped working.
+function Engine:set_actions(actions)
+    self._actions = actions or {}
+    self._by_id = {}
+    for _, a in ipairs(self._actions) do self._by_id[a.id] = a end
+end
+
 -- current key string, or nil when unbound. A disabled action reports no key.
 -- An empty-string key (used by keyless user scripts) is also treated as unbound.
 function Engine:current_key(id)
@@ -80,9 +93,17 @@ function Engine:_should_attach(a)
     return true
 end
 
--- Guarded closure for a backend attachment.
-local function wrap(a)
-    return function() pcall(a.invoke) end
+-- Guarded closure for a backend attachment. Late-binds to the CURRENT action by
+-- id (not a captured snapshot), so editing a script's code — which swaps the
+-- action object via set_actions but keeps the same key — takes effect on the
+-- already-attached binding with no detach/reattach, and a removed action can
+-- never fire stale.
+function Engine:_wrap(id)
+    local self_ref = self
+    return function()
+        local a = self_ref._by_id[id]
+        if a and a.invoke then pcall(a.invoke) end
+    end
 end
 
 -- Reconcile backend attachments with desired state.
@@ -114,9 +135,8 @@ function Engine:apply()
     -- attach anything desired that isn't already live
     for id, key in pairs(desired) do
         if not self._live[id] then
-            local a = self:_action(id)
             local token
-            pcall(function() token = self._backend.attach(key, wrap(a)) end)
+            pcall(function() token = self._backend.attach(key, self:_wrap(id)) end)
             self._live[id] = { key = key, token = token }
         end
     end

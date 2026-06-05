@@ -23,6 +23,20 @@ local function fake_backend()
     }
 end
 
+-- Like fake_backend but counts attach/detach calls per key, so a test can prove
+-- a re-apply does NOT re-register an unchanged binding.
+local function counting_backend()
+    local live, attaches, detaches = {}, {}, {}
+    return {
+        live = live,
+        attach = function(key, fn) live[key] = fn; attaches[key] = (attaches[key] or 0) + 1; return { key = key } end,
+        detach = function(key, token) live[key] = nil; detaches[key] = (detaches[key] or 0) + 1 end,
+        attached = function(key) return live[key] ~= nil end,
+        n_attach = function(key) return attaches[key] or 0 end,
+        n_detach = function(key) return detaches[key] or 0 end,
+    }
+end
+
 local function fake_actions()
     return {
         { id='a1', label='A1', category='C', default_key='m', ed_key=nil, invoke=function() end }, -- keyless
@@ -144,6 +158,76 @@ do
     check('empty default_key -> nothing attached', be.count() == 0)
     local rows = eng:rows()
     check('rows pass through script flag', rows[1].script == true)
+end
+
+-- set_actions: reconcile in place WITHOUT re-registering unchanged keys.
+-- Regression: scripts_changed() used to REBUILD the engine on every save, which
+-- re-attached every hotkey onto the shared toolbar window (the old engine's
+-- detach tokens were thrown away) -> all hotkeys broke. set_actions + apply must
+-- only touch what actually changed.
+do
+    local be = counting_backend()
+    local builtin = { id='b1', label='B', category='C', default_key='m', ed_key=nil, invoke=function() end }
+    local s1 = { id='script.1', label='S1', category='Scripts', default_key='k', ed_key=nil, script=true, invoke=function() end }
+    local eng = E.new({ actions = { builtin, s1 }, backend = be, overrides = {}, ed_conflicts = {}, normalize = norm })
+    eng:apply()
+    check('set_actions: m attached initially', be.attached('m'))
+    check('set_actions: k attached initially', be.attached('k'))
+    check('set_actions: m attached exactly once', be.n_attach('m') == 1)
+
+    -- add a second script -> only its key should be touched
+    local s2 = { id='script.2', label='S2', category='Scripts', default_key='j', ed_key=nil, script=true, invoke=function() end }
+    eng:set_actions({ builtin, s1, s2 })
+    eng:apply()
+    check('set_actions: added script j attached', be.attached('j'))
+    check('set_actions: m NOT re-attached', be.n_attach('m') == 1)
+    check('set_actions: k NOT re-attached', be.n_attach('k') == 1)
+    check('set_actions: m never detached', be.n_detach('m') == 0)
+
+    -- remove a script -> its key detaches, others untouched
+    eng:set_actions({ builtin, s2 })
+    eng:apply()
+    check('set_actions: removed script k detached', not be.attached('k'))
+    check('set_actions: k detached exactly once', be.n_detach('k') == 1)
+    check('set_actions: m still attached once', be.attached('m') and be.n_attach('m') == 1)
+    check('set_actions: j still attached', be.attached('j'))
+end
+
+-- set_actions preserves existing overrides (the override map is not discarded).
+do
+    local be = counting_backend()
+    local builtin = { id='b1', label='B', category='C', default_key='m', ed_key=nil, invoke=function() end }
+    local eng = E.new({ actions = { builtin }, backend = be, overrides = {}, ed_conflicts = {}, normalize = norm })
+    eng:apply()
+    eng:bind('b1', 'z')
+    local s1 = { id='script.1', label='S1', category='Scripts', default_key='k', ed_key=nil, script=true, invoke=function() end }
+    eng:set_actions({ builtin, s1 })
+    eng:apply()
+    check('set_actions preserves override: still at z', eng:current_key('b1') == 'z')
+    check('set_actions preserves override: default m not attached', not be.attached('m'))
+    check('set_actions preserves override: z not re-attached', be.n_attach('z') == 1)
+end
+
+-- Editing a script's CODE (same key) takes effect on the already-attached
+-- binding: the live closure late-binds to the CURRENT action by id, so no
+-- detach/reattach is needed and it never runs stale code.
+do
+    local be = fake_backend()   -- stores the actual fn in live[key]
+    local ran = {}
+    local s_old = { id='script.1', label='S', category='Scripts', default_key='k', ed_key=nil, script=true,
+                    invoke=function() ran.which = 'old' end }
+    local eng = E.new({ actions = { s_old }, backend = be, overrides = {}, ed_conflicts = {}, normalize = norm })
+    eng:apply()
+    local live_fn = be.live['k']
+    check('code-edit: script bound at k', type(live_fn) == 'function')
+
+    local s_new = { id='script.1', label='S', category='Scripts', default_key='k', ed_key=nil, script=true,
+                    invoke=function() ran.which = 'new' end }
+    eng:set_actions({ s_new })
+    eng:apply()
+    check('code-edit: same closure stays attached', be.live['k'] == live_fn)
+    live_fn()  -- simulate the hotkey firing
+    check('code-edit: live binding runs the EDITED code', ran.which == 'new')
 end
 
 if failures > 0 then print(failures .. ' failure(s)'); os.exit(1) end
