@@ -53,10 +53,63 @@ local function apply_code_skin(widget)
                 if st[1] and st[1].text then st[1].text.font = FONT_MONO end
             end
         end
+        -- Match the main window's scrollbars: the grid's thin dark vertical bar,
+        -- and the grid's horizontal bar recoloured to the same dark track
+        -- (0x363636) so it isn't the stock thick light-grey one. The grid horz bar
+        -- already carries proper left/right arrow images + a white thumb.
         local grid = Skin.gridSkin_Multiplayer_roleNew and Skin.gridSkin_Multiplayer_roleNew()
-        if grid and grid.skinData and grid.skinData.skins and s.skinData.skins then
-            if grid.skinData.skins.vertScrollBar then s.skinData.skins.vertScrollBar = grid.skinData.skins.vertScrollBar end
-            if grid.skinData.skins.horzScrollBar then s.skinData.skins.horzScrollBar = grid.skinData.skins.horzScrollBar end
+        local gs = grid and grid.skinData and grid.skinData.skins
+        if gs and s.skinData.skins then
+            if gs.vertScrollBar then s.skinData.skins.vertScrollBar = gs.vertScrollBar end
+            if gs.horzScrollBar then
+                -- Replicate the vanilla ME Unit List panel's horizontal bar (same
+                -- gridSkin_Multiplayer_roleNew, overridden in me_units_list_panel.dlg):
+                --   * 15px tall (maxSize/minSize.vert) → thin, not the stock thick bar
+                --   * dark 0x363636 track to match the vertical bar
+                --   * visible released arrow images (the grid's own don't render when
+                --     not hovered) + the polzunok thumb image
+                pcall(function()
+                    local HZ = 'dxgui\\skins\\skinme\\images\\buttons\\scroll\\horz\\'
+                    local hz = gs.horzScrollBar
+                    local sd = hz.skinData
+                    sd.params = sd.params or {}
+                    sd.params.maxSize = { vert = 15 }
+                    sd.params.minSize = { vert = 15 }
+                    -- Darken the WHOLE 9-slice track (not just center) — the grid
+                    -- horz bar is uniformly 0x63686b, so a center-only recolour
+                    -- leaves the lighter edges as an outline the vertical bar lacks.
+                    local relbar = sd.states and sd.states.released and sd.states.released[1]
+                    if relbar and relbar.bkg then
+                        for _, k in ipairs({
+                            'left_top','center_top','right_top',
+                            'left_center','center_center','right_center',
+                            'left_bottom','center_bottom','right_bottom',
+                        }) do
+                            relbar.bkg[k] = '0x363636ff'
+                        end
+                    end
+                    local function set_pic(btn, fname)
+                        local r = btn and btn.skinData and btn.skinData.states
+                                  and btn.skinData.states.released and btn.skinData.states.released[1]
+                        if r then r.picture = r.picture or {}; r.picture.file = HZ .. fname end
+                    end
+                    local sk = sd.skins or {}
+                    set_pic(sk.decreaseButton, 'down_normal.png')   -- left arrow
+                    set_pic(sk.increaseButton, 'up_normal.png')     -- right arrow
+                    -- Skin the thumb across ALL states with the polzunok image set,
+                    -- so hover brightens (like the vertical bar) instead of swapping
+                    -- to the grid's faded horzscroll_ME_thumb_hover image.
+                    local function set_thumb(state, fname)
+                        local r = sk.thumb and sk.thumb.skinData and sk.thumb.skinData.states
+                                  and sk.thumb.skinData.states[state] and sk.thumb.skinData.states[state][1]
+                        if r then r.bkg = r.bkg or {}; r.bkg.file = HZ .. fname end
+                    end
+                    set_thumb('released', 'polzunok_normal.png')
+                    set_thumb('hover',    'polzunok_hover.png')
+                    set_thumb('pressed',  'polzunok_pressed.png')
+                end)
+                s.skinData.skins.horzScrollBar = gs.horzScrollBar
+            end
         end
         widget:setSkin(s)
     end)
@@ -197,11 +250,13 @@ function M.open(id)
     end
     pcall(function() raw:insertWidget(W.clear_btn) end)
 
-    -- Code: multiline EditBox (monospace + main-window scrollbars)
+    -- Code: multiline EditBox (monospace + main-window scrollbars). Set multiline
+    -- FIRST — it rebuilds the scrollbar widgets, so the skin must be applied after
+    -- or our custom scrollbars get wiped by the default ones.
     W.code = EditBox.new()
-    apply_code_skin(W.code)
     pcall(function() if W.code.setMultiline then W.code:setMultiline(true) end end)
     pcall(function() if W.code.setTextWrapping then W.code:setTextWrapping(false) end end)
+    apply_code_skin(W.code)
     pcall(function() W.code:setText((s and s.code) or '') end)
     pcall(function() if W.code.setHintText then W.code:setHintText('-- Lua, runs in the ME GUI env') end end)
     pcall(function() raw:insertWidget(W.code) end)
