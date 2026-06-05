@@ -144,7 +144,6 @@ function M.open(id)
         title = W.edit_id and 'Edit Script' or 'New Script',
         size = { w = 540, h = 480 },
         min_size = { w = 440, h = 340 },
-        persist_across_new_mission = true,
         disable_undo_hotkey = true,
         on_resize = function(_, rx, ry, rw, rh) relayout(rx, ry, rw, rh) end,
     })

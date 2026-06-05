@@ -144,6 +144,9 @@ This is the first tag after a long quiet period — `sms.version` had been froze
   consumed before any binding goes live. (ED's own native keys — `a/h/s/u/o`,
   the pan arrows — are outside the mod's control and may still fire if pressed
   mid-capture.)
+- The **Hotkey Manager** window (and its script editor) now auto-close on
+  **File ▸ New / Open**, like the Prefab Manager and Mass Edit windows. They
+  had opted out of the shared `sms_window` close-on-new-mission behaviour.
 
 ### [0.19.0] — 2026-06-05
 

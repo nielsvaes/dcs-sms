@@ -419,7 +419,6 @@ function M.show()
         title = 'Hotkey Manager',
         size = { w = 480, h = 520 },
         min_size = { w = 380, h = 320 },
-        persist_across_new_mission = true,  -- hotkeys aren't mission-bound
         disable_undo_hotkey = true,
         on_resize = function(_, x, y, w, h) relayout(x, y, w, h) end,
     })
