@@ -15,6 +15,7 @@
 -- without affecting the cached Skin module copy.
 
 local Skin;  do local ok, m = pcall(require, 'Skin'); if ok then Skin = m end end
+local sms_scrollbars = require('dcs_sms_me.sms_scrollbars')
 
 local M = {}
 
@@ -134,11 +135,9 @@ function M.scroll_pane()
     local pane = Skin.scrollPane_modul_noinserts and Skin.scrollPane_modul_noinserts() or nil
     if not (pane and pane.skinData and pane.skinData.skins) then return pane end
 
-    local grid = Skin.gridSkin_Multiplayer_roleNew and Skin.gridSkin_Multiplayer_roleNew() or nil
-    if grid and grid.skinData and grid.skinData.skins and grid.skinData.skins.vertScrollBar then
-        pane.skinData.skins.vertScrollBar = grid.skinData.skins.vertScrollBar
-    end
-    return pane
+    -- Inject the grid's thin vertScrollBar (vertical only — scroll panes have no
+    -- horizontal bar) so the pane's bar matches the rest of the tool windows.
+    return sms_scrollbars.apply(pane, { horizontal = false })
 end
 
 -- Icon-bearing Static skin: clone staticSkin and inject a 64x64 picture into
