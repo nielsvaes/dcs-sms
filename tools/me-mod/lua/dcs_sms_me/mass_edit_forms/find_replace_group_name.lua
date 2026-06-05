@@ -153,7 +153,7 @@ function M.new(parent_raw, get_checked, on_after_apply)
     if Button and Button.new then
         local ok, b = pcall(Button.new)
         if ok and b then
-            skin_helper.apply(b, 'dtc_button')
+            skin_helper.apply(b, 'sms_button')
             if b.setText then pcall(b.setText, b, '< >') end
             if b.setTooltipText then
                 pcall(b.setTooltipText, b, 'Swap Find and Replace text')
@@ -168,7 +168,7 @@ function M.new(parent_raw, get_checked, on_after_apply)
     if Button and Button.new then
         local ok, b = pcall(Button.new)
         if ok and b then
-            skin_helper.apply(b, 'dtc_button')
+            skin_helper.apply(b, 'sms_button')
             if b.setText then pcall(b.setText, b, 'Replace') end
             apply_btn = add(b)
         end

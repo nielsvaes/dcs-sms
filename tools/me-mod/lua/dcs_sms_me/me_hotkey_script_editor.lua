@@ -12,11 +12,12 @@ local Button; do local ok, m = pcall(require, 'Button'); if ok then Button = m e
 local EditBox;do local ok, m = pcall(require, 'EditBox');if ok then EditBox= m end end
 local Skin;   do local ok, m = pcall(require, 'Skin');   if ok then Skin   = m end end
 
-local dtc_skins; do local ok, m = pcall(require, 'dcs_sms_me.dtc_skins'); if ok then dtc_skins = m end end
+local sms_skins; do local ok, m = pcall(require, 'dcs_sms_me.sms_skins'); if ok then sms_skins = m end end
 
 local sms_window  = require('dcs_sms_me.sms_window')
 local scripts_mod = require('dcs_sms_me.me_hotkey_scripts')
 local capture     = require('dcs_sms_me.me_hotkey_capture')
+local sms_scrollbars = require('dcs_sms_me.sms_scrollbars')
 
 local M = {}
 local W = {}  -- single editor instance
@@ -27,7 +28,7 @@ local function try_skin(widget, skin_name)
     pcall(function()
         if not (widget and widget.setSkin) then return end
         local s
-        if     skin_name == 'dtc_button' then s = dtc_skins and dtc_skins.button()
+        if     skin_name == 'sms_button' then s = sms_skins and sms_skins.button()
         else
             local fn = Skin and Skin[skin_name]
             if fn then s = fn() end
@@ -36,83 +37,15 @@ local function try_skin(widget, skin_name)
     end)
 end
 
-local FONT_MONO = 'DejaVuLGCSansMono.ttf'
-
--- Skin for the code editor: monospace font (matching the ME "DO SCRIPT" editor,
--- which clones editBoxSkin and overrides text.font to DejaVuLGCSansMono.ttf) plus
--- the main window's thin scrollbars (cloned from the grid skin) so the horizontal
--- bar matches the vertical one. editBoxSkin_ME() returns a fresh deep copy per
--- call, so these mutations are widget-local.
+-- Skin for the code editor: the shared themed editbox skin (monospace font +
+-- the main window's thin Unit-List scrollbars). themed_editbox_skin returns a
+-- fresh editBoxSkin_ME() clone per call, so this is widget-local. The call-site
+-- ordering (setMultiline BEFORE setSkin) still matters and lives at the EditBox
+-- construction below — setMultiline rebuilds the scrollbar widgets.
 local function apply_code_skin(widget)
     if not (widget and widget.setSkin) then return end
-    pcall(function()
-        local s = Skin and Skin.editBoxSkin_ME and Skin.editBoxSkin_ME()
-        if not (s and s.skinData) then return end
-        if s.skinData.states then
-            for _, st in pairs(s.skinData.states) do
-                if st[1] and st[1].text then st[1].text.font = FONT_MONO end
-            end
-        end
-        -- Match the main window's scrollbars: the grid's thin dark vertical bar,
-        -- and the grid's horizontal bar recoloured to the same dark track
-        -- (0x363636) so it isn't the stock thick light-grey one. The grid horz bar
-        -- already carries proper left/right arrow images + a white thumb.
-        local grid = Skin.gridSkin_Multiplayer_roleNew and Skin.gridSkin_Multiplayer_roleNew()
-        local gs = grid and grid.skinData and grid.skinData.skins
-        if gs and s.skinData.skins then
-            if gs.vertScrollBar then s.skinData.skins.vertScrollBar = gs.vertScrollBar end
-            if gs.horzScrollBar then
-                -- Replicate the vanilla ME Unit List panel's horizontal bar (same
-                -- gridSkin_Multiplayer_roleNew, overridden in me_units_list_panel.dlg):
-                --   * 15px tall (maxSize/minSize.vert) → thin, not the stock thick bar
-                --   * dark 0x363636 track to match the vertical bar
-                --   * visible released arrow images (the grid's own don't render when
-                --     not hovered) + the polzunok thumb image
-                pcall(function()
-                    local HZ = 'dxgui\\skins\\skinme\\images\\buttons\\scroll\\horz\\'
-                    local hz = gs.horzScrollBar
-                    local sd = hz.skinData
-                    sd.params = sd.params or {}
-                    sd.params.maxSize = { vert = 15 }
-                    sd.params.minSize = { vert = 15 }
-                    -- Darken the WHOLE 9-slice track (not just center) — the grid
-                    -- horz bar is uniformly 0x63686b, so a center-only recolour
-                    -- leaves the lighter edges as an outline the vertical bar lacks.
-                    local relbar = sd.states and sd.states.released and sd.states.released[1]
-                    if relbar and relbar.bkg then
-                        for _, k in ipairs({
-                            'left_top','center_top','right_top',
-                            'left_center','center_center','right_center',
-                            'left_bottom','center_bottom','right_bottom',
-                        }) do
-                            relbar.bkg[k] = '0x363636ff'
-                        end
-                    end
-                    local function set_pic(btn, fname)
-                        local r = btn and btn.skinData and btn.skinData.states
-                                  and btn.skinData.states.released and btn.skinData.states.released[1]
-                        if r then r.picture = r.picture or {}; r.picture.file = HZ .. fname end
-                    end
-                    local sk = sd.skins or {}
-                    set_pic(sk.decreaseButton, 'down_normal.png')   -- left arrow
-                    set_pic(sk.increaseButton, 'up_normal.png')     -- right arrow
-                    -- Skin the thumb across ALL states with the polzunok image set,
-                    -- so hover brightens (like the vertical bar) instead of swapping
-                    -- to the grid's faded horzscroll_ME_thumb_hover image.
-                    local function set_thumb(state, fname)
-                        local r = sk.thumb and sk.thumb.skinData and sk.thumb.skinData.states
-                                  and sk.thumb.skinData.states[state] and sk.thumb.skinData.states[state][1]
-                        if r then r.bkg = r.bkg or {}; r.bkg.file = HZ .. fname end
-                    end
-                    set_thumb('released', 'polzunok_normal.png')
-                    set_thumb('hover',    'polzunok_hover.png')
-                    set_thumb('pressed',  'polzunok_pressed.png')
-                end)
-                s.skinData.skins.horzScrollBar = gs.horzScrollBar
-            end
-        end
-        widget:setSkin(s)
-    end)
+    local s = sms_scrollbars.themed_editbox_skin({ mono = true })
+    if s then pcall(function() widget:setSkin(s) end) end
 end
 
 -- Reposition every widget to the current content rect. Wired to sms_window's
@@ -234,7 +167,7 @@ function M.open(id)
 
     W.capture_btn = Button.new()
     pcall(function() W.capture_btn:setText('Capture') end)
-    try_skin(W.capture_btn, 'dtc_button')
+    try_skin(W.capture_btn, 'sms_button')
     if W.capture_btn.addChangeCallback then
         W.capture_btn:addChangeCallback(function()
             capture.capture(function(chord) W.key = chord; refresh_key_label() end, function() end)
@@ -244,7 +177,7 @@ function M.open(id)
 
     W.clear_btn = Button.new()
     pcall(function() W.clear_btn:setText('Clear') end)
-    try_skin(W.clear_btn, 'dtc_button')
+    try_skin(W.clear_btn, 'sms_button')
     if W.clear_btn.addChangeCallback then
         W.clear_btn:addChangeCallback(function() W.key = ''; refresh_key_label() end)
     end
@@ -264,26 +197,26 @@ function M.open(id)
     -- Bottom row: Run | (spacer) | Save / Delete / Cancel
     W.run_btn = Button.new()
     pcall(function() W.run_btn:setText('Run') end)
-    try_skin(W.run_btn, 'dtc_button')
+    try_skin(W.run_btn, 'sms_button')
     if W.run_btn.addChangeCallback then W.run_btn:addChangeCallback(run_now) end
     pcall(function() raw:insertWidget(W.run_btn) end)
 
     W.save_btn = Button.new()
     pcall(function() W.save_btn:setText('Save') end)
-    try_skin(W.save_btn, 'dtc_button')
+    try_skin(W.save_btn, 'sms_button')
     if W.save_btn.addChangeCallback then W.save_btn:addChangeCallback(save) end
     pcall(function() raw:insertWidget(W.save_btn) end)
 
     W.del_btn = Button.new()
     pcall(function() W.del_btn:setText('Delete') end)
-    try_skin(W.del_btn, 'dtc_button')
+    try_skin(W.del_btn, 'sms_button')
     if W.del_btn.addChangeCallback then W.del_btn:addChangeCallback(delete_script) end
     pcall(function() if W.del_btn.setVisible then W.del_btn:setVisible(W.edit_id ~= nil) end end)
     pcall(function() raw:insertWidget(W.del_btn) end)
 
     W.cancel_btn = Button.new()
     pcall(function() W.cancel_btn:setText('Cancel') end)
-    try_skin(W.cancel_btn, 'dtc_button')
+    try_skin(W.cancel_btn, 'sms_button')
     if W.cancel_btn.addChangeCallback then W.cancel_btn:addChangeCallback(close) end
     pcall(function() raw:insertWidget(W.cancel_btn) end)
 

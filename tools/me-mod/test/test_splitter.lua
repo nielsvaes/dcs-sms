@@ -36,7 +36,7 @@ end
 
 package.preload['Static'] = function() return { new = new_static_stub } end
 package.preload['Skin']   = function() return setmetatable({}, { __index = function() return function() return {} end end }) end
-package.preload['dcs_sms_me.dtc_skins'] = function()
+package.preload['dcs_sms_me.sms_skins'] = function()
     return { splitter = function() return { _which = 'splitter' } end }
 end
 
@@ -66,7 +66,7 @@ do
     check('initial value applied',              s:get_value() == 100)
     check('is_dragging false initially',        s:is_dragging() == false)
     check('widget() returns the Static stub',   s:widget() == last_static)
-    check('default skin applied (dtc_splitter)', last_static._skin and last_static._skin._which == 'splitter')
+    check('default skin applied (sms_splitter)', last_static._skin and last_static._skin._which == 'splitter')
 end
 
 -- ---------------------------------------------------------------------------

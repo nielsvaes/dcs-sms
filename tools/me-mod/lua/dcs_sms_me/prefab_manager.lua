@@ -56,7 +56,7 @@ local MsgWindow;       do local ok, mod = pcall(require, 'MsgWindow');       if 
 local prefab_ops = require('dcs_sms_me.prefab_ops')
 local sms_window     = require('dcs_sms_me.sms_window')
 local undo       = require('dcs_sms_me.undo')
-local dtc_skins  = require('dcs_sms_me.dtc_skins')
+local sms_skins  = require('dcs_sms_me.sms_skins')
 local marquee_hook  = require('dcs_sms_me.marquee_hook')
 local new_mission_hook = require('dcs_sms_me.new_mission_hook')
 local airbase_detect = require('dcs_sms_me.airbase_detect')
@@ -65,11 +65,12 @@ local version       = require('dcs_sms_me.version')
 local splitter_mod  = require('dcs_sms_me.splitter')
 local clearable_edit = require('dcs_sms_me.clearable_edit')
 local prefab_naming = require('dcs_sms_me.prefab_naming')
+local sms_scrollbars = require('dcs_sms_me.sms_scrollbars')
 
 -- Apply a skin by name. Resolves in this order:
---   * 'dtc_button' / 'dtc_grid' / 'dtc_grid_header' → DTC-dialog-style skins
---     built at runtime in dtc_skins.lua. These give the small dark-blue
---     ADD/EDIT button look + the navy grid look from me_DTCnew.dlg.
+--   * 'sms_button' / 'sms_grid' / 'sms_grid_header' → the DCS-SMS house skins
+--     built at runtime in sms_skins.lua. These give the small dark-blue
+--     ADD/EDIT button look + the navy grid look (cribbed from me_DTCnew.dlg).
 --   * any other name → looked up in the Skin module, which auto-generates
 --     one function per entry in dxgui/skins/skinME/skin_names.lua (e.g.
 --     Skin.staticSkin_ME, Skin.editBoxSkin_ME).
@@ -79,16 +80,16 @@ local function try_skin(widget, skin_name)
     pcall(function()
         if not (widget and widget.setSkin) then return end
         local s
-        if     skin_name == 'dtc_button'      then s = dtc_skins.button()
-        elseif skin_name == 'dtc_grid'        then s = dtc_skins.grid()
-        elseif skin_name == 'dtc_grid_header' then s = dtc_skins.grid_header()
-        elseif skin_name == 'icon_warning'    then s = dtc_skins.icon_static('warning')
-        elseif skin_name == 'icon_question'   then s = dtc_skins.icon_static('question')
-        elseif skin_name == 'dtc_dial'        then s = dtc_skins.dial()
-        elseif skin_name == 'dtc_separator'   then s = dtc_skins.separator()
-        elseif skin_name == 'dtc_status_yellow' then s = dtc_skins.static_yellow()
-        elseif skin_name == 'dtc_status_red'    then s = dtc_skins.static_red()
-        elseif skin_name == 'dtc_status_green'  then s = dtc_skins.static_green()
+        if     skin_name == 'sms_button'      then s = sms_skins.button()
+        elseif skin_name == 'sms_grid'        then s = sms_skins.grid()
+        elseif skin_name == 'sms_grid_header' then s = sms_skins.grid_header()
+        elseif skin_name == 'icon_warning'    then s = sms_skins.icon_static('warning')
+        elseif skin_name == 'icon_question'   then s = sms_skins.icon_static('question')
+        elseif skin_name == 'sms_dial'        then s = sms_skins.dial()
+        elseif skin_name == 'sms_separator'   then s = sms_skins.separator()
+        elseif skin_name == 'sms_status_yellow' then s = sms_skins.static_yellow()
+        elseif skin_name == 'sms_status_red'    then s = sms_skins.static_red()
+        elseif skin_name == 'sms_status_green'  then s = sms_skins.static_green()
         else
             local fn = Skin[skin_name]
             if not fn then return end
@@ -139,7 +140,7 @@ local function apply_me_tree_skin(widget)
         -- unreadable on the dark window. Indices 3/4 (selected) have a
         -- 0x3c3e40ff grey bkg + off-white text. Repaint unselected text
         -- white-ish and selected bkg to the same teal-blue
-        -- (0x2da1beff) dtc_skins.grid uses for row selection.
+        -- (0x2da1beff) sms_skins.grid uses for row selection.
         local item = s.skinData.skins and s.skinData.skins.item
         local item_sd = item and item.skinData
         local rel = item_sd and item_sd.states and item_sd.states.released
@@ -150,21 +151,10 @@ local function apply_me_tree_skin(widget)
             if rel[4] and rel[4].bkg  then rel[4].bkg.center_center = '0x2da1beff' end
         end
         -- Replace the stock dark-gray scrollbars with the grid's thin
-        -- modern-blue ones so the folder browser matches the file
-        -- browser. Same trick dtc_skins.scroll_pane uses: clone the
-        -- vertScrollBar sub-skin from gridSkin_Multiplayer_roleNew and
-        -- inject it over the tree's default vertScrollBar.
-        local grid_skin = Skin_mod.gridSkin_Multiplayer_roleNew
-                          and Skin_mod.gridSkin_Multiplayer_roleNew()
-        if grid_skin and grid_skin.skinData and grid_skin.skinData.skins
-           and s.skinData.skins then
-            if grid_skin.skinData.skins.vertScrollBar then
-                s.skinData.skins.vertScrollBar = grid_skin.skinData.skins.vertScrollBar
-            end
-            if grid_skin.skinData.skins.horzScrollBar then
-                s.skinData.skins.horzScrollBar = grid_skin.skinData.skins.horzScrollBar
-            end
-        end
+        -- modern-blue ones so the folder browser matches the file browser.
+        -- The tree wants the plain grid vert+horz (no editbox-style horz
+        -- refinement), so refine_horz=false.
+        sms_scrollbars.apply(s, { refine_horz = false })
         widget:setSkin(s)
     end)
 end
@@ -1540,7 +1530,7 @@ local function show_rename_overlay(prompt, current_name, on_ok, on_cancel)
         local ok_btn = Button.new()
         ok_btn:setBounds(w - 200, h - 92, 90, 22)
         ok_btn:setText('OK')
-        try_skin(ok_btn, 'dtc_button')
+        try_skin(ok_btn, 'sms_button')
         ok_btn:addChangeCallback(function()
             local new_name = (input.getText and input:getText()) or ''
             close()
@@ -1551,7 +1541,7 @@ local function show_rename_overlay(prompt, current_name, on_ok, on_cancel)
         local cancel_btn = Button.new()
         cancel_btn:setBounds(w - 100, h - 92, 90, 22)
         cancel_btn:setText('Cancel')
-        try_skin(cancel_btn, 'dtc_button')
+        try_skin(cancel_btn, 'sms_button')
         cancel_btn:addChangeCallback(function()
             close()
             pcall(on_cancel or function() end)
@@ -2072,7 +2062,7 @@ local function open_move_modal(row)
 
     local btn_move = Button.new(); btn_move:setText('Move')
     local btn_cancel = Button.new(); btn_cancel:setText('Cancel')
-    try_skin(btn_move, 'dtc_button'); try_skin(btn_cancel, 'dtc_button')
+    try_skin(btn_move, 'sms_button'); try_skin(btn_cancel, 'sms_button')
     raw:insertWidget(btn_move);     raw:insertWidget(btn_cancel)
     btn_move:setBounds(180, 295, 80, 22)
     btn_cancel:setBounds(265, 295, 80, 22)
@@ -2270,7 +2260,7 @@ function M.show()
 
         W.save_btn = Button.new()
         W.save_btn:setText('Save')
-        try_skin(W.save_btn, 'dtc_button')
+        try_skin(W.save_btn, 'sms_button')
         W.save_btn:addChangeCallback(on_save_click)
         W.window:insertWidget(W.save_btn)
 
@@ -2290,7 +2280,7 @@ function M.show()
         end
 
         W.sep1 = Static.new()
-        try_skin(W.sep1, 'dtc_separator')
+        try_skin(W.sep1, 'sms_separator')
         W.window:insertWidget(W.sep1)
 
         -- Row 1: "Search:" label + filter input. Count of prefabs lives in
@@ -2365,7 +2355,7 @@ function M.show()
             initial  = W.tree_w,
             min      = LEFT_MIN,
             max      = 800,   -- dynamically tightened in relayout via set_range
-            skin     = 'dtc_splitter',
+            skin     = 'sms_splitter',
             on_drag  = function(new_left_w)
                 W.tree_w = new_left_w
                 pcall(function()
@@ -2481,7 +2471,7 @@ function M.show()
         -- + New folder button (below the tree, left half).
         W.new_folder_btn = Button.new()
         W.new_folder_btn:setText('+ New folder')
-        try_skin(W.new_folder_btn, 'dtc_button')
+        try_skin(W.new_folder_btn, 'sms_button')
         W.window:insertWidget(W.new_folder_btn)
         W.new_folder_btn:addChangeCallback(function() on_new_folder(W.selected_folder) end)
 
@@ -2494,7 +2484,7 @@ function M.show()
         -- here and clears the visual highlight.
         W.show_all_btn = Button.new()
         W.show_all_btn:setText('Show all')
-        try_skin(W.show_all_btn, 'dtc_button')
+        try_skin(W.show_all_btn, 'sms_button')
         W.window:insertWidget(W.show_all_btn)
         W.show_all_btn:addChangeCallback(function()
             on_folder_path('')
@@ -2510,7 +2500,7 @@ function M.show()
 
         if Grid and GridHeaderCell then
             W.grid = Grid.new()
-            try_skin(W.grid, 'dtc_grid')
+            try_skin(W.grid, 'sms_grid')
 
             -- Columns sized for the 420px content area (440 - 20px padding).
             -- Numeric counter columns are tight (35px); Name gets the lion's
@@ -2519,7 +2509,7 @@ function M.show()
             W.grid_headers = {}
             for i, c in ipairs(COLS) do
                 local hc = GridHeaderCell.new()
-                try_skin(hc, 'dtc_grid_header')
+                try_skin(hc, 'sms_grid_header')
                 if hc.setText then hc:setText(c.label) end
                 if hc.addChangeCallback then
                     local idx = i
@@ -2609,30 +2599,30 @@ function M.show()
         -- (library-wide), Rename + Delete on the right (per-selection).
         W.reload_btn = Button.new()
         W.reload_btn:setText('Reload')
-        try_skin(W.reload_btn, 'dtc_button')
+        try_skin(W.reload_btn, 'sms_button')
         W.reload_btn:addChangeCallback(on_reload_click)
         W.window:insertWidget(W.reload_btn)
 
         W.undo_btn = Button.new()
         W.undo_btn:setText('Undo last placement')
-        try_skin(W.undo_btn, 'dtc_button')
+        try_skin(W.undo_btn, 'sms_button')
         W.undo_btn:addChangeCallback(on_undo_click)
         W.window:insertWidget(W.undo_btn)
 
         W.rename_btn = Button.new()
         W.rename_btn:setText('Rename')
-        try_skin(W.rename_btn, 'dtc_button')
+        try_skin(W.rename_btn, 'sms_button')
         W.rename_btn:addChangeCallback(on_rename_click)
         W.window:insertWidget(W.rename_btn)
 
         W.delete_btn = Button.new()
         W.delete_btn:setText('Delete')
-        try_skin(W.delete_btn, 'dtc_button')
+        try_skin(W.delete_btn, 'sms_button')
         W.delete_btn:addChangeCallback(on_delete_click)
         W.window:insertWidget(W.delete_btn)
 
         W.sep2 = Static.new()
-        try_skin(W.sep2, 'dtc_separator')
+        try_skin(W.sep2, 'sms_separator')
         W.window:insertWidget(W.sep2)
 
         -- Row 4: Country picker.
@@ -2648,7 +2638,7 @@ function M.show()
         if ToggleButton then
             W.country_filter_btn = ToggleButton.new()
             W.country_filter_btn:setText('Combat')
-            try_skin(W.country_filter_btn, 'dtc_button')
+            try_skin(W.country_filter_btn, 'sms_button')
             if W.country_filter_btn.addChangeCallback then
                 pcall(function()
                     W.country_filter_btn:addChangeCallback(function(self)
@@ -2700,7 +2690,7 @@ function M.show()
             W.window:insertWidget(W.rotation_spin)
 
             W.rotation_dial = Dial.new()
-            try_skin(W.rotation_dial, 'dtc_dial')
+            try_skin(W.rotation_dial, 'sms_dial')
             pcall(function() W.rotation_dial:setRange(0, 359) end)
             pcall(function() W.rotation_dial:setStep(1) end)
             pcall(function() W.rotation_dial:setPageStep(10) end)
@@ -2770,7 +2760,7 @@ function M.show()
         pcall(function()
             if ToggleButton and ToggleButton.new then
                 local t = ToggleButton.new()
-                try_skin(t, 'dtc_button')
+                try_skin(t, 'sms_button')
                 if t.setText  then pcall(t.setText,  t, 'Keep Num') end
                 if t.setState then pcall(t.setState, t, true) end
                 if t.setTooltipText then
@@ -2812,13 +2802,13 @@ function M.show()
 
         W.place_origin_btn = Button.new()
         W.place_origin_btn:setText('Place at original location')
-        try_skin(W.place_origin_btn, 'dtc_button')
+        try_skin(W.place_origin_btn, 'sms_button')
         W.place_origin_btn:addChangeCallback(on_place_origin_click)
         W.window:insertWidget(W.place_origin_btn)
 
         W.place_click_btn = Button.new()
         W.place_click_btn:setText('Place at click')
-        try_skin(W.place_click_btn, 'dtc_button')
+        try_skin(W.place_click_btn, 'sms_button')
         W.place_click_btn:addChangeCallback(on_place_click)
         W.window:insertWidget(W.place_click_btn)
 

@@ -1,7 +1,11 @@
--- dtc_skins.lua — DTC-style skin builders.
+-- sms_skins.lua — the DCS-SMS house skin set for tool windows.
 --
--- The DTC editor dialog (modules/dialogs/me_DTCnew.dlg) uses a different
--- skin set than the rest of the dxgui Skin module:
+-- These are the native Mission Editor skins the tool windows use throughout,
+-- built at runtime. Most are stock dxgui skins with a small tweak, or a skin
+-- the dxgui Skin module doesn't expose by name so we clone-and-patch it. (The
+-- builders were first cribbed from the editor's DTC dialog, hence the
+-- me_DTCnew.dlg / me_managerDTC.dlg citations below — but there is nothing
+-- DTC-specific about them; they are just the editor's normal look.)
 --
 --   * Buttons:   inline override of toggleButtonSkin_ME with btnmean2.png
 --                (small dark-blue rectangular buttons — the ADD/EDIT look).
@@ -15,21 +19,22 @@
 -- without affecting the cached Skin module copy.
 
 local Skin;  do local ok, m = pcall(require, 'Skin'); if ok then Skin = m end end
+local sms_scrollbars = require('dcs_sms_me.sms_scrollbars')
 
 local M = {}
 
 -- Recursively swap any `["file"] = "...btn_ME_all_*.png"` reference inside
--- the cloned toggleButtonSkin_ME for the DTC btnmean2 image. Same image is
+-- the cloned toggleButtonSkin_ME for the btnmean2 button image. Same image is
 -- used across all states; per-state color modulation in the base skin
 -- (released = full alpha, hover = brighter, pressed = dimmer, etc.) is
 -- preserved automatically.
-local DTC_BTN_IMAGE = 'dxgui\\skins\\skinme\\images\\m1\\buttons\\btnmini\\btnmean2.png'
+local BTN_IMAGE = 'dxgui\\skins\\skinme\\images\\m1\\buttons\\btnmini\\btnmean2.png'
 
 local function swap_btn_image(node)
     if type(node) ~= 'table' then return end
     for k, v in pairs(node) do
         if k == 'file' and type(v) == 'string' and v:find('btn_ME_all') then
-            node[k] = DTC_BTN_IMAGE
+            node[k] = BTN_IMAGE
         elseif type(v) == 'table' then
             swap_btn_image(v)
         end
@@ -72,7 +77,7 @@ function M.button_off() return button_colored('0xff5555ff') end  -- red
 -- 0xRRGGBBAA hex color in the skin tree by an alpha multiplier (default
 -- 0.75 = 75% opacity). Used for inline clear-buttons (clearable_edit)
 -- and other affordances that should sit visually softer than the
--- standard chunky dtc_button.
+-- standard chunky sms_button.
 local function scale_hex_alpha(hex_str, factor)
     if type(hex_str) ~= 'string' or #hex_str ~= 10 then return hex_str end
     if not hex_str:match('^0x%x+$') then return hex_str end
@@ -107,7 +112,7 @@ end
 function M.grid()
     local s = Skin.gridSkin_Multiplayer_roleNew and Skin.gridSkin_Multiplayer_roleNew() or nil
     if not s then return nil end
-    -- The DTC dialog overrides selectionColor inline. Copy that here so a
+    -- me_DTCnew.dlg overrides selectionColor inline. Copy that here so a
     -- selected row gets the teal-blue highlight rather than the default
     -- grayish 0x3c3e40.
     if s.skinData and s.skinData.params then
@@ -134,11 +139,9 @@ function M.scroll_pane()
     local pane = Skin.scrollPane_modul_noinserts and Skin.scrollPane_modul_noinserts() or nil
     if not (pane and pane.skinData and pane.skinData.skins) then return pane end
 
-    local grid = Skin.gridSkin_Multiplayer_roleNew and Skin.gridSkin_Multiplayer_roleNew() or nil
-    if grid and grid.skinData and grid.skinData.skins and grid.skinData.skins.vertScrollBar then
-        pane.skinData.skins.vertScrollBar = grid.skinData.skins.vertScrollBar
-    end
-    return pane
+    -- Inject the grid's thin vertScrollBar (vertical only — scroll panes have no
+    -- horizontal bar) so the pane's bar matches the rest of the tool windows.
+    return sms_scrollbars.apply(pane, { horizontal = false })
 end
 
 -- Icon-bearing Static skin: clone staticSkin and inject a 64x64 picture into
@@ -171,7 +174,7 @@ function M.static_green()  return static_colored('0x44dd44ff') end  -- placement
 -- Coalition-tinted Static variants. Render the cell's text in the
 -- coalition color so the group treeview's Country column visually echoes
 -- the colored marker the country ComboList already shows on its
--- ListBoxItem entries. Hex values match the existing dtc palette where
+-- ListBoxItem entries. Hex values match the existing house palette where
 -- possible (red = static_red's hex; neutral = static_yellow's hex).
 function M.coal_red()     return static_colored('0xff5555ff') end
 function M.coal_blue()    return static_colored('0x5599ffff') end

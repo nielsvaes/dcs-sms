@@ -39,10 +39,10 @@ package.preload['Skin'] = function()
     return setmetatable({}, { __index = function(_, k) return function() return { _skin_name = k } end end })
 end
 
--- dtc_skins is consulted directly by skin_helper for dtc_* names; return
+-- sms_skins is consulted directly by skin_helper for sms_* names; return
 -- a stub that yields { _which = name } so tests can identify which color
 -- the tri-state button asked for.
-package.preload['dcs_sms_me.dtc_skins'] = function()
+package.preload['dcs_sms_me.sms_skins'] = function()
     return {
         button     = function() return { _which = 'leave' } end,
         button_on  = function() return { _which = 'on'    } end,
@@ -98,7 +98,7 @@ do
     check('parent.insertWidget was called',           #parent._inserted == 1)
     check('initial state = LEAVE',                    tsb:get_state() == tsb_mod.STATE_LEAVE)
     check('initial text = "Hidden on map —"',         last_button._text == 'Hidden on map —')
-    check('initial skin = leave (dtc_button)',        last_button._skin and last_button._skin._which == 'leave')
+    check('initial skin = leave (sms_button)',        last_button._skin and last_button._skin._which == 'leave')
     check('widget() returns underlying button',       tsb:widget() == last_button)
 end
 

@@ -107,6 +107,17 @@ This is the first tag after a long quiet period — `sms.version` had been froze
 
 ### [0.19.1] — 2026-06-05
 
+**Changed**
+- Internal: extracted the themed scrollbar skinning (the thin dark vertical bar
+  + the ME-Unit-List-matched horizontal bar) into a shared
+  `dcs_sms_me/sms_scrollbars.lua` module. The script editor, the Prefab Manager
+  folder tree, and the scroll-pane skin now share one implementation. No
+  visible change — future tool windows get matching scrollbars from one call.
+- Internal: renamed `dtc_skins` → `sms_skins` and its skin-name prefix
+  `dtc_*` → `sms_*` (`sms_button`, `sms_grid`, …). The module was never
+  DTC-specific — it is the native-editor skin set the tool windows use
+  throughout; the old name was a historical artifact. No behaviour change.
+
 **Fixed**
 - **ME Hotkeys: creating or editing a user script no longer breaks every hotkey.**
   Saving a script rebuilt the hotkey engine from scratch and re-registered every

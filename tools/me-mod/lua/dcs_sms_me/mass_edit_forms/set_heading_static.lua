@@ -267,7 +267,7 @@ function M.new(parent_raw, get_checked, on_after_apply, _get_categories)
     if Button and Button.new then
         local ok, b = pcall(Button.new)
         if ok and b then
-            skin_helper.apply(b, 'dtc_button')
+            skin_helper.apply(b, 'sms_button')
             if b.setText then pcall(b.setText, b, 'Set Heading') end
             abs_btn = add(b)
         end
@@ -288,7 +288,7 @@ function M.new(parent_raw, get_checked, on_after_apply, _get_categories)
     if Button and Button.new then
         local ok, b = pcall(Button.new)
         if ok and b then
-            skin_helper.apply(b, 'dtc_button')
+            skin_helper.apply(b, 'sms_button')
             if b.setText then pcall(b.setText, b, 'Set Heading') end
             del_btn = add(b)
         end
@@ -301,7 +301,7 @@ function M.new(parent_raw, get_checked, on_after_apply, _get_categories)
     if Button and Button.new then
         local ok, b = pcall(Button.new)
         if ok and b then
-            skin_helper.apply(b, 'dtc_button')
+            skin_helper.apply(b, 'sms_button')
             if b.setText then pcall(b.setText, b, 'Random') end
             if b.setTooltipText then
                 pcall(b.setTooltipText, b, 'Each checked static gets its own random heading (0–360°)')

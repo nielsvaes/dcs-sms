@@ -40,7 +40,7 @@
 --                      the pane to the RIGHT of the splitter — dragging
 --                      the splitter right shrinks that pane.) Default: false.
 --     opts.skin      : skin name to apply to the Static (default
---                      'dtc_splitter' if available, else nil).
+--                      'sms_splitter' if available, else nil).
 --     opts.on_drag   : function(new_value) called on every mouse-move
 --                      while dragging. Synchronous; the callback is
 --                      free to mutate layout state and call relayout.
@@ -67,7 +67,7 @@ function M.new(parent_raw, opts)
     local ok, s = pcall(Static.new, '')
     if not (ok and s) then return nil end
 
-    local skin = opts.skin or 'dtc_splitter'
+    local skin = opts.skin or 'sms_splitter'
     if skin then skin_helper.apply(s, skin) end
 
     if parent_raw and parent_raw.insertWidget then

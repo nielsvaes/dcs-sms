@@ -40,9 +40,9 @@ local M = {}
 -- previously duplicated in window.lua and group_tools.lua.
 local SEVERITY_SKIN = {
     info     = 'staticSkin_ME',
-    success  = 'dtc_status_green',
-    warning  = 'dtc_status_yellow',
-    error    = 'dtc_status_red',
+    success  = 'sms_status_green',
+    warning  = 'sms_status_yellow',
+    error    = 'sms_status_red',
 }
 
 -- Map a severity string to its skin name. Unknown / nil severities fall
@@ -119,7 +119,7 @@ local Skin;          do local ok, mod = pcall(require, 'Skin');          if ok t
 local Gui;           do local ok, mod = pcall(require, 'dxgui');         if ok then Gui           = mod end end
 local UpdateManager; do local ok, mod = pcall(require, 'UpdateManager'); if ok then UpdateManager = mod end end
 
-local dtc_skins;        do local ok, mod = pcall(require, 'dcs_sms_me.dtc_skins');        if ok then dtc_skins        = mod end end
+local sms_skins;        do local ok, mod = pcall(require, 'dcs_sms_me.sms_skins');        if ok then sms_skins        = mod end end
 local version          = require('dcs_sms_me.version')
 local undo;             do local ok, mod = pcall(require, 'dcs_sms_me.undo');             if ok then undo             = mod end end
 local new_mission_hook; do local ok, mod = pcall(require, 'dcs_sms_me.new_mission_hook'); if ok then new_mission_hook = mod end end
@@ -145,10 +145,10 @@ local function try_skin(widget, skin_name)
     pcall(function()
         if not (widget and widget.setSkin) then return end
         local s
-        if     skin_name == 'dtc_status_green'  then s = dtc_skins.static_green()
-        elseif skin_name == 'dtc_status_yellow' then s = dtc_skins.static_yellow()
-        elseif skin_name == 'dtc_status_red'    then s = dtc_skins.static_red()
-        elseif skin_name == 'dtc_separator'     then s = dtc_skins.separator()
+        if     skin_name == 'sms_status_green'  then s = sms_skins.static_green()
+        elseif skin_name == 'sms_status_yellow' then s = sms_skins.static_yellow()
+        elseif skin_name == 'sms_status_red'    then s = sms_skins.static_red()
+        elseif skin_name == 'sms_separator'     then s = sms_skins.separator()
         else
             local fn = Skin and Skin[skin_name]
             if not fn then return end
@@ -265,7 +265,7 @@ function SMSWindow.new(opts)
     -- the layout doesn't actually overlap).
     local sep = Static.new()
     pcall(function() if win.insertWidget then win:insertWidget(sep) end end)
-    try_skin(sep, 'dtc_separator')
+    try_skin(sep, 'sms_separator')
     self._sep = sep
 
     local status = Static.new('')

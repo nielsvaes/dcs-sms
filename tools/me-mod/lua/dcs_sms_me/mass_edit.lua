@@ -105,7 +105,7 @@ local W = {
         airbase  = { key = 'name',  dir = 'asc' },
     },
     form_panels = { group = {}, unit = {}, waypoint = {}, zone = {}, drawing = {}, airbase = {}, static = {} },
-    -- Per-scope thin horizontal separator widgets (Static + dtc_separator
+    -- Per-scope thin horizontal separator widgets (Static + sms_separator
     -- skin) drawn between consecutive form panels. Length is always
     -- #form_panels[scope] - 1 (zero when the scope has 0 or 1 forms);
     -- shown/hidden along with the active scope's form stack.
@@ -117,7 +117,7 @@ local W = {
     categories     = {},
     -- country (table reference) → 'red' | 'blue' | 'neutral'. Built by
     -- rebuild_pool from the mission tree; the group-scope treeview's
-    -- Country column applies the matching dtc_coal_* skin per row.
+    -- Country column applies the matching sms_coal_* skin per row.
     country_to_side = {},
     widgets = {
         scope_tabs   = {},
@@ -146,13 +146,13 @@ local SCOPES = { 'group', 'unit', 'static', 'waypoint', 'zone', 'drawing', 'airb
 -- standard disabled appearance.
 local DISABLED_SCOPES = { waypoint = true, zone = true, drawing = true }
 
--- Map a coalition side → dtc-coalition-skin name for the Coalition and
+-- Map a coalition side → sms-coalition-skin name for the Coalition and
 -- Country cells in group scope. Unknown sides fall back to staticSkin_ME
 -- (no tint).
 local COALITION_CELL_SKIN = {
-    red     = 'dtc_coal_red',
-    blue    = 'dtc_coal_blue',
-    neutral = 'dtc_coal_neutral',
+    red     = 'sms_coal_red',
+    blue    = 'sms_coal_blue',
+    neutral = 'sms_coal_neutral',
 }
 
 -- ---------------------------------------------------------------------------
@@ -338,9 +338,9 @@ local function set_tab_state(tab, state)
     -- Skin-swap drives the visual: dxgui's ToggleButton renderer doesn't
     -- pick a distinct visual for sticky-on, so a single skin can't
     -- distinguish active/inactive when the mouse is off the tab. Active
-    -- tabs get dtc_tab (gold-on-cream every state); inactive get dtc_tab_off
+    -- tabs get sms_tab (gold-on-cream every state); inactive get sms_tab_off
     -- (text-only every state).
-    skin_helper.apply(tab, on and 'dtc_tab' or 'dtc_tab_off')
+    skin_helper.apply(tab, on and 'sms_tab' or 'sms_tab_off')
     if tab.setState then
         _set_state_internal = true
         pcall(tab.setState, tab, on)
@@ -659,7 +659,7 @@ local function build_tree_widget()
 
     local ok_grid, grid = pcall(Grid.new)
     if not (ok_grid and grid) then return end
-    skin_helper.apply(grid, 'dtc_grid')
+    skin_helper.apply(grid, 'sms_grid')
     if grid.setBounds then pcall(grid.setBounds, grid, 8, 72, 430, 460) end
 
     W.widgets.tree_headers = {}
@@ -667,7 +667,7 @@ local function build_tree_widget()
     for i, c in ipairs(cols) do
         local ok_hc, hc = pcall(GridHeaderCell.new)
         if ok_hc and hc then
-            skin_helper.apply(hc, 'dtc_grid_header')
+            skin_helper.apply(hc, 'sms_grid_header')
             if hc.setText then pcall(hc.setText, hc, c.label) end
             if c.key ~= 'check' and hc.addChangeCallback then
                 local key = c.key
@@ -1164,7 +1164,7 @@ local function build_window()
     if Button and Button.new then
         local ok, b = pcall(Button.new)
         if ok and b then
-            skin_helper.apply(b, 'dtc_button')
+            skin_helper.apply(b, 'sms_button')
             if b.setText then pcall(b.setText, b, 'Refresh') end
             if b.addMouseDownCallback then pcall(b.addMouseDownCallback, b, on_refresh_clicked) end
             pcall(raw.insertWidget, raw, b)
@@ -1225,7 +1225,7 @@ local function build_window()
         if not (Button and Button.new) then return nil end
         local ok, b = pcall(Button.new)
         if not (ok and b) then return nil end
-        skin_helper.apply(b, 'dtc_button')
+        skin_helper.apply(b, 'sms_button')
         if b.setText then pcall(b.setText, b, label) end
         if b.addMouseDownCallback then pcall(b.addMouseDownCallback, b, cb) end
         pcall(raw.insertWidget, raw, b)
@@ -1341,11 +1341,11 @@ local function build_window()
     if ScrollPane and ScrollPane.new then
         local ok_sp, sp = pcall(ScrollPane.new)
         if ok_sp and sp then
-            -- dtc_scroll_pane = me_managerDTC.dlg's noinserts pane background
+            -- sms_scroll_pane = me_managerDTC.dlg's noinserts pane background
             -- + grid4mulnew's thin "tools" scrollbar (the lighter look the
             -- treeview uses). Plain scrollPane_modul_noinserts ships with
             -- the dark-gray vertScrollBarSkinSV which clashes.
-            skin_helper.apply(sp, 'dtc_scroll_pane')
+            skin_helper.apply(sp, 'sms_scroll_pane')
             pcall(raw.insertWidget, raw, sp)
             W.widgets.form_scroll = sp
             form_parent = sp
@@ -1368,7 +1368,7 @@ local function build_window()
         initial  = LAYOUT.FORM_PANE_W,
         min      = LAYOUT.FORM_PANE_MIN_W,
         max      = LAYOUT.FORM_PANE_MAX_W,
-        skin     = 'dtc_splitter',
+        skin     = 'sms_splitter',
         invert   = true,  -- dragging RIGHT shrinks the right (form) pane
         on_drag  = function(new_w)
             LAYOUT.FORM_PANE_W = new_w
@@ -1398,7 +1398,7 @@ local function build_window()
             if Static and Static.new then
                 local ok, s = pcall(Static.new, '')
                 if ok and s then
-                    skin_helper.apply(s, 'dtc_separator')
+                    skin_helper.apply(s, 'sms_separator')
                     pcall(form_parent.insertWidget, form_parent, s)
                     if s.setVisible then pcall(s.setVisible, s, false) end
                     seps[#seps + 1] = s
