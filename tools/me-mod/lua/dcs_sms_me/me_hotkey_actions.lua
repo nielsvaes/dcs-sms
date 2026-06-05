@@ -11,7 +11,7 @@ local M = {}
 -- Display/group order for the UI. DCS-SMS (this mod's own tools) leads; the next
 -- three are toolbar-driven; the rest mirror the ME main-menu bar (File / Edit …).
 M.CATEGORIES = {
-    'DCS-SMS',
+    'DCS-SMS', 'Scripts',
     'Map/Selection', 'Object-add', 'Panel',
     'File', 'Edit', 'View', 'Flight', 'Campaign', 'Dynamic Mission', 'Misc',
 }

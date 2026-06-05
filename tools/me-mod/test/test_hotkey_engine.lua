@@ -129,5 +129,22 @@ do
     check('collision: y still attached after winner reset', be.attached('y'))
 end
 
+-- empty default_key is treated as unbound (used by keyless user scripts)
+do
+    local be = fake_backend()
+    local eng = E.new({
+        actions = {
+            { id='sx', label='ScriptX', category='Scripts', default_key='', ed_key=nil, script=true, invoke=function() end },
+        },
+        backend = be, overrides = {}, ed_conflicts = {}, normalize = norm,
+    })
+    eng:apply()
+    check('empty default_key -> current_key nil', eng:current_key('sx') == nil)
+    check('empty default_key -> not modified', eng:is_modified('sx') == false)
+    check('empty default_key -> nothing attached', be.count() == 0)
+    local rows = eng:rows()
+    check('rows pass through script flag', rows[1].script == true)
+end
+
 if failures > 0 then print(failures .. ' failure(s)'); os.exit(1) end
 print('All me_hotkey_engine tests passed.')

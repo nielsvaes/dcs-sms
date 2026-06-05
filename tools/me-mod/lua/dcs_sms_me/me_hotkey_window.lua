@@ -33,6 +33,7 @@ local sms_window    = require('dcs_sms_me.sms_window')
 local backend       = require('dcs_sms_me.me_hotkey_backend')
 local actions       = require('dcs_sms_me.me_hotkey_actions')
 local clearable_edit = require('dcs_sms_me.clearable_edit')
+local capture       = require('dcs_sms_me.me_hotkey_capture')
 
 local M = {}
 local W = {
@@ -150,43 +151,6 @@ local function row_matches(row, q)
     return hay:find(q, 1, true) ~= nil
 end
 
--- ---- capture overlay: grab the next chord, then on_done(chord)/on_cancel() ----
-local function capture_chord(on_done, on_cancel)
-    local screen_w, screen_h = 1920, 1080
-    pcall(function() screen_w, screen_h = Gui.GetWindowSize() end)
-    local w, h = 360, 120
-    local overlay, cb
-    local state = backend.new_chord_state()
-    local done = false
-    local function teardown()
-        if done then return end
-        done = true
-        W._capture_teardown = nil
-        pcall(function() if cb and Gui and Gui.RemoveKeyboardCallback then Gui.RemoveKeyboardCallback(cb) end end)
-        pcall(function() if overlay and overlay.setVisible then overlay:setVisible(false) end end)
-    end
-    W._capture_teardown = teardown
-    pcall(function()
-        overlay = Window.new((screen_w - w) / 2, (screen_h - h) / 2, w, h, 'Press a key…')
-        overlay:setSkin((Skin.windowSkinME and Skin.windowSkinME()) or Skin.windowSkin())
-        overlay:setVisible(true); overlay:setZOrder(260)
-        pcall(function() overlay.onClose = function() teardown(); pcall(on_cancel or function() end) end end)
-        local lbl = Static.new()
-        lbl:setBounds(16, 16, w - 32, 40)
-        lbl:setText('Press a key (or Esc to cancel)…')
-        try_skin(lbl, 'staticSkin_ME')
-        overlay:insertWidget(lbl)
-        cb = function(keyName, keyState)
-            if keyName == 'escape' and keyState == 'down' then
-                teardown(); pcall(on_cancel or function() end); return
-            end
-            local chord = backend.match_chord(state, keyName, keyState)
-            if chord then teardown(); pcall(function() on_done(chord) end) end
-        end
-        if Gui and Gui.AddKeyboardCallback then Gui.AddKeyboardCallback(cb) end
-    end)
-end
-
 -- ---- status + render ----
 
 local function set_hint()
@@ -222,7 +186,10 @@ local function render()
         for _, row in ipairs(rows) do
             if row.category == cat and row_matches(row, q) then cat_rows[#cat_rows + 1] = row end
         end
-        if not (filtering and #cat_rows == 0) then
+        -- Hide a category with no rows: always for Scripts (it's empty until you
+        -- add one), and for any category while a filter is active.
+        local hide_empty = (#cat_rows == 0) and (filtering or cat == 'Scripts')
+        if not hide_empty then
             -- While filtering, force-expand so matches inside a folded category
             -- still surface.
             local expanded = filtering or (not W.collapsed[cat])
@@ -248,7 +215,7 @@ local function render()
                         W.grid:setCell(0, r, make_cell(row.label, style, row.label))
                         W.grid:setCell(1, r, make_cell(key, row.disabled and 'disabled' or 'default'))
                     end)
-                    W._row_meta[r] = { kind = 'action', id = row.id, disabled = row.disabled }
+                    W._row_meta[r] = { kind = 'action', id = row.id, disabled = row.disabled, script = row.script }
                     if (not row.disabled) and row.id == W.selected_id then selected_row = r end
                     r = r + 1
                 end
@@ -266,7 +233,7 @@ end
 local function start_capture(id)
     local e = eng(); if not e then return end
     W.selected_id = id
-    capture_chord(function(chord)
+    capture.capture(function(chord)
         local res = e:bind(id, chord)
         pcall(function() facade().persist() end)
         render()
@@ -284,6 +251,10 @@ end
 local function reset_selected()
     if not W.selected_id then
         if W.sms_window then W.sms_window:flash_status('Select a row first.', 'info') end
+        return
+    end
+    if tostring(W.selected_id):match('^script%.') then
+        if W.sms_window then W.sms_window:flash_status('Scripts are edited from the editor (double-click).', 'info') end
         return
     end
     local e = eng(); if not e then return end
@@ -335,6 +306,7 @@ local function relayout(x, y, w, h)
     end
     if W.reset_sel_btn then pcall(function() W.reset_sel_btn:setBounds(x, y + h - 28, 150, 22) end) end
     if W.reset_all_btn then pcall(function() W.reset_all_btn:setBounds(x + 160, y + h - 28, 110, 22) end) end
+    if W.new_script_btn then pcall(function() W.new_script_btn:setBounds(x + 278, y + h - 28, 130, 22) end) end
 end
 
 local function build_body()
@@ -392,9 +364,12 @@ local function build_body()
         W.grid.onMouseDoubleClick = function(self, mx, my, button)
             if button ~= 1 then return end
             local meta = row_at(self, mx, my)
-            -- Category collapse is handled by the single-click that precedes the
-            -- double; only enabled action rows act on the double (open capture).
-            if meta and meta.kind == 'action' and not meta.disabled then start_capture(meta.id) end
+            if not (meta and meta.kind == 'action' and not meta.disabled) then return end
+            if meta.script then
+                facade().open_script_editor(meta.id)
+            else
+                start_capture(meta.id)
+            end
         end
 
         render()
@@ -426,10 +401,19 @@ local function build_body()
         W.reset_all_btn:addChangeCallback(function() reset_all() end)
     end
     pcall(function() if raw and raw.insertWidget then raw:insertWidget(W.reset_all_btn) end end)
+
+    W.new_script_btn = Button.new()
+    pcall(function() if W.new_script_btn.setBounds then W.new_script_btn:setBounds(x + 278, y + h - 28, 130, 22) end end)
+    if W.new_script_btn.setText then W.new_script_btn:setText('+ New Script') end
+    try_skin(W.new_script_btn, 'dtc_button')
+    if W.new_script_btn.addChangeCallback then
+        W.new_script_btn:addChangeCallback(function() facade().open_script_editor(nil) end)
+    end
+    pcall(function() if raw and raw.insertWidget then raw:insertWidget(W.new_script_btn) end end)
 end
 
 function M.show()
-    if W._capture_teardown then pcall(W._capture_teardown) end
+    capture.teardown()
     if W.sms_window then W.sms_window:show(); render(); set_hint(); return end
     W.sms_window = sms_window.new({
         title = 'ME Hotkeys',
@@ -446,12 +430,18 @@ function M.show()
 end
 
 function M.hide()
-    if W._capture_teardown then pcall(W._capture_teardown) end
+    capture.teardown()
     if W.sms_window then W.sms_window:hide() end
 end
 
 function M.toggle()
     if W.sms_window then W.sms_window:toggle(); render(); set_hint() else M.show() end
+end
+
+-- Re-render the list from the (possibly rebuilt) engine. Called by the facade
+-- after a script is added/edited/deleted. No-op if the window isn't built.
+function M.refresh()
+    if W.sms_window and W.grid then render() end
 end
 
 return M

@@ -35,22 +35,25 @@ end
 
 function Engine:_action(id) return self._by_id[id] end
 
--- current key string, or nil when unbound. A disabled action reports no key
--- (and ignores any override) so it's inert until re-enabled — its real
--- default_key field is left untouched so re-enabling restores it.
+-- current key string, or nil when unbound. A disabled action reports no key.
+-- An empty-string key (used by keyless user scripts) is also treated as unbound.
 function Engine:current_key(id)
     local a = self:_action(id)
     if a and a.disabled then return nil end
     local ov = self._overrides[id]
     if ov == '' then return nil end
     if ov ~= nil then return ov end
-    return a and a.default_key or nil
+    local dk = a and a.default_key
+    if dk == nil or dk == '' then return nil end
+    return dk
 end
 
 function Engine:default_key(id)
     local a = self:_action(id)
     if a and a.disabled then return nil end
-    return a and a.default_key or nil
+    local dk = a and a.default_key
+    if dk == nil or dk == '' then return nil end
+    return dk
 end
 
 function Engine:is_modified(id)
@@ -171,6 +174,7 @@ function Engine:rows()
             default_key = a.default_key,
             modified = self:is_modified(a.id),
             disabled = a.disabled or false,
+            script = a.script or false,
         }
     end
     return rows
