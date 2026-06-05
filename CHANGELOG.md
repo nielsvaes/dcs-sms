@@ -127,6 +127,11 @@ This is the first tag after a long quiet period — `sms.version` had been froze
   stopped firing. The facade now reconciles the live engine in place (only the
   changed script's key is touched), and bindings late-bind to the current action
   so editing a script's code takes effect without a re-register.
+- `install-me-mod` (and therefore `dev-reload`) now **prunes** files left in the
+  installed module directory that are no longer part of the mod, so a file
+  renamed or removed between versions (e.g. `dtc_skins.lua` → `sms_skins.lua`)
+  no longer lingers in the DCS install. Each removal is reported as
+  `removed stale <path>`.
 
 ### [0.19.0] — 2026-06-05
 

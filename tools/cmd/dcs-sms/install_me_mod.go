@@ -88,6 +88,19 @@ func installMeModCmd(args []string, stdout, stderr io.Writer) int {
 	}
 	fmt.Fprintf(stdout, "copied %s/* → %s\n", memod.ModuleDirName, moduleDst)
 
+	// Prune files left by an earlier version that were renamed or removed in this
+	// one (the module dir is owned entirely by the installer, so anything not in
+	// the embed is stale). Without this, a rename like dtc_skins.lua ->
+	// sms_skins.lua would leave the old file lingering and loadable.
+	removed, err := pruneStaleEmbedDir(memod.FS, memod.ModuleDirName, moduleDst)
+	if err != nil {
+		fmt.Fprintln(stderr, "dcs-sms install-me-mod: prune stale modules:", err)
+		return 3
+	}
+	for _, rel := range removed {
+		fmt.Fprintf(stdout, "removed stale %s\n", rel)
+	}
+
 	// Step 2: patch MissionEditor.lua (idempotent).
 	meSrc, err := os.ReadFile(meFile)
 	if err != nil {
@@ -158,4 +171,55 @@ func copyEmbedDir(efs fs.FS, srcSubdir, dstDir string) error {
 		}
 		return os.WriteFile(target, data, 0o644)
 	})
+}
+
+// pruneStaleEmbedDir removes any file or directory under dstDir that is not part
+// of the embed subtree srcSubdir, so files renamed or deleted between versions
+// don't linger in the install. The module directory is owned entirely by the
+// installer (pure source, no user/runtime files), so deleting orphans is safe.
+// Returns the slash-separated relative paths removed.
+func pruneStaleEmbedDir(efs fs.FS, srcSubdir, dstDir string) ([]string, error) {
+	expected := map[string]bool{}
+	if err := fs.WalkDir(efs, srcSubdir, func(path string, d fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		rel := strings.TrimPrefix(strings.TrimPrefix(path, srcSubdir), "/")
+		if rel != "" {
+			expected[filepath.FromSlash(rel)] = true
+		}
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+
+	var removed []string
+	if err := filepath.WalkDir(dstDir, func(path string, d fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if path == dstDir {
+			return nil
+		}
+		rel, err := filepath.Rel(dstDir, path)
+		if err != nil {
+			return err
+		}
+		if expected[rel] {
+			return nil
+		}
+		// Orphan: not in the embed. RemoveAll handles both files and dirs; for a
+		// dir, skip descending since it's gone.
+		if err := os.RemoveAll(path); err != nil {
+			return err
+		}
+		removed = append(removed, filepath.ToSlash(rel))
+		if d.IsDir() {
+			return filepath.SkipDir
+		}
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+	return removed, nil
 }

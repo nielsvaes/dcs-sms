@@ -109,6 +109,52 @@ func TestInstallMeMod_Idempotent_ReinstallPreservesPatch(t *testing.T) {
 	}
 }
 
+func TestInstallMeMod_PrunesStaleModuleFiles(t *testing.T) {
+	install := newFakeInstall(t)
+	var stdout, stderr bytes.Buffer
+	if code := installMeModCmd([]string{"--dcs-path", install, "--no-config-save"}, &stdout, &stderr); code != 0 {
+		t.Fatalf("first install exit %d, stderr: %s", code, stderr.String())
+	}
+	moduleDir := filepath.Join(install, "MissionEditor", "modules", "dcs_sms_me")
+
+	// Simulate files left by a previous version that were renamed or deleted in
+	// this one (e.g. dtc_skins.lua after the dtc_skins->sms_skins rename), one at
+	// the top level and one inside a real subdirectory.
+	staleTop := filepath.Join(moduleDir, "dtc_skins.lua")
+	if err := os.WriteFile(staleTop, []byte("-- stale orphan\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	staleSub := filepath.Join(moduleDir, "verbs", "ghost_verbs.lua")
+	if err := os.WriteFile(staleSub, []byte("-- stale orphan in subdir\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Re-install: orphans must be pruned, real files must remain.
+	stdout.Reset()
+	stderr.Reset()
+	if code := installMeModCmd([]string{"--dcs-path", install, "--no-config-save"}, &stdout, &stderr); code != 0 {
+		t.Fatalf("re-install exit %d, stderr: %s", code, stderr.String())
+	}
+	if _, err := os.Stat(staleTop); !os.IsNotExist(err) {
+		t.Errorf("top-level stale file should have been pruned, stat err: %v", err)
+	}
+	if _, err := os.Stat(staleSub); !os.IsNotExist(err) {
+		t.Errorf("stale file in subdir should have been pruned, stat err: %v", err)
+	}
+	// A real embedded file must survive.
+	if _, err := os.Stat(filepath.Join(moduleDir, "init.lua")); err != nil {
+		t.Errorf("real module file init.lua missing after prune: %v", err)
+	}
+	// The verbs dir is real (still has real files), so it must survive.
+	if info, err := os.Stat(filepath.Join(moduleDir, "verbs")); err != nil || !info.IsDir() {
+		t.Errorf("real verbs dir should survive prune: %v", err)
+	}
+	// The removal should be reported to the user.
+	if !strings.Contains(stdout.String(), "dtc_skins.lua") {
+		t.Errorf("expected pruned file to be reported in stdout, got: %s", stdout.String())
+	}
+}
+
 func TestInstallMeMod_ReturnsExitCode5WhenDirNotWritable(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("Windows: read-only chmod doesn't block writes the same way; covered by manual testing")
