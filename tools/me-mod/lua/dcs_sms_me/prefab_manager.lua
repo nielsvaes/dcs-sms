@@ -65,6 +65,7 @@ local version       = require('dcs_sms_me.version')
 local splitter_mod  = require('dcs_sms_me.splitter')
 local clearable_edit = require('dcs_sms_me.clearable_edit')
 local prefab_naming = require('dcs_sms_me.prefab_naming')
+local sms_scrollbars = require('dcs_sms_me.sms_scrollbars')
 
 -- Apply a skin by name. Resolves in this order:
 --   * 'dtc_button' / 'dtc_grid' / 'dtc_grid_header' → DTC-dialog-style skins
@@ -150,21 +151,10 @@ local function apply_me_tree_skin(widget)
             if rel[4] and rel[4].bkg  then rel[4].bkg.center_center = '0x2da1beff' end
         end
         -- Replace the stock dark-gray scrollbars with the grid's thin
-        -- modern-blue ones so the folder browser matches the file
-        -- browser. Same trick dtc_skins.scroll_pane uses: clone the
-        -- vertScrollBar sub-skin from gridSkin_Multiplayer_roleNew and
-        -- inject it over the tree's default vertScrollBar.
-        local grid_skin = Skin_mod.gridSkin_Multiplayer_roleNew
-                          and Skin_mod.gridSkin_Multiplayer_roleNew()
-        if grid_skin and grid_skin.skinData and grid_skin.skinData.skins
-           and s.skinData.skins then
-            if grid_skin.skinData.skins.vertScrollBar then
-                s.skinData.skins.vertScrollBar = grid_skin.skinData.skins.vertScrollBar
-            end
-            if grid_skin.skinData.skins.horzScrollBar then
-                s.skinData.skins.horzScrollBar = grid_skin.skinData.skins.horzScrollBar
-            end
-        end
+        -- modern-blue ones so the folder browser matches the file browser.
+        -- The tree wants the plain grid vert+horz (no editbox-style horz
+        -- refinement), so refine_horz=false.
+        sms_scrollbars.apply(s, { refine_horz = false })
         widget:setSkin(s)
     end)
 end
