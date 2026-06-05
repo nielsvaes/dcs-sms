@@ -57,6 +57,18 @@ function M.persist()
     pcall(function() config.save(M.engine():overrides_delta()) end)
 end
 
+-- Suspend / resume all live hotkey bindings. The capture overlay calls these
+-- around a capture so the key the user presses to assign a binding doesn't also
+-- fire whatever that key is currently bound to. resume re-attaches from the
+-- current override state, so a bind made during the capture is honoured.
+function M.suspend_bindings()
+    pcall(function() M.engine():detach_all() end)
+end
+
+function M.resume_bindings()
+    pcall(function() M.engine():apply() end)
+end
+
 function M.toggle_window()
     local ok, err = pcall(function() require('dcs_sms_me.me_hotkey_window').toggle() end)
     if not ok then log.write('sms.me', log.ERROR, 'ME Hotkeys window failed: ' .. tostring(err)) end

@@ -13,6 +13,15 @@ local Gui;    do local ok, m = pcall(require, 'dxgui');  if ok then Gui    = m e
 
 local backend = require('dcs_sms_me.me_hotkey_backend')
 
+-- Lazy facade accessor for suspend/resume_bindings. Lazy (not a load-time
+-- require) so there's no cycle — the facade pulls in the script editor, which
+-- pulls in this module.
+local function facade()
+    local ok, m = pcall(require, 'dcs_sms_me.me_hotkeys')
+    if ok then return m end
+    return nil
+end
+
 local M = {}
 M._teardown = nil
 
@@ -29,9 +38,16 @@ function M.capture(on_done, on_cancel)
         M._teardown = nil
         pcall(function() if cb and Gui and Gui.RemoveKeyboardCallback then Gui.RemoveKeyboardCallback(cb) end end)
         pcall(function() if overlay and overlay.setVisible then overlay:setVisible(false) end end)
+        -- Re-attach the hotkeys we suspended for the capture (runs on every exit
+        -- path: captured, Esc, window-closed, or force-teardown).
+        pcall(function() local f = facade(); if f and f.resume_bindings then f.resume_bindings() end end)
     end
     M._teardown = teardown
-    pcall(function()
+    -- Suspend every live hotkey while the overlay is up so the key the user
+    -- presses to assign a binding doesn't also fire its current action.
+    pcall(function() local f = facade(); if f and f.suspend_bindings then f.suspend_bindings() end end)
+    local registered = false
+    local ok = pcall(function()
         overlay = Window.new((screen_w - w) / 2, (screen_h - h) / 2, w, h, 'Press a key…')
         overlay:setSkin((Skin.windowSkinME and Skin.windowSkinME()) or Skin.windowSkin())
         overlay:setVisible(true); overlay:setZOrder(260)
@@ -48,8 +64,11 @@ function M.capture(on_done, on_cancel)
             local chord = backend.match_chord(state, keyName, keyState)
             if chord then teardown(); pcall(function() on_done(chord) end) end
         end
-        if Gui and Gui.AddKeyboardCallback then Gui.AddKeyboardCallback(cb) end
+        if Gui and Gui.AddKeyboardCallback then Gui.AddKeyboardCallback(cb); registered = true end
     end)
+    -- If the overlay or keyboard hook couldn't be set up, don't strand the
+    -- hotkeys in the suspended state — tear down (which resumes) right away.
+    if not (ok and registered) then teardown() end
 end
 
 -- Force-close any active capture overlay (no-op if none).

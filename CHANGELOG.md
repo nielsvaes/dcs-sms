@@ -132,6 +132,14 @@ This is the first tag after a long quiet period — `sms.version` had been froze
   renamed or removed between versions (e.g. `dtc_skins.lua` → `sms_skins.lua`)
   no longer lingers in the DCS install. Each removal is reported as
   `removed stale <path>`.
+- **ME Hotkeys: capturing a new key no longer also fires the bound action.**
+  The "press a key" capture overlay observed keys but left the live hotkey
+  bindings attached, so the key you pressed to assign a binding (e.g. while
+  rebinding Multi Select) also triggered whatever it was currently bound to.
+  All managed hotkeys are now suspended for the duration of a capture and
+  re-attached when it closes. (ED's own native keys — `a/h/s/u/o`, the pan
+  arrows — are outside the mod's control and may still fire if pressed
+  mid-capture.)
 
 ### [0.19.0] — 2026-06-05
 

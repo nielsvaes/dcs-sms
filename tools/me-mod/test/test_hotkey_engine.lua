@@ -230,5 +230,34 @@ do
     check('code-edit: live binding runs the EDITED code', ran.which == 'new')
 end
 
+-- detach_all suspends every live binding (used while the capture overlay is up,
+-- so the key being captured doesn't also fire its current action), and a later
+-- apply() restores them from the current override state.
+do
+    local eng, be = new_engine()
+    eng:apply()
+    check('suspend: keyless m attached before detach_all', be.attached('m'))
+    eng:detach_all()
+    check('suspend: m detached after detach_all', not be.attached('m'))
+    check('suspend: nothing attached after detach_all', be.count() == 0)
+    check('suspend: _live cleared', next(eng._live) == nil)
+    eng:apply()
+    check('resume: m re-attached after apply', be.attached('m'))
+end
+
+-- detach_all on an engine with overrides detaches the override key too, and
+-- resume restores the override (not the default).
+do
+    local eng, be = new_engine()
+    eng:apply()
+    eng:bind('a2', 'z')                 -- override native a2 to 'z'
+    check('suspend(override): z attached before', be.attached('z'))
+    eng:detach_all()
+    check('suspend(override): z detached', not be.attached('z'))
+    eng:apply()
+    check('resume(override): z restored', be.attached('z'))
+    check('resume(override): default a still not attached', not be.attached('a'))
+end
+
 if failures > 0 then print(failures .. ' failure(s)'); os.exit(1) end
 print('All me_hotkey_engine tests passed.')

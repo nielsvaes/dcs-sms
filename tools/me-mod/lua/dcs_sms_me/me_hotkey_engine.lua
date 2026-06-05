@@ -142,6 +142,18 @@ function Engine:apply()
     end
 end
 
+-- Detach every live binding from the backend and forget them. Used to suspend
+-- all hotkeys while the capture overlay is up (so the key being captured can't
+-- also fire its current action); a following apply() re-attaches from the
+-- current override state. Idempotent — a second call is a no-op.
+function Engine:detach_all()
+    if not self._backend then return end
+    for id, rec in pairs(self._live) do
+        pcall(function() self._backend.detach(rec.key, rec.token) end)
+        self._live[id] = nil
+    end
+end
+
 -- Set override (clearing it when the key equals the default), then re-apply.
 -- Returns { displaced = { id=, label= } | { ed = label } | nil }.
 function Engine:bind(id, key)
