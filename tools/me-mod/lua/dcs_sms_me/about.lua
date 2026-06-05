@@ -5,8 +5,8 @@
 -- The dialog is a single-instance Window with a Static logo, a few Static
 -- text labels, and a Close button. The logo is rendered by skinning the
 -- Static with a clone of staticSkin where released[1].picture points at
--- the bundled logo.png — the same trick dtc_skins.icon_static uses for
--- its warning/question glyphs (see dtc_skins.lua line 64+).
+-- the bundled logo.png — the same trick sms_skins.icon_static uses for
+-- its warning/question glyphs (see sms_skins.lua line 64+).
 
 local M = {}
 
@@ -19,7 +19,7 @@ local W = nil
 local LOGO_FILE = './MissionEditor/modules/dcs_sms_me/logo.png'
 
 -- Build a Static skin whose released state renders the bundled logo.png
--- at its natural 128x128 size. Pattern mirrors dtc_skins.icon_static.
+-- at its natural 128x128 size. Pattern mirrors sms_skins.icon_static.
 local function build_logo_skin()
     local Skin = require('Skin')
     local s = Skin.staticSkin and Skin.staticSkin() or nil

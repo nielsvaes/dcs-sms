@@ -4,7 +4,7 @@
 
 **Goal:** Extract the duplicated themed-scrollbar dxgui skinning into one shared `dcs_sms_me/sms_scrollbars.lua` module and refactor the three existing call sites onto it, behaviour-identical.
 
-**Architecture:** A new pure module exposes `M.apply(skin, opts)` (inject grid vert + optional horz + optional Unit-List refinement) and `M.themed_editbox_skin(opts)` (mono editbox convenience). The script editor, prefab-manager tree skin, and `dtc_skins.scroll_pane()` each replace their inline scrollbar injection with a call. A unit test stubs `Skin` and asserts the table mutations.
+**Architecture:** A new pure module exposes `M.apply(skin, opts)` (inject grid vert + optional horz + optional Unit-List refinement) and `M.themed_editbox_skin(opts)` (mono editbox convenience). The script editor, prefab-manager tree skin, and `sms_skins.scroll_pane()` each replace their inline scrollbar injection with a call. A unit test stubs `Skin` and asserts the table mutations.
 
 **Tech Stack:** Lua 5.1, dxgui skin tables. Tests run via `tools/me-mod/test/run-tests.ps1` (`lua` is not on PATH).
 
@@ -33,7 +33,7 @@ Create `tools/me-mod/lua/dcs_sms_me/sms_scrollbars.lua` with exactly this conten
 -- horizontal bar refined to 15px tall with a dark 9-slice track, visible arrow
 -- images, and a polzunok thumb that brightens on hover. This module is the one
 -- home for that recipe; previously it was hand-built inline and duplicated
--- across me_hotkey_script_editor.lua, prefab_manager.lua, and dtc_skins.lua.
+-- across me_hotkey_script_editor.lua, prefab_manager.lua, and sms_skins.lua.
 --
 -- Skin gotchas (all guarded so a future DCS build degrades instead of crashing):
 --   * Skin.gridSkin_Multiplayer_roleNew() / editBoxSkin_ME() return a FRESH deep
@@ -326,7 +326,7 @@ do
         '../lua/dcs_sms_me/sms_scrollbars.lua',
         '../lua/dcs_sms_me/me_hotkey_script_editor.lua',
         '../lua/dcs_sms_me/prefab_manager.lua',
-        '../lua/dcs_sms_me/dtc_skins.lua',
+        '../lua/dcs_sms_me/sms_skins.lua',
     }) do
         local fn, err = loadfile(rel)
         check('parses: ' .. rel, fn ~= nil, err)
@@ -488,7 +488,7 @@ Find this exact block (inside `apply_me_tree_skin`, around lines 152–167):
 ```lua
         -- Replace the stock dark-gray scrollbars with the grid's thin
         -- modern-blue ones so the folder browser matches the file
-        -- browser. Same trick dtc_skins.scroll_pane uses: clone the
+        -- browser. Same trick sms_skins.scroll_pane uses: clone the
         -- vertScrollBar sub-skin from gridSkin_Multiplayer_roleNew and
         -- inject it over the tree's default vertScrollBar.
         local grid_skin = Skin_mod.gridSkin_Multiplayer_roleNew
@@ -545,10 +545,10 @@ EOF
 
 ---
 
-### Task 4: Refactor `dtc_skins.scroll_pane()` onto the module
+### Task 4: Refactor `sms_skins.scroll_pane()` onto the module
 
 **Files:**
-- Modify: `tools/me-mod/lua/dcs_sms_me/dtc_skins.lua`
+- Modify: `tools/me-mod/lua/dcs_sms_me/sms_skins.lua`
 
 **Depends on:** Task 1.
 
@@ -598,9 +598,9 @@ end
 
 - [ ] **Step 3: Verify the file still parses + suite green**
 
-Run: `cd tools/me-mod/test && pwsh -File run-tests.ps1 2>&1 | Select-String -Pattern 'dtc_skins.lua|skin_helper|^FAIL|failure\(s\)'`
+Run: `cd tools/me-mod/test && pwsh -File run-tests.ps1 2>&1 | Select-String -Pattern 'sms_skins.lua|skin_helper|^FAIL|failure\(s\)'`
 
-Expected: a `PASS parses: ../lua/dcs_sms_me/dtc_skins.lua` line, the `test_skin_helper` suite still passing, and no `FAIL` lines, no `failure(s)`.
+Expected: a `PASS parses: ../lua/dcs_sms_me/sms_skins.lua` line, the `test_skin_helper` suite still passing, and no `FAIL` lines, no `failure(s)`.
 
 - [ ] **Step 4: Verify the build still compiles**
 
@@ -611,9 +611,9 @@ Expected: exits 0, no output.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add tools/me-mod/lua/dcs_sms_me/dtc_skins.lua
+git add tools/me-mod/lua/dcs_sms_me/sms_skins.lua
 git commit -m "$(cat <<'EOF'
-refactor(me-mod): dtc_skins.scroll_pane delegates to sms_scrollbars
+refactor(me-mod): sms_skins.scroll_pane delegates to sms_scrollbars
 
 Replaces the inline grid vertScrollBar injection with
 sms_scrollbars.apply(pane, {horizontal=false}). Vertical-only, identical
@@ -670,7 +670,7 @@ Insert a new entry between `## ME-mod` and `### [0.19.0] — 2026-06-05`, so it 
 - Internal: extracted the themed scrollbar skinning (the thin dark vertical bar
   + the ME-Unit-List-matched horizontal bar) into a shared
   `dcs_sms_me/sms_scrollbars.lua` module. The script editor, the Prefab Manager
-  folder tree, and the DTC scroll-pane skin now share one implementation. No
+  folder tree, and the scroll-pane skin now share one implementation. No
   visible change — future tool windows get matching scrollbars from one call.
 
 ### [0.19.0] — 2026-06-05
@@ -687,7 +687,7 @@ In `tools/me-mod/AGENTS.md`, find the `sms_window.lua` row:
 Insert a new row immediately after it:
 
 ```markdown
-| `sms_scrollbars.lua` | Reusable themed-scrollbar skin helper. `M.apply(skin, opts)` injects the grid's thin dark vertScrollBar (+ optional horzScrollBar, optionally refined to the vanilla ME Unit-List look) into any widget skin; `M.themed_editbox_skin({mono=true})` returns a ready code-editor skin. Used by `me_hotkey_script_editor.lua`, `prefab_manager.lua` (tree), and `dtc_skins.scroll_pane()`. |
+| `sms_scrollbars.lua` | Reusable themed-scrollbar skin helper. `M.apply(skin, opts)` injects the grid's thin dark vertScrollBar (+ optional horzScrollBar, optionally refined to the vanilla ME Unit-List look) into any widget skin; `M.themed_editbox_skin({mono=true})` returns a ready code-editor skin. Used by `me_hotkey_script_editor.lua`, `prefab_manager.lua` (tree), and `sms_skins.scroll_pane()`. |
 ```
 
 - [ ] **Step 4: Verify the docs are coherent (no build/test needed)**
@@ -716,7 +716,7 @@ EOF
 - New module `sms_scrollbars.lua` with `M.apply` + `M.themed_editbox_skin` → Task 1. ✓
 - Refactor script editor → Task 2. ✓
 - Refactor prefab manager tree → Task 3. ✓
-- Refactor `dtc_skins.scroll_pane()` → Task 4. ✓
+- Refactor `sms_skins.scroll_pane()` → Task 4. ✓
 - Unit test → Task 1 (Steps 2–5). ✓
 - Doc sync (AGENTS.md §2.2, CHANGELOG, version bump) → Task 5. ✓
 - Part B dropped → not in plan. ✓

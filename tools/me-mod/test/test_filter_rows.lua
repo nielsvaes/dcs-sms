@@ -32,7 +32,7 @@ package.preload['lfs']            = function() return { dir = function() return 
 package.preload['dcs_sms_me.log']        = function() return { write = function() end, INFO = 0, ERROR = 0, WARNING = 0 } end
 package.preload['dcs_sms_me.prefab_ops'] = function() return { scan_dir = function() return {} end, save_selection = function() return false, 'stub' end, exists = function() return false end } end
 package.preload['dcs_sms_me.selection']  = function() return {} end
-package.preload['dcs_sms_me.dtc_skins']  = function()
+package.preload['dcs_sms_me.sms_skins']  = function()
     return {
         button = function() return nil end,
         grid = function() return nil end,

@@ -160,7 +160,7 @@ do
         '../lua/dcs_sms_me/sms_scrollbars.lua',
         '../lua/dcs_sms_me/me_hotkey_script_editor.lua',
         '../lua/dcs_sms_me/prefab_manager.lua',
-        '../lua/dcs_sms_me/dtc_skins.lua',
+        '../lua/dcs_sms_me/sms_skins.lua',
     }) do
         local fn, err = loadfile(rel)
         check('parses: ' .. rel, fn ~= nil, err)

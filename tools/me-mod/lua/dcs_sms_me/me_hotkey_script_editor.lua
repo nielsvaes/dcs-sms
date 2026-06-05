@@ -12,7 +12,7 @@ local Button; do local ok, m = pcall(require, 'Button'); if ok then Button = m e
 local EditBox;do local ok, m = pcall(require, 'EditBox');if ok then EditBox= m end end
 local Skin;   do local ok, m = pcall(require, 'Skin');   if ok then Skin   = m end end
 
-local dtc_skins; do local ok, m = pcall(require, 'dcs_sms_me.dtc_skins'); if ok then dtc_skins = m end end
+local sms_skins; do local ok, m = pcall(require, 'dcs_sms_me.sms_skins'); if ok then sms_skins = m end end
 
 local sms_window  = require('dcs_sms_me.sms_window')
 local scripts_mod = require('dcs_sms_me.me_hotkey_scripts')
@@ -28,7 +28,7 @@ local function try_skin(widget, skin_name)
     pcall(function()
         if not (widget and widget.setSkin) then return end
         local s
-        if     skin_name == 'dtc_button' then s = dtc_skins and dtc_skins.button()
+        if     skin_name == 'sms_button' then s = sms_skins and sms_skins.button()
         else
             local fn = Skin and Skin[skin_name]
             if fn then s = fn() end
@@ -167,7 +167,7 @@ function M.open(id)
 
     W.capture_btn = Button.new()
     pcall(function() W.capture_btn:setText('Capture') end)
-    try_skin(W.capture_btn, 'dtc_button')
+    try_skin(W.capture_btn, 'sms_button')
     if W.capture_btn.addChangeCallback then
         W.capture_btn:addChangeCallback(function()
             capture.capture(function(chord) W.key = chord; refresh_key_label() end, function() end)
@@ -177,7 +177,7 @@ function M.open(id)
 
     W.clear_btn = Button.new()
     pcall(function() W.clear_btn:setText('Clear') end)
-    try_skin(W.clear_btn, 'dtc_button')
+    try_skin(W.clear_btn, 'sms_button')
     if W.clear_btn.addChangeCallback then
         W.clear_btn:addChangeCallback(function() W.key = ''; refresh_key_label() end)
     end
@@ -197,26 +197,26 @@ function M.open(id)
     -- Bottom row: Run | (spacer) | Save / Delete / Cancel
     W.run_btn = Button.new()
     pcall(function() W.run_btn:setText('Run') end)
-    try_skin(W.run_btn, 'dtc_button')
+    try_skin(W.run_btn, 'sms_button')
     if W.run_btn.addChangeCallback then W.run_btn:addChangeCallback(run_now) end
     pcall(function() raw:insertWidget(W.run_btn) end)
 
     W.save_btn = Button.new()
     pcall(function() W.save_btn:setText('Save') end)
-    try_skin(W.save_btn, 'dtc_button')
+    try_skin(W.save_btn, 'sms_button')
     if W.save_btn.addChangeCallback then W.save_btn:addChangeCallback(save) end
     pcall(function() raw:insertWidget(W.save_btn) end)
 
     W.del_btn = Button.new()
     pcall(function() W.del_btn:setText('Delete') end)
-    try_skin(W.del_btn, 'dtc_button')
+    try_skin(W.del_btn, 'sms_button')
     if W.del_btn.addChangeCallback then W.del_btn:addChangeCallback(delete_script) end
     pcall(function() if W.del_btn.setVisible then W.del_btn:setVisible(W.edit_id ~= nil) end end)
     pcall(function() raw:insertWidget(W.del_btn) end)
 
     W.cancel_btn = Button.new()
     pcall(function() W.cancel_btn:setText('Cancel') end)
-    try_skin(W.cancel_btn, 'dtc_button')
+    try_skin(W.cancel_btn, 'sms_button')
     if W.cancel_btn.addChangeCallback then W.cancel_btn:addChangeCallback(close) end
     pcall(function() raw:insertWidget(W.cancel_btn) end)
 

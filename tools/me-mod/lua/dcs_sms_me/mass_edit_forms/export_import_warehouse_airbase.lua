@@ -198,7 +198,7 @@ function M.new(parent_raw, get_checked, on_after_apply, _get_categories)
 
     if Button and Button.new then
         local ok, b = pcall(Button.new); if ok and b then
-            skin_helper.apply(b, 'dtc_button')
+            skin_helper.apply(b, 'sms_button')
             if b.setText then pcall(b.setText, b, 'Save') end
             save_btn = add(b)
         end
@@ -221,12 +221,12 @@ function M.new(parent_raw, get_checked, on_after_apply, _get_categories)
 
     if Button and Button.new then
         local ok, b = pcall(Button.new); if ok and b then
-            skin_helper.apply(b, 'dtc_button')
+            skin_helper.apply(b, 'sms_button')
             if b.setText then pcall(b.setText, b, 'Delete') end
             delete_btn = add(b)
         end
         local ok2, b2 = pcall(Button.new); if ok2 and b2 then
-            skin_helper.apply(b2, 'dtc_button')
+            skin_helper.apply(b2, 'sms_button')
             if b2.setText then pcall(b2.setText, b2, 'Apply') end
             apply_btn = add(b2)
         end

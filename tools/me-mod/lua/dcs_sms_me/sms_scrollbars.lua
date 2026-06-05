@@ -5,7 +5,7 @@
 -- horizontal bar refined to 15px tall with a dark 9-slice track, visible arrow
 -- images, and a polzunok thumb that brightens on hover. This module is the one
 -- home for that recipe; previously it was hand-built inline and duplicated
--- across me_hotkey_script_editor.lua, prefab_manager.lua, and dtc_skins.lua.
+-- across me_hotkey_script_editor.lua, prefab_manager.lua, and sms_skins.lua.
 --
 -- Skin gotchas (all guarded so a future DCS build degrades instead of crashing):
 --   * Skin.gridSkin_Multiplayer_roleNew() / editBoxSkin_ME() return a FRESH deep

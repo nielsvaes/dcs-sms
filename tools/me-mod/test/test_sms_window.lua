@@ -18,14 +18,14 @@ local sw = require('dcs_sms_me.sms_window')
 assert(sw._validate_severity('info')    == 'staticSkin_ME',   "info -> staticSkin_ME")
 print('PASS validate_severity(info) = staticSkin_ME')
 
-assert(sw._validate_severity('success') == 'dtc_status_green',  "success -> dtc_status_green")
-print('PASS validate_severity(success) = dtc_status_green')
+assert(sw._validate_severity('success') == 'sms_status_green',  "success -> sms_status_green")
+print('PASS validate_severity(success) = sms_status_green')
 
-assert(sw._validate_severity('warning') == 'dtc_status_yellow', "warning -> dtc_status_yellow")
-print('PASS validate_severity(warning) = dtc_status_yellow')
+assert(sw._validate_severity('warning') == 'sms_status_yellow', "warning -> sms_status_yellow")
+print('PASS validate_severity(warning) = sms_status_yellow')
 
-assert(sw._validate_severity('error')   == 'dtc_status_red',    "error -> dtc_status_red")
-print('PASS validate_severity(error) = dtc_status_red')
+assert(sw._validate_severity('error')   == 'sms_status_red',    "error -> sms_status_red")
+print('PASS validate_severity(error) = sms_status_red')
 
 -- Unknown severity falls back to info skin.
 assert(sw._validate_severity('bogus') == 'staticSkin_ME', "unknown -> info fallback")

@@ -19,7 +19,7 @@
 --     opts.initial_text : default ''. Initial value (and on_change fires
 --                         only on user input afterwards, not on this).
 --     opts.skin         : EditBox skin name. Default 'editBoxSkin_ME'.
---     opts.clear_skin   : Clear button skin. Default 'dtc_button_translucent'
+--     opts.clear_skin   : Clear button skin. Default 'sms_button_translucent'
 --                         (75% opacity so the × sits visually softer
 --                         inside the editbox instead of dominating).
 --     opts.clear_glyph  : Text shown on the clear button. Default '×'.
@@ -55,7 +55,7 @@ function M.new(parent_raw, opts)
     if Button and Button.new then
         local ok_b, b = pcall(Button.new)
         if ok_b and b then
-            skin_helper.apply(b, opts.clear_skin or 'dtc_button_translucent')
+            skin_helper.apply(b, opts.clear_skin or 'sms_button_translucent')
             if b.setText then pcall(b.setText, b, opts.clear_glyph or '×') end
             if b.setTooltipText then pcall(b.setTooltipText, b, 'Clear') end
             if parent_raw and parent_raw.insertWidget then

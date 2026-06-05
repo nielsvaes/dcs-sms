@@ -42,9 +42,9 @@ local STATE_SUFFIX = {
 }
 
 local STATE_SKIN = {
-    [M.STATE_LEAVE] = 'dtc_button',
-    [M.STATE_ON]    = 'dtc_button_on',
-    [M.STATE_OFF]   = 'dtc_button_off',
+    [M.STATE_LEAVE] = 'sms_button',
+    [M.STATE_ON]    = 'sms_button_on',
+    [M.STATE_OFF]   = 'sms_button_off',
 }
 
 -- Exposed for tests / external callers that want to render the suffix
@@ -88,7 +88,7 @@ function M.new(parent_raw, label)
         if self._btn.setText then
             pcall(self._btn.setText, self._btn, M.compose_text(self._label, state))
         end
-        skin_helper.apply(self._btn, STATE_SKIN[state] or 'dtc_button')
+        skin_helper.apply(self._btn, STATE_SKIN[state] or 'sms_button')
         if self._on_change then pcall(self._on_change, self, state) end
     end
 

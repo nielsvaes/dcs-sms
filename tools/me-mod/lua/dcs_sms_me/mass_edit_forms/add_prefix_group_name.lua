@@ -148,7 +148,7 @@ function M.new(parent_raw, get_checked, on_after_apply)
     if Button and Button.new then
         local ok, b = pcall(Button.new)
         if ok and b then
-            skin_helper.apply(b, 'dtc_button')
+            skin_helper.apply(b, 'sms_button')
             if b.setText then pcall(b.setText, b, 'Add') end
             apply_btn = add(b)
         end

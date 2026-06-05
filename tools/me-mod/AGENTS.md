@@ -168,7 +168,7 @@ You do **not** have:
 | `marquee_hook.lua` | Monkey-patches the ME's selection-rect handler so we observe the most recent rect. |
 | `new_mission_hook.lua` | Monkey-patches `File > New` / `File > Open` so any open Prefab Manager window auto-hides. |
 | `sms_window.lua` | Reusable handle/factory for tool windows — branded title bar, footer status bar, resize clamp, Ctrl+Z to undo bus, File-New auto-hide. The Prefab Manager rides on it; future tool windows should too. |
-| `sms_scrollbars.lua` | Reusable themed-scrollbar skin helper. `M.apply(skin, opts)` injects the grid's thin dark vertScrollBar (+ optional horzScrollBar, optionally refined to the vanilla ME Unit-List look) into any widget skin; `M.themed_editbox_skin({mono=true})` returns a ready code-editor skin. Used by `me_hotkey_script_editor.lua`, `prefab_manager.lua` (tree), and `dtc_skins.scroll_pane()`. |
+| `sms_scrollbars.lua` | Reusable themed-scrollbar skin helper. `M.apply(skin, opts)` injects the grid's thin dark vertScrollBar (+ optional horzScrollBar, optionally refined to the vanilla ME Unit-List look) into any widget skin; `M.themed_editbox_skin({mono=true})` returns a ready code-editor skin. Used by `me_hotkey_script_editor.lua`, `prefab_manager.lua` (tree), and `sms_skins.scroll_pane()`. |
 | `me_hotkeys.lua` | Facade/singleton — builds the engine from registry actions **+ user scripts** (`me_hotkey_scripts.to_actions()`) + saved overrides + backend, applies on bootstrap, exposes `toggle_window()`, `scripts_changed()`, `open_script_editor()`. |
 | `me_hotkey_actions.lua` | Bindable-action registry: id/label/category/default_key/ed_key + lazy `invoke` thunks + the ED-native conflict map. Invokes fire ED's own `me_toolbar.toolbarCallback(toggleButton…)` / `me_map_window.onChange_…` entry points — NOT guessed `panel_*`/`freeCamera` modules (those are locals inside `me_toolbar.lua`, not requirable). `ed_key` is set ONLY for keys ED itself binds and that actually fire (a/h/s/u/o, pan up/down/right); left, +/-, Alt+Y and all keyless actions are `ed_key=nil` so the engine attaches its own callback. Also wires the main-menu bar via `menu_item(menu, item)` → `me_menubar.menuBar.<menu>.menu.<item>.func()` (File/Edit/View/Flight/Campaign/Dynamic Mission/Misc categories), and the mod's own tools via `sms_tool(module, method)` (DCS-SMS category — Prefab Manager / Mass Edit / Hotkeys / About). |
 | `me_hotkey_config.lua` | Override-delta persistence (`me_hotkeys.lua` file under the dcs-sms root) + `BACKEND_MODE`. |
@@ -185,7 +185,7 @@ You do **not** have:
 | `warehouse_ops.lua`, `ship_warehouse.lua` | Airbase + per-ship warehouse capture for the Prefab Manager. |
 | `airbase_detect.lua` | Detect when a marquee selection includes an airbase. |
 | `undo.lua` | Project-wide undo bus the `sms_window` Ctrl+Z handler dispatches to. |
-| `dtc_skins.lua` | DTC-style skin overrides for the Prefab Manager UI. |
+| `sms_skins.lua` | The DCS-SMS house skin set — runtime-built native-editor skins (buttons, grid, tabs, separators, splitter, coloured statics, scroll pane, …) shared across the tool windows. Resolved by name through `skin_helper.apply` (`sms_button`, `sms_grid`, …). Formerly `dtc_skins`. |
 | `about.lua` | The DCS-SMS → About dialog. |
 
 ## 2.3 The embed workflow

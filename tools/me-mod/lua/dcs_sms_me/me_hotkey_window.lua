@@ -27,7 +27,7 @@ local Gui;           do local ok, m = pcall(require, 'dxgui');         if ok the
 local Grid;          do local ok, m = pcall(require, 'Grid');          if ok then Grid          = m end end
 local GridHeaderCell;do local ok, m = pcall(require, 'GridHeaderCell');if ok then GridHeaderCell= m end end
 
-local dtc_skins; do local ok, m = pcall(require, 'dcs_sms_me.dtc_skins'); if ok then dtc_skins = m end end
+local sms_skins; do local ok, m = pcall(require, 'dcs_sms_me.sms_skins'); if ok then sms_skins = m end end
 
 local sms_window    = require('dcs_sms_me.sms_window')
 local backend       = require('dcs_sms_me.me_hotkey_backend')
@@ -56,15 +56,15 @@ local function eng()
     return nil
 end
 
--- Apply a skin by name, mirroring prefab_manager.lua's resolver: DTC-dialog
--- skins come from dtc_skins.lua, everything else from the Skin module.
+-- Apply a skin by name, mirroring prefab_manager.lua's resolver: the house
+-- skins come from sms_skins.lua, everything else from the Skin module.
 local function try_skin(widget, skin_name)
     pcall(function()
         if not (widget and widget.setSkin) then return end
         local s
-        if     skin_name == 'dtc_button'      then s = dtc_skins and dtc_skins.button()
-        elseif skin_name == 'dtc_grid'        then s = dtc_skins and dtc_skins.grid()
-        elseif skin_name == 'dtc_grid_header' then s = dtc_skins and dtc_skins.grid_header()
+        if     skin_name == 'sms_button'      then s = sms_skins and sms_skins.button()
+        elseif skin_name == 'sms_grid'        then s = sms_skins and sms_skins.grid()
+        elseif skin_name == 'sms_grid_header' then s = sms_skins and sms_skins.grid_header()
         else
             local fn = Skin and Skin[skin_name]
             if not fn then return end
@@ -331,7 +331,7 @@ local function build_body()
 
     if Grid and GridHeaderCell then
         W.grid = Grid.new()
-        try_skin(W.grid, 'dtc_grid')
+        try_skin(W.grid, 'sms_grid')
 
         local c0, c1 = col_widths(w)
         local cols = {
@@ -340,7 +340,7 @@ local function build_body()
         }
         for _, c in ipairs(cols) do
             local hc = GridHeaderCell.new()
-            try_skin(hc, 'dtc_grid_header')
+            try_skin(hc, 'sms_grid_header')
             if hc.setText then pcall(function() hc:setText(c.label) end) end
             pcall(function() W.grid:insertColumn(c.width, hc) end)
         end
@@ -387,7 +387,7 @@ local function build_body()
     W.reset_sel_btn = Button.new()
     pcall(function() if W.reset_sel_btn.setBounds then W.reset_sel_btn:setBounds(x, y + h - 28, 150, 22) end end)
     if W.reset_sel_btn.setText then W.reset_sel_btn:setText('↩  Reset selected') end
-    try_skin(W.reset_sel_btn, 'dtc_button')
+    try_skin(W.reset_sel_btn, 'sms_button')
     if W.reset_sel_btn.addChangeCallback then
         W.reset_sel_btn:addChangeCallback(function() reset_selected() end)
     end
@@ -396,7 +396,7 @@ local function build_body()
     W.reset_all_btn = Button.new()
     pcall(function() if W.reset_all_btn.setBounds then W.reset_all_btn:setBounds(x + 160, y + h - 28, 110, 22) end end)
     if W.reset_all_btn.setText then W.reset_all_btn:setText('Reset all') end
-    try_skin(W.reset_all_btn, 'dtc_button')
+    try_skin(W.reset_all_btn, 'sms_button')
     if W.reset_all_btn.addChangeCallback then
         W.reset_all_btn:addChangeCallback(function() reset_all() end)
     end
@@ -405,7 +405,7 @@ local function build_body()
     W.new_script_btn = Button.new()
     pcall(function() if W.new_script_btn.setBounds then W.new_script_btn:setBounds(x + 278, y + h - 28, 130, 22) end end)
     if W.new_script_btn.setText then W.new_script_btn:setText('+ New Script') end
-    try_skin(W.new_script_btn, 'dtc_button')
+    try_skin(W.new_script_btn, 'sms_button')
     if W.new_script_btn.addChangeCallback then
         W.new_script_btn:addChangeCallback(function() facade().open_script_editor(nil) end)
     end
