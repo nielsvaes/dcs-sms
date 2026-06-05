@@ -62,10 +62,18 @@ function M.toggle_window()
     if not ok then log.write('sms.me', log.ERROR, 'ME Hotkeys window failed: ' .. tostring(err)) end
 end
 
--- Called by the script editor after add/update/remove: rebuild the engine from
--- the new script set (+ overrides), re-attach, and refresh the open window.
+-- Called by the script editor after add/update/remove. Reconcile the LIVE engine
+-- in place: swap in the new action set and re-apply so the engine detaches the
+-- removed script's key and attaches the new one, leaving every other hotkey
+-- untouched. (Do NOT call M.install() here — that builds a fresh engine with an
+-- empty _live and re-registers every hotkey on top of the still-live previous
+-- registrations, which broke all hotkeys on every save.)
 function M.scripts_changed()
-    M.install()
+    pcall(function()
+        local e = M.engine()
+        e:set_actions(all_actions())
+        e:apply()
+    end)
     pcall(function()
         local w = require('dcs_sms_me.me_hotkey_window')
         if w and w.refresh then w.refresh() end

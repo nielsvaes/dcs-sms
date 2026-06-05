@@ -105,6 +105,18 @@ This is the first tag after a long quiet period — `sms.version` had been froze
 
 ## ME-mod
 
+### [0.19.1] — 2026-06-05
+
+**Fixed**
+- **ME Hotkeys: creating or editing a user script no longer breaks every hotkey.**
+  Saving a script rebuilt the hotkey engine from scratch and re-registered every
+  binding on the Mission Editor's toolbar window on top of the previous
+  registrations (the old engine held the detach tokens and was discarded), which
+  corrupted the shared hotkey surface so *all* hotkeys — built-ins included —
+  stopped firing. The facade now reconciles the live engine in place (only the
+  changed script's key is touched), and bindings late-bind to the current action
+  so editing a script's code takes effect without a re-register.
+
 ### [0.19.0] — 2026-06-05
 
 **Added**
