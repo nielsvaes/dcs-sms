@@ -293,6 +293,8 @@ The list leads with a **DCS-SMS** category for this mod's own tools (Prefab Mana
 
 The **search box** at the top filters the list by name, category, or bound key — type `ctrl` to see everything on a Ctrl combo, `shift+s` to find Save As, `pan` for the pan actions. A filter force-expands the categories so matches inside collapsed groups still show.
 
+**User scripts (advanced).** The **Scripts** category lets you bind your own Lua to a key. Click **`+ New Script`** (or double-click an existing script row) to open the editor: give it a name, capture a hotkey, and write Lua in the multiline editor. **Run** executes it immediately so you can iterate, then **Save**. The code runs in the Mission Editor's Lua environment (full access to the editor's modules and the mission) — powerful, and entirely at your own risk; errors are caught and logged, never crash the editor. Scripts are stored in `<Saved Games>\DCS\dcs-sms\me_scripts.lua`. Leave the hotkey blank to keep a script unbound (run it from the editor only).
+
 ## 🔌 External execution toggle
 
 Under the **DCS-SMS** top menu in the Mission Editor, a third item "External execution: ON/OFF" controls whether the dcs-sms hook honors `--target gui` requests from the `dcs-sms.exe` CLI (or any other external tool writing to the mailbox).

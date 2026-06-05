@@ -428,6 +428,19 @@ For each form above: run the apply, hit Ctrl+Z (or whatever the ME's undo key is
 - [ ] Search box filters by name, category or key: `ctrl` narrows to Ctrl
       combos, `shift+s` finds Save As, `pan` the pan actions; matches inside a
       collapsed category still surface; `×` clears.
+- [ ] **`+ New Script`** opens the editor. Enter a name, click **Run** on
+      `return 1+1` → status shows `→ 2`. Capture a hotkey, **Save** → a row
+      appears under the **Scripts** category with that key.
+- [ ] Press the script's hotkey (no field focused) → the script runs (verify its
+      effect, e.g. a `log.write` line in `dcs.log`).
+- [ ] Double-click the script row → editor reopens pre-filled; edit the code,
+      **Save** → behaviour updates.
+- [ ] A script with a syntax error: **Save** is blocked and the error is shown;
+      **Run** on broken Lua shows the error and does not crash the editor.
+- [ ] **Delete** in the editor removes the row; the **Scripts** category
+      disappears when the last script is gone.
+- [ ] Restart the ME → scripts persist (reloaded from
+      `<Saved Games>\DCS\dcs-sms\me_scripts.lua`).
 - [ ] Dynamic Mission rows are greyed with `—`, can't be selected or bound.
 - [ ] Open a unit name field and type a word containing `m` → it types normally
       (does NOT trigger Multi Select).

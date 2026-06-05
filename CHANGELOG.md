@@ -105,6 +105,19 @@ This is the first tag after a long quiet period — `sms.version` had been froze
 
 ## ME-mod
 
+### [0.19.0] — 2026-06-05
+
+**Added**
+- **ME Hotkeys: user scripts.** Write your own Lua snippets, name them, and bind
+  each to a hotkey (Maya-style). A new **Scripts** category in the Hotkeys window
+  lists them; **`+ New Script`** (or double-clicking a script row) opens an editor
+  with a name field, a hotkey capture field, a multiline Lua editor, and a **Run**
+  button that compiles + runs the code immediately (result/error shown inline).
+  Scripts run in the ME GUI Lua env under `loadstring`+`pcall` (errors are caught
+  and logged, never crash the editor) and persist to
+  `Saved Games\DCS\dcs-sms\me_scripts.lua`, separate from the built-in key
+  overrides. A blank hotkey = unbound (run it from the editor, bind later).
+
 ### [0.18.0] — 2026-06-04
 
 **Added**
