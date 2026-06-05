@@ -289,7 +289,7 @@ Apply is refused across theatres (a Caucasus airbase prefab can't be applied on 
 
 Defaults use single letters where free (e.g. `m` for Multi Select, `d` for Draw); the object-add and pan keys keep their existing editor keys. Every action fires through the editor's own toolbar/map entry points, so a bound key does exactly what clicking the matching toolbar button does.
 
-The list also covers the whole **main-menu bar** — File, Edit, View, Flight, Campaign, Dynamic Mission and Misc categories — so menu entries that ship without a shortcut (Save As, Open Backup, Prepare Mission, the static-template load/save, …) get one. Key combinations work too: capture `Ctrl+Shift+S`, `Alt+3`, etc. by holding the modifier(s) and pressing the key. (Exit is deliberately not bindable, to avoid an accidental editor exit.)
+The list leads with a **DCS-SMS** category for this mod's own tools (Prefab Manager `Alt+P`, Mass Edit `Alt+E`, Hotkeys `Alt+K`, About `Alt+I`), then covers the whole **main-menu bar** — File, Edit, View, Flight, Campaign, Dynamic Mission and Misc categories — so menu entries that ship without a shortcut (Save As, Open Backup, Prepare Mission, the static-template load/save, …) get one. Key combinations work too: capture `Ctrl+Shift+S`, `Alt+3`, etc. by holding the modifier(s) and pressing the key. (Exit is deliberately not bindable, to avoid an accidental editor exit.)
 
 The **search box** at the top filters the list by name, category, or bound key — type `ctrl` to see everything on a Ctrl combo, `shift+s` to find Save As, `pan` for the pan actions. A filter force-expands the categories so matches inside collapsed groups still show.
 

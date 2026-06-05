@@ -8,9 +8,10 @@
 
 local M = {}
 
--- Display/group order for the UI. The first three are toolbar-driven; the rest
--- mirror the ME main-menu bar (File / Edit / View / …).
+-- Display/group order for the UI. DCS-SMS (this mod's own tools) leads; the next
+-- three are toolbar-driven; the rest mirror the ME main-menu bar (File / Edit …).
 M.CATEGORIES = {
+    'DCS-SMS',
     'Map/Selection', 'Object-add', 'Panel',
     'File', 'Edit', 'View', 'Flight', 'Campaign', 'Dynamic Mission', 'Misc',
 }
@@ -79,6 +80,17 @@ local function menu_item(menu_name, item_name)
     end
 end
 
+-- DCS-SMS tool: open one of this mod's own windows/dialogs by requiring its
+-- module and calling the method the DCS-SMS menu uses (see menu.lua).
+local function sms_tool(module_name, method)
+    return function()
+        pcall(function()
+            local m = require('dcs_sms_me.' .. module_name)
+            if m and type(m[method]) == 'function' then m[method]() end
+        end)
+    end
+end
+
 -- ---- the catalog ----
 -- ed_key = a native ED hotkey we deliberately DON'T re-attach over (the engine
 -- relies on ED's own binding so we never double-fire). Set ONLY for keys the
@@ -88,6 +100,12 @@ end
 -- fire reliably) and all keyless actions — gets ed_key=nil so we attach our own
 -- callback and own the key outright.
 local ACTIONS = {
+    -- DCS-SMS (this mod's own tool windows — same entry points as the menu)
+    { id='sms.prefab_manager', label='Prefab Manager', category='DCS-SMS', default_key='Alt+P', ed_key=nil, invoke=sms_tool('prefab_manager', 'toggle') },
+    { id='sms.mass_edit',      label='Mass Edit',      category='DCS-SMS', default_key='Alt+E', ed_key=nil, invoke=sms_tool('mass_edit', 'toggle') },
+    { id='sms.hotkeys',        label='Hotkeys',        category='DCS-SMS', default_key='Alt+K', ed_key=nil, invoke=sms_tool('me_hotkeys', 'toggle_window') },
+    { id='sms.about',          label='About',          category='DCS-SMS', default_key='Alt+I', ed_key=nil, invoke=sms_tool('about', 'show') },
+
     -- Map/Selection
     { id='map.multi_select', label='Multi Select', category='Map/Selection', default_key='m',     ed_key=nil,     invoke=toolbar_button('toggleButtonMultiSelection') },
     { id='map.zoom_in',      label='Zoom in',      category='Map/Selection', default_key='+',     ed_key=nil,     invoke=call_map('onChange_Plus') },

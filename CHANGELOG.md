@@ -124,6 +124,8 @@ This is the first tag after a long quiet period — `sms.version` had been froze
     poking guessed panel modules.
   - Key combinations (Ctrl/Shift/Alt + key) are supported, both in the capture
     overlay and as defaults.
+  - A **DCS-SMS** category for the mod's own tools — Prefab Manager (`Alt+P`),
+    Mass Edit (`Alt+E`), Hotkeys (`Alt+K`), About (`Alt+I`).
   - Covers the whole **main-menu bar** too — File / Edit / View / Flight /
     Campaign / Dynamic Mission / Misc categories, firing each entry's menu func.
     New/Open/Save/Fly/Record/DTC/Center/Remove ride ED's existing keys; the rest
