@@ -58,5 +58,42 @@ check('get returns a backend with attach/detach', (function()
     local be = B.get('perkey'); return type(be) == 'table' and type(be.attach) == 'function' and type(be.detach) == 'function'
 end)())
 
+-- capture_step: the press/release latch the capture overlay uses. A chord is
+-- FINALIZED on the key-UP of the non-modifier key that formed it (NOT on its
+-- key-down), so the assigning keypress is fully consumed — with bindings still
+-- suspended — before the new binding goes live. Otherwise the editor dispatches
+-- that same held key to the freshly-attached binding and fires the action you
+-- were assigning.
+do
+    local cs = B.new_capture_state()
+    check('capture: plain key DOWN does not finalize', B.capture_step(cs, 'm', 'down') == nil)
+    check('capture: plain key UP finalizes the chord', B.capture_step(cs, 'm', 'up') == 'm')
+end
+do
+    local cs = B.new_capture_state()
+    check('capture: Esc down -> cancel', B.capture_step(cs, 'escape', 'down') == 'cancel')
+end
+do
+    -- modifier chord: Ctrl held, k pressed then released -> 'Ctrl+k' on the k UP
+    local cs = B.new_capture_state()
+    check('capture: Ctrl down -> nil',      B.capture_step(cs, 'left ctrl', 'down') == nil)
+    check('capture: k down (pending) -> nil', B.capture_step(cs, 'k', 'down') == nil)
+    check('capture: k up -> Ctrl+k',        B.capture_step(cs, 'k', 'up') == 'Ctrl+k')
+end
+do
+    -- releasing the modifier before the chord key still finalizes the latched chord
+    local cs = B.new_capture_state()
+    B.capture_step(cs, 'left ctrl', 'down')
+    B.capture_step(cs, 'j', 'down')                 -- latches 'Ctrl+j'
+    check('capture: modifier up while pending -> nil', B.capture_step(cs, 'left ctrl', 'up') == nil)
+    check('capture: chord-key up finalizes latched chord', B.capture_step(cs, 'j', 'up') == 'Ctrl+j')
+end
+do
+    -- a bare modifier never finalizes
+    local cs = B.new_capture_state()
+    check('capture: modifier down alone -> nil', B.capture_step(cs, 'left alt', 'down') == nil)
+    check('capture: modifier up alone -> nil',   B.capture_step(cs, 'left alt', 'up') == nil)
+end
+
 if failures > 0 then print(failures .. ' failure(s)'); os.exit(1) end
 print('All me_hotkey_backend tests passed.')

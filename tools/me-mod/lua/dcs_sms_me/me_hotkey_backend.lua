@@ -49,6 +49,41 @@ function M.match_chord(state, keyName, keyState)
     return prefix .. keyName
 end
 
+-- ---- capture press/release latch ----
+--
+-- The "press a key" overlay finalizes a chord on the key-UP of the non-modifier
+-- key that formed it, NOT on its key-down. The binding the caller creates from
+-- the chord goes live immediately; if we finalized on key-down, the editor would
+-- dispatch that same still-held keypress to the freshly-attached binding and fire
+-- the very action you were assigning. Finalizing on release means the assigning
+-- key-down is already consumed (bindings stay suspended through it), so the new
+-- binding only ever fires on the NEXT press.
+
+function M.new_capture_state()
+    return { mods = M.new_chord_state(), pending = nil, pending_key = nil }
+end
+
+-- Feed one key event. Returns:
+--   'cancel'       — Esc pressed; caller cancels the capture
+--   <chord string> — a chord finalized on release; caller completes the capture
+--   nil            — nothing yet (state updated in place)
+function M.capture_step(cs, keyName, keyState)
+    local lname = (type(keyName) == 'string') and keyName:lower() or keyName
+    if lname == 'escape' and keyState == 'down' then return 'cancel' end
+    if cs.pending then
+        if keyState == 'up' and lname == cs.pending_key then
+            return cs.pending
+        end
+        return nil
+    end
+    local chord = M.match_chord(cs.mods, keyName, keyState)
+    if chord then
+        cs.pending = chord
+        cs.pending_key = lname
+    end
+    return nil
+end
+
 -- ---- dxgui-bound backends (guarded so the module loads in the test VM) ----
 
 local function toolbar_window()

@@ -30,7 +30,7 @@ function M.capture(on_done, on_cancel)
     pcall(function() screen_w, screen_h = Gui.GetWindowSize() end)
     local w, h = 360, 120
     local overlay, cb
-    local state = backend.new_chord_state()
+    local cstate = backend.new_capture_state()
     local done = false
     local function teardown()
         if done then return end
@@ -58,11 +58,15 @@ function M.capture(on_done, on_cancel)
         pcall(function() if Skin and Skin.staticSkin_ME then lbl:setSkin(Skin.staticSkin_ME()) end end)
         overlay:insertWidget(lbl)
         cb = function(keyName, keyState)
-            if keyName == 'escape' and keyState == 'down' then
-                teardown(); pcall(on_cancel or function() end); return
+            -- Finalize on key-UP (see backend.capture_step) so the key the user
+            -- presses to assign a binding doesn't also fire the action it gets
+            -- bound to. Bindings stay suspended through the assigning key-down.
+            local r = backend.capture_step(cstate, keyName, keyState)
+            if r == 'cancel' then
+                teardown(); pcall(on_cancel or function() end)
+            elseif type(r) == 'string' then
+                teardown(); pcall(function() on_done(r) end)
             end
-            local chord = backend.match_chord(state, keyName, keyState)
-            if chord then teardown(); pcall(function() on_done(chord) end) end
         end
         if Gui and Gui.AddKeyboardCallback then Gui.AddKeyboardCallback(cb); registered = true end
     end)
