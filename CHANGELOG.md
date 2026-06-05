@@ -105,6 +105,15 @@ This is the first tag after a long quiet period — `sms.version` had been froze
 
 ## ME-mod
 
+### [0.19.1] — 2026-06-05
+
+**Changed**
+- Internal: extracted the themed scrollbar skinning (the thin dark vertical bar
+  + the ME-Unit-List-matched horizontal bar) into a shared
+  `dcs_sms_me/sms_scrollbars.lua` module. The script editor, the Prefab Manager
+  folder tree, and the DTC scroll-pane skin now share one implementation. No
+  visible change — future tool windows get matching scrollbars from one call.
+
 ### [0.19.0] — 2026-06-05
 
 **Added**
