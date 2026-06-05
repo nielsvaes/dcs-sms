@@ -8,13 +8,22 @@ local actions    = require('dcs_sms_me.me_hotkey_actions')
 local config      = require('dcs_sms_me.me_hotkey_config')
 local engine_mod  = require('dcs_sms_me.me_hotkey_engine')
 local backend_mod = require('dcs_sms_me.me_hotkey_backend')
+local scripts_mod = require('dcs_sms_me.me_hotkey_scripts')
 
 local M = {}
 local _engine
 
+-- Built-in registry actions + one dynamic action per saved user script.
+local function all_actions()
+    local list = {}
+    for _, a in ipairs(actions.list()) do list[#list + 1] = a end
+    for _, a in ipairs(scripts_mod.to_actions(scripts_mod.load())) do list[#list + 1] = a end
+    return list
+end
+
 local function build()
     return engine_mod.new({
-        actions      = actions.list(),
+        actions      = all_actions(),
         backend      = backend_mod.get(config.BACKEND_MODE),
         overrides    = config.load(),
         ed_conflicts = actions.ED_CONFLICTS,
@@ -51,6 +60,24 @@ end
 function M.toggle_window()
     local ok, err = pcall(function() require('dcs_sms_me.me_hotkey_window').toggle() end)
     if not ok then log.write('sms.me', log.ERROR, 'ME Hotkeys window failed: ' .. tostring(err)) end
+end
+
+-- Called by the script editor after add/update/remove: rebuild the engine from
+-- the new script set (+ overrides), re-attach, and refresh the open window.
+function M.scripts_changed()
+    M.install()
+    pcall(function()
+        local w = require('dcs_sms_me.me_hotkey_window')
+        if w and w.refresh then w.refresh() end
+    end)
+end
+
+-- Open the script editor (id = existing script to edit, or nil for a new one).
+function M.open_script_editor(id)
+    local ok, err = pcall(function() require('dcs_sms_me.me_hotkey_script_editor').open(id) end)
+    if not ok then
+        log.write('sms.me', log.ERROR, 'script editor failed: ' .. tostring(err))
+    end
 end
 
 return M
