@@ -103,7 +103,7 @@ local ACTIONS = {
     -- DCS-SMS (this mod's own tool windows — same entry points as the menu)
     { id='sms.prefab_manager', label='Prefab Manager', category='DCS-SMS', default_key='Alt+P', ed_key=nil, invoke=sms_tool('prefab_manager', 'toggle') },
     { id='sms.mass_edit',      label='Mass Edit',      category='DCS-SMS', default_key='Alt+E', ed_key=nil, invoke=sms_tool('mass_edit', 'toggle') },
-    { id='sms.hotkeys',        label='Hotkeys',        category='DCS-SMS', default_key='Alt+K', ed_key=nil, invoke=sms_tool('me_hotkeys', 'toggle_window') },
+    { id='sms.hotkeys',        label='Hotkey Manager', category='DCS-SMS', default_key='Alt+K', ed_key=nil, invoke=sms_tool('me_hotkeys', 'toggle_window') },
     { id='sms.about',          label='About',          category='DCS-SMS', default_key='Alt+I', ed_key=nil, invoke=sms_tool('about', 'show') },
 
     -- Map/Selection

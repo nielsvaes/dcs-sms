@@ -108,6 +108,8 @@ This is the first tag after a long quiet period — `sms.version` had been froze
 ### [0.19.1] — 2026-06-05
 
 **Changed**
+- Renamed the **Hotkeys** tool to **Hotkey Manager** (menu entry, window title,
+  and the bindable action), matching the "Prefab Manager" / "Mass Edit" naming.
 - Internal: extracted the themed scrollbar skinning (the thin dark vertical bar
   + the ME-Unit-List-matched horizontal bar) into a shared
   `dcs_sms_me/sms_scrollbars.lua` module. The script editor, the Prefab Manager

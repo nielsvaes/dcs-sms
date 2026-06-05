@@ -1,4 +1,4 @@
--- me_hotkey_window.lua — the ME Hotkeys tool window.
+-- me_hotkey_window.lua — the Hotkey Manager tool window.
 --
 -- sms_window chrome + a two-column Grid (Action | Binding), mirroring the
 -- Prefab Manager / Mass Edit table look. Rows are grouped under clickable
@@ -416,7 +416,7 @@ function M.show()
     capture.teardown()
     if W.sms_window then W.sms_window:show(); render(); set_hint(); return end
     W.sms_window = sms_window.new({
-        title = 'ME Hotkeys',
+        title = 'Hotkey Manager',
         size = { w = 480, h = 520 },
         min_size = { w = 380, h = 320 },
         persist_across_new_mission = true,  -- hotkeys aren't mission-bound

@@ -129,9 +129,9 @@ local function add_top_level_menu()
         log.write('sms.me', log.ERROR, 'Mass Edit menu:newItem failed: ' .. tostring(me_err))
     end
 
-    -- "Hotkeys" entry — opens the ME Hotkeys binding window.
+    -- "Hotkey Manager" entry — opens the hotkey-binding window.
     local hotkeys_item
-    local ok_hk, hk_err = pcall(function() hotkeys_item = menu:newItem('Hotkeys') end)
+    local ok_hk, hk_err = pcall(function() hotkeys_item = menu:newItem('Hotkey Manager') end)
     if ok_hk and hotkeys_item then
         pcall(function()
             local sibling_item = sibling_menu
@@ -148,7 +148,7 @@ local function add_top_level_menu()
             end
         end
     else
-        log.write('sms.me', log.ERROR, 'Hotkeys menu:newItem failed: ' .. tostring(hk_err))
+        log.write('sms.me', log.ERROR, 'Hotkey Manager menu:newItem failed: ' .. tostring(hk_err))
     end
 
     -- Sibling "About" menu entry. Same skin-clone pattern as the Prefab

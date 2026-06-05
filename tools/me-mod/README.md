@@ -283,9 +283,9 @@ Apply is refused across theatres (a Caucasus airbase prefab can't be applied on 
 - **Undo** — `Ctrl-Z` with the Manager window focused undoes the most recent placement (groups, zones, drawings, and airbase splices all restored together).
 - **Library** — Reload (rescan disk), Rename, Delete, live name+theatre search, click-to-sort columns.
 
-## ⌨️ ME Hotkeys
+## ⌨️ Hotkey Manager
 
-**DCS-SMS → Hotkeys** opens a window with an **Action | Binding** table of native Mission-Editor actions grouped under collapsible category rows (Map/Selection, Object-add, Panel toggles) — click a category row to fold it away. **Single-click** a row to select it, **double-click** to capture a new key. The footer has **↩ Reset selected** (reverts the selected row) and **Reset all** (reverts everything); any binding changed from its default shows in **amber italic**. Bindings persist across sessions in `<Saved Games>\DCS\dcs-sms\me_hotkeys.lua`.
+**DCS-SMS → Hotkey Manager** opens a window with an **Action | Binding** table of native Mission-Editor actions grouped under collapsible category rows (Map/Selection, Object-add, Panel toggles) — click a category row to fold it away. **Single-click** a row to select it, **double-click** to capture a new key. The footer has **↩ Reset selected** (reverts the selected row) and **Reset all** (reverts everything); any binding changed from its default shows in **amber italic**. Bindings persist across sessions in `<Saved Games>\DCS\dcs-sms\me_hotkeys.lua`.
 
 Defaults use single letters where free (e.g. `m` for Multi Select, `d` for Draw); the object-add and pan keys keep their existing editor keys. Every action fires through the editor's own toolbar/map entry points, so a bound key does exactly what clicking the matching toolbar button does.
 
