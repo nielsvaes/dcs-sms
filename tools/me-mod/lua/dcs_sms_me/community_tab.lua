@@ -664,10 +664,12 @@ function M.build(parent, deps)
         pcall(function()
             if W.job then return end  -- a fetch is already in flight
             if not (transport and transport.available and fetch and fetch.new) then
+                load_from_cache()
                 set_status('Community networking unavailable in this build. Showing cached catalog.', 'warning')
                 return
             end
             if not transport.available() then
+                load_from_cache()
                 set_status('Secure networking unavailable — install LuaSec in dcs-sms\\lib. Showing cached catalog.', 'warning')
                 return
             end
