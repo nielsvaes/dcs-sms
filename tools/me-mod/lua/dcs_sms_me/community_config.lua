@@ -4,7 +4,7 @@ local M = {}
 
 -- raw.githubusercontent.com base for the community repo's default branch.
 -- Trailing slash required; file_url concatenates directly.
--- NOTE: placeholder repo coordinates — update to the real repo when it exists.
+-- Catalog source: https://github.com/nielsvaes/dcs-sms-prefabs
 M.RAW_BASE = 'https://raw.githubusercontent.com/nielsvaes/dcs-sms-prefabs/main/'
 
 -- Manifest path within the repo.
