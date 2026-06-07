@@ -164,9 +164,12 @@ download URL as `<RAW_BASE>/<path>`.
   **mock transport** (the testable state machine).
 - `community_transport` real LuaSec/LuaSocket transport (DCS-only; manual
   smoke).
-- `package.cpath`/`package.path` wiring in `init.lua` for the bundled LuaSec,
-  and install-side copying of a `lib/` payload directory (the binaries
-  themselves are supplied separately — see Constraints).
+- `package.cpath`/`package.path` wiring in `init.lua` pointing at the LuaSec
+  payload under `<Saved Games>/DCS/dcs-sms/lib/` (the binaries themselves are
+  supplied separately — see Constraints). **No install-side copy** — that dir
+  lives under `lfs.writedir()`, outside the installer-owned module dir, so it
+  survives reinstalls (the installer prunes anything in the module dir that is
+  not in the embed).
 - Community tab UI in the Prefab Manager (dxgui; DCS-only; manual smoke).
 - Menu/version/CHANGELOG/AGENTS/docs updates per repo conventions.
 - A manual-smoke checklist entry in `docs/release-gate/me-mod-smoke.md`.
@@ -185,9 +188,13 @@ download URL as `<RAW_BASE>/<path>`.
   cooperative via the `UpdateManager` tick + coroutines.
 - **No LuaSec in DCS** — must be bundled. The native DLLs (`ssl.dll`, OpenSSL
   `libssl`/`libcrypto`) must match the LuaJIT/x64 ABI. **These binaries are NOT
-  produced in this session**; the code wires up loading them and the install
-  copies a `lib/` directory, but the feature only runs end-to-end once the
-  binaries are present. This is the single biggest runtime prerequisite.
+  produced in this session**; the code wires up loading them from
+  `<Saved Games>/DCS/dcs-sms/lib/`, but the feature only runs end-to-end once
+  the binaries are present there. This is the single biggest runtime
+  prerequisite. The payload lives under `lfs.writedir()` (not the installer-
+  owned module dir) precisely because `install-me-mod` prunes any module-dir
+  file not in the embed — a user-dropped DLL there would be deleted on the next
+  install.
 - **Never throw out of ME-mod code.** Every socket/parse/file step is
   `pcall`-guarded and degrades to a logged failure + safe UI state, per
   `tools/me-mod/AGENTS.md` §2.4 / §2.11.
@@ -241,9 +248,11 @@ spec. (Brainstorm choices are marked **[B]**; autonomous calls **[A]**.)
 14. **[A] Config constants** (`RAW_BASE` URL, manifest path, cache filename)
     live in a single `community_config.lua` so the repo URL is changed in one
     place.
-15. **[A] LuaSec payload directory**: bundled binaries are expected under the
-    mod's `lib/` directory; `init.lua` prepends that to `package.cpath`. The
-    embed/install copies `lib/` if present. Absence of the binaries degrades
+15. **[A] LuaSec payload directory**: bundled binaries + LuaSec Lua files +
+    `cacert.pem` are expected under `<Saved Games>/DCS/dcs-sms/lib/`;
+    `init.lua` prepends `lib/?.dll` to `package.cpath` and `lib/?.lua` to
+    `package.path`. This dir is under `lfs.writedir()`, NOT the installer-owned
+    module dir, so reinstalls don't prune it. Absence of the binaries degrades
     gracefully: the Community tab loads, Refresh reports "secure networking
     unavailable — LuaSec not installed," and the rest of the Prefab Manager is
     unaffected.
