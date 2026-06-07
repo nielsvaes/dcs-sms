@@ -11,6 +11,13 @@ local ok, err = pcall(function()
     local version = require('dcs_sms_me.version')
     log.write('sms.me', log.INFO, 'bootstrap (version ' .. tostring(version) .. ')')
 
+    -- Wire the bundled LuaSec payload onto package.cpath/path so the
+    -- community library can require('ssl.https'). The payload lives under
+    -- <Saved Games>/DCS/dcs-sms/lib/ (user-supplied; see README). Safe no-op
+    -- when the dir/binaries are absent — require simply fails later and the
+    -- Community tab degrades to "secure networking unavailable".
+    pcall(function() require('dcs_sms_me.lib_path').apply() end)
+
     local menu = require('dcs_sms_me.menu')
     menu.install()
 

@@ -1,0 +1,3 @@
+# LuaSec payload artifacts are byte-exact — never apply EOL/text conversion.
+*.dll binary
+*.pem binary

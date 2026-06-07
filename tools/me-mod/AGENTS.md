@@ -187,6 +187,18 @@ You do **not** have:
 | `undo.lua` | Project-wide undo bus the `sms_window` Ctrl+Z handler dispatches to. |
 | `sms_skins.lua` | The DCS-SMS house skin set — runtime-built native-editor skins (buttons, grid, tabs, separators, splitter, coloured statics, scroll pane, …) shared across the tool windows. Resolved by name through `skin_helper.apply` (`sms_button`, `sms_grid`, …). Formerly `dtc_skins`. |
 | `about.lua` | The DCS-SMS → About dialog. |
+| `prefab_safe_load.lua` | Data-only Lua parser/validator. Parses (never executes) a prefab's `return {…}` against a strict literal-data grammar; rejects anything with calls, globals, operators, or function defs. Used by the community loader so untrusted files never reach `dofile`. |
+| `community_config.lua` | Community-library endpoints + schema constants (`RAW_BASE`, manifest path, `Community` folder, schema version). |
+| `community_manifest.lua` | Parse/validate the `index.json` manifest + pure search/sort/tag-filter helpers. |
+| `community_cache.lua` | Persist/restore the last-fetched manifest JSON for offline browsing. |
+| `community_import.lua` | Adopt a community prefab: SHA-256 verify + data-only validate, then write into the user's `Community/` folder. |
+| `community_fetch.lua` | Non-blocking fetch orchestration — a coroutine pumped by the UpdateManager tick over an injectable transport. |
+| `community_transport.lua` | Real LuaSec/LuaSocket HTTPS transport (DCS-only); degrades gracefully when LuaSec is absent. |
+| `community_tab.lua` | The Community tab UI in the Prefab Manager (browse/search/sort/tags/detail/import). |
+| `lib_path.lua` | Builds the `package.cpath`/`path` entries for the bundled LuaSec payload under `dcs-sms/lib/`. |
+| `vendor/json.lua` | Vendored decode-only JSON. |
+| `vendor/bit_compat.lua` | 32-bit bitops: LuaJIT `bit` or a pure-Lua fallback (for the test VM). |
+| `vendor/sha256.lua` | Vendored pure-Lua SHA-256 (integrity check). |
 
 ## 2.3 The embed workflow
 

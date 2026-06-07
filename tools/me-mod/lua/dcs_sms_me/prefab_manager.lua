@@ -90,6 +90,8 @@ local function try_skin(widget, skin_name)
         elseif skin_name == 'sms_status_yellow' then s = sms_skins.static_yellow()
         elseif skin_name == 'sms_status_red'    then s = sms_skins.static_red()
         elseif skin_name == 'sms_status_green'  then s = sms_skins.static_green()
+        elseif skin_name == 'sms_tab'         then s = sms_skins.tab()
+        elseif skin_name == 'sms_tab_off'     then s = sms_skins.tab_off()
         else
             local fn = Skin[skin_name]
             if not fn then return end
@@ -1610,11 +1612,18 @@ local function on_undo_click()
     end)
 end
 
+-- Tab-strip band height (Community library, Task 13). The [My Prefabs]
+-- [Community] tab buttons live in the top TAB_H px of the content area; the
+-- whole My-Prefabs layout (relayout below) is shifted down by TAB_H so its
+-- panel looks unchanged, and the window's height/min-height grow by TAB_H so
+-- the grid keeps its size rather than getting squeezed.
+local TAB_H = 32
+
 -- Min dims: width drops vs. the original full-width-bottom-strip layout
 -- because side-by-side place buttons no longer constrain full window
 -- width; height grows to fit the new right-column control stack
--- (3 naming rows + 1 toggle row).
-local MIN_W, MIN_H = 580, 580
+-- (3 naming rows + 1 toggle row), plus TAB_H for the tab strip.
+local MIN_W, MIN_H = 580, 580 + TAB_H
 -- Gutter between tree and grid panes. The splitter sits centered inside
 -- it with SPLITTER_MARGIN of breathing room on each side so the grab
 -- bar doesn't visually butt against either pane (matches Mass Edit).
@@ -1648,20 +1657,22 @@ local function relayout(w, h)
     if W.tree_w < LEFT_MIN  then W.tree_w = LEFT_MIN  end
     if W.tree_w > max_tree_w then W.tree_w = max_tree_w end
 
-    -- Row 0: Name + Fixed checkbox + Save (spans full width).
+    -- Row 0: Name + Fixed checkbox + Save (spans full width). The whole top
+    -- band is offset by TAB_H so the tab strip (built in M.show) sits above it.
+    local top0      = 8 + TAB_H
     local check_w   = 130
     local save_x    = w - 90
     local check_x   = save_x - 6 - check_w
     local input_x   = 60
     local input_w   = math.max(60, check_x - 6 - input_x)
-    set(W.name_label,      10,      8, 50,      22)
-    set(W.name_input,      input_x, 8, input_w, 22)
-    set(W.fixed_check,     check_x, 8, check_w, 22)
-    set(W.fixed_check_lbl, check_x, 8, check_w, 22)
-    set(W.save_btn,        save_x,  8, 80,      22)
+    set(W.name_label,      10,      top0, 50,      22)
+    set(W.name_input,      input_x, top0, input_w, 22)
+    set(W.fixed_check,     check_x, top0, check_w, 22)
+    set(W.fixed_check_lbl, check_x, top0, check_w, 22)
+    set(W.save_btn,        save_x,  top0, 80,      22)
 
-    -- Separator at y=40.
-    set(W.sep1, 10, 40, w - 20, 1)
+    -- Separator below the name row (was y=40, now shifted by TAB_H).
+    set(W.sep1, 10, 40 + TAB_H, w - 20, 1)
 
     -- Row 1: search inputs (same y for both panes). The grid (and the
     -- right-column control stack below it) starts after the full
@@ -1672,11 +1683,12 @@ local function relayout(w, h)
     local right_x = 10 + W.tree_w + SPLIT_GUTTER
     local right_w = w - right_x - 10
 
-    set(W.folder_search_label, left_x,        51, 100, 22)
-    set(W.folder_search_input, left_x + 105,  51, left_w - 105, 22)
+    local search_y = 51 + TAB_H
+    set(W.folder_search_label, left_x,        search_y, 100, 22)
+    set(W.folder_search_input, left_x + 105,  search_y, left_w - 105, 22)
 
-    set(W.search_label, right_x,       51, 80,  22)
-    set(W.filter_input, right_x + 84,  51, right_w - 84, 22)
+    set(W.search_label, right_x,       search_y, 80,  22)
+    set(W.filter_input, right_x + 84,  search_y, right_w - 84, 22)
 
     -- Bottom-band offsets (anchored to h).
     -- row3 / [+New folder] / [Show all] / [Reload][Undo][Rename][Delete] row.
@@ -1696,7 +1708,7 @@ local function relayout(w, h)
     --   row_h (row3 height) + 10 (gap below row3) + 1 (sep2) + 8 (pad)
     --   + 28 (country) + 50 (rotation) + 84 (3 naming rows)
     -- which sums to row_h + 181, landing at the place buttons row's top y.
-    local body_y = 77
+    local body_y = 77 + TAB_H
     local left_bottom_y = row3_y + 22 + 10 + 8 + 28 + 50 + 84  -- = row3_y + 202
 
     local tree_h = math.max(60, left_bottom_y - body_y - 8)
@@ -1715,7 +1727,7 @@ local function relayout(w, h)
     -- widgets. Range is updated every relayout so window resizes shrink the
     -- max clamp before the user can drag past RIGHT_MIN.
     local splitter_x        = 10 + W.tree_w + SPLITTER_MARGIN
-    local splitter_y_top    = 51
+    local splitter_y_top    = 51 + TAB_H
     local splitter_y_bottom = body_y + tree_h
     local splitter_h        = math.max(60, splitter_y_bottom - splitter_y_top)
     if W.splitter and W.splitter.set_bounds then
@@ -1823,6 +1835,13 @@ local function relayout(w, h)
     local place_click_x = stack_x + stack_w - place_click_w
     set(W.place_origin_btn, place_orig_x,  cur_y, place_orig_w,  row_h)
     set(W.place_click_btn,  place_click_x, cur_y, place_click_w, row_h)
+
+    -- Reflow the Community tab's panel to the same content size so it resizes
+    -- alongside the My-Prefabs panel. Safe no-op until the panel is built
+    -- (first switch to the Community tab).
+    if W.community and W.community ~= false and W.community.relayout then
+        pcall(function() W.community:relayout(w, h) end)
+    end
 end
 
 -- Folder operation handlers (Task 17). Confirmations use show_overlay;
@@ -2176,12 +2195,16 @@ function M.show()
         -- country list; existing selection is preserved if still valid.
         populate_country_combo()
         pcall(function() W.window:setVisible(true) end)
+        -- Reset to the My Prefabs tab on every re-show (plan: default = 'my'),
+        -- so re-opening never lands on a stale Community panel.
+        if M._select_tab then pcall(function() M._select_tab('my') end) end
         return
     end
     local ok, err = pcall(function()
         -- Initial dims must meet MIN_W/MIN_H to avoid a squashed first-paint
-        -- before SMSWindow's resize-clamp fires.
-        local w, h = 920, 580
+        -- before SMSWindow's resize-clamp fires. Height includes TAB_H for the
+        -- tab strip so the grid keeps its pre-Community size.
+        local w, h = 920, 580 + TAB_H
 
         W.sms_window = sms_window.new({
             title    = 'Prefab Manager',
@@ -2816,6 +2839,184 @@ function M.show()
 
         refresh_list()
         populate_country_combo()
+
+        -- ===================================================================
+        -- Task 13: [My Prefabs] [Community] tab strip.
+        --
+        -- The whole existing layout above is the "My Prefabs" panel; the
+        -- relayout offset (TAB_H) leaves the top band free for two tab
+        -- buttons. The Community panel (community_tab.lua) is built lazily the
+        -- first time its tab is selected, parented under the same window, and
+        -- shown/hidden alongside the My-Prefabs widgets. Everything here is
+        -- pcall-guarded: if community_tab can't build, the manager keeps
+        -- working with only the My-Prefabs tab.
+        -- ===================================================================
+        pcall(function()
+            -- Collect the top-level My-Prefabs widget handles so they can be
+            -- hidden/shown en masse. Visibility-toggling (not re-parenting) is
+            -- enough — these widgets are all direct children of W.window.
+            W.my_prefab_widgets = {
+                W.name_label, W.name_input, W.save_btn,
+                W.fixed_check, W.fixed_check_lbl, W.sep1,
+                W.search_label, W.filter_input,
+                W.folder_search_label, W.folder_search_input,
+                W.folder_tree, W.splitter,
+                W.new_folder_btn, W.show_all_btn,
+                W.grid,
+                W.reload_btn, W.undo_btn, W.rename_btn, W.delete_btn,
+                W.sep2,
+                W.country_label, W.country_combo, W.country_filter_btn,
+                W.rotation_label, W.rotation_spin, W.rotation_dial,
+                W.rotation_input, W.rotation_unit,
+                W.naming_name_label, W.naming_name_input,
+                W.naming_prefix_label, W.naming_prefix_input,
+                W.naming_suffix_label, W.naming_suffix_input,
+                W.naming_keep_num_btn,
+                W.place_origin_btn, W.place_click_btn,
+            }
+
+            -- Show/hide every My-Prefabs widget. MUST use pairs, not ipairs:
+            -- the list contains conditionally-created widgets (only ONE of
+            -- rotation_dial/rotation_spin/rotation_input exists; CheckBox /
+            -- splitter may be absent), so it has nil holes — ipairs would stop
+            -- at the first hole and leave the rest of the panel visible. pairs
+            -- visits every non-nil entry regardless of holes. Handles the
+            -- visibility shapes in play: raw dxgui widgets + clearable_edit
+            -- (setVisible/set_visible) and the splitter (show/hide only).
+            local function set_my_prefabs_visible(vis)
+                for _, wdg in pairs(W.my_prefab_widgets) do
+                    if wdg.setVisible then
+                        pcall(function() wdg:setVisible(vis) end)
+                    elseif wdg.set_visible then
+                        pcall(function() wdg:set_visible(vis) end)
+                    elseif vis and wdg.show then
+                        pcall(function() wdg:show() end)
+                    elseif (not vis) and wdg.hide then
+                        pcall(function() wdg:hide() end)
+                    end
+                end
+            end
+
+            -- Lazily build the Community panel exactly once. Returns true on
+            -- success. On failure, logs and leaves W.community nil so
+            -- select_tab falls back to the My-Prefabs tab.
+            local function ensure_community()
+                if W.community ~= nil then return W.community ~= false end
+                local ok_build, panel = pcall(function()
+                    return require('dcs_sms_me.community_tab').build(W.window, {
+                        set_status        = set_status,
+                        refresh_my_library = refresh_list,
+                    })
+                end)
+                if not ok_build or not panel then
+                    W.community = false  -- sentinel: build failed, don't retry
+                    log.write('sms.me', log.ERROR,
+                        'Community tab build failed: ' .. tostring(panel))
+                    return false
+                end
+                W.community = panel
+                -- Lay the freshly-built panel out to the current content size
+                -- (the manager's last relayout ran before this lazy build).
+                pcall(function()
+                    if W.community.relayout and W.window and W.window.getSize then
+                        local ww, wh = W.window:getSize()
+                        if ww and wh then W.community:relayout(ww, wh) end
+                    end
+                end)
+                -- Panels start hidden; My Prefabs is the default tab.
+                pcall(function() W.community:hide() end)
+                -- Register the community tick once (guarded against double
+                -- registration, mirroring the marquee-subscribe one-shot).
+                if UpdateManager and UpdateManager.add and W.community.tick
+                   and not W.community_tick_added then
+                    pcall(function()
+                        UpdateManager.add(function() pcall(W.community.tick) end)
+                    end)
+                    W.community_tick_added = true
+                end
+                return true
+            end
+
+            -- Reflect the active tab via a skin swap (mirrors Mass Edit's
+            -- scope tabs): the active tab gets the gold 'sms_tab' skin, the
+            -- inactive one 'sms_tab_off'. The recursion guard stops the
+            -- programmatic setState below from re-entering the tab change
+            -- callbacks (same pattern as mass_edit.set_tab_state).
+            local _tab_set_internal = false
+            local function set_tab_state(tab, on)
+                if not tab then return end
+                try_skin(tab, on and 'sms_tab' or 'sms_tab_off')
+                if tab.setState then
+                    _tab_set_internal = true
+                    pcall(function() tab:setState(on) end)
+                    _tab_set_internal = false
+                end
+            end
+
+            local function update_tab_buttons()
+                set_tab_state(W.tab_my_btn,       W.active_tab == 'my')
+                set_tab_state(W.tab_community_btn, W.active_tab == 'community')
+            end
+
+            -- Switch tabs. 'my' always works; 'community' falls back to 'my'
+            -- if the panel couldn't be built.
+            local function select_tab(which)
+                if which == 'community' then
+                    if not ensure_community() then which = 'my' end
+                end
+                W.active_tab = which
+                if which == 'community' then
+                    set_my_prefabs_visible(false)
+                    pcall(function() W.community:show() end)
+                    -- First switch kicks the once-per-session auto-sync.
+                    if not W.community_first_shown then
+                        W.community_first_shown = true
+                        pcall(function() W.community:on_first_show() end)
+                    end
+                else
+                    if W.community and W.community ~= false then
+                        pcall(function() W.community:hide() end)
+                    end
+                    set_my_prefabs_visible(true)
+                end
+                update_tab_buttons()
+            end
+            M._select_tab = select_tab  -- exposed for smoke/debug
+
+            -- Tab buttons live in the top TAB_H band (above the name row).
+            -- ToggleButton so the active tab can stay visually 'pressed' via
+            -- the gold skin (set_tab_state); falls back to Button if the
+            -- ToggleButton class isn't bound. The change callback bails when
+            -- _tab_set_internal is set (our own setState echo).
+            local function make_tab(label, which)
+                local btn
+                if ToggleButton and ToggleButton.new then
+                    local ok_b, b = pcall(ToggleButton.new)
+                    if ok_b then btn = b end
+                end
+                if not btn then btn = Button.new() end
+                if btn.setText then pcall(function() btn:setText(label) end) end
+                if btn.addChangeCallback then
+                    btn:addChangeCallback(function()
+                        if _tab_set_internal then return end
+                        pcall(function() select_tab(which) end)
+                    end)
+                end
+                W.window:insertWidget(btn)
+                return btn
+            end
+            W.tab_my_btn       = make_tab('My Prefabs', 'my')
+            W.tab_community_btn = make_tab('Community', 'community')
+
+            -- Position the two tabs at the very top, left-aligned.
+            local tab_y, tab_h, tab_w, tab_gap = 4, 24, 110, 4
+            pcall(function() W.tab_my_btn:setBounds(10, tab_y, tab_w, tab_h) end)
+            pcall(function() W.tab_community_btn:setBounds(10 + tab_w + tab_gap, tab_y, tab_w, tab_h) end)
+
+            -- Default to the My Prefabs tab.
+            W.active_tab = 'my'
+            update_tab_buttons()
+        end)
     end)
     if not ok then
         log.write('sms.me', log.ERROR, 'window construction failed: ' .. tostring(err))

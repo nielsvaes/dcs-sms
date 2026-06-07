@@ -454,3 +454,24 @@ For each form above: run the apply, hit Ctrl+Z (or whatever the ME's undo key is
 - [ ] Click **Reset all** → every row returns to its default.
 - [ ] Restart the ME → bindings persist (overrides reloaded from
       `<Saved Games>\DCS\dcs-sms\me_hotkeys.lua`).
+
+## Community prefab library
+
+> These require the LuaSec payload in `Saved Games/DCS/dcs-sms/lib/`. Without
+> it, only the "degrades gracefully" checks apply.
+
+- [ ] Open the Prefab Manager → a `[My Prefabs] [Community]` tab strip is visible; My Prefabs is selected by default and looks unchanged.
+- [ ] Click **Community** the first time → it auto-syncs: status shows "Syncing…", then "Synced N prefabs." within a second or two, and the editor never freezes during the fetch (pan/zoom the map mid-sync to confirm).
+- [ ] The list shows name / author / ♥ / theatre; selecting a row fills the detail panel (description, tags, counts).
+- [ ] Type in the search box → list filters by name/author/tag live. Click a tag chip → list filters to that tag; click again → clears.
+- [ ] Change sort (likes / name / newest) → order updates.
+- [ ] Click **＋ Add to my library** → status confirms "Imported … → Community/"; switch to My Prefabs → a `Community` folder now holds the prefab; place it normally.
+- [ ] Re-select the same community prefab → button shows **Imported ✓** (disabled).
+- [ ] Click **⟳ Refresh** → re-fetches; "last synced" time updates.
+- [ ] **Degrades gracefully:** with the `lib/` payload removed, open Community → it shows the cached catalog (or empty) and Refresh reports "secure networking unavailable"; the rest of the Prefab Manager is unaffected.
+- [ ] **Tamper check (optional):** point `community_config.RAW_BASE` at a file whose bytes don't match its manifest sha256 → import is refused with a sha256-mismatch message; no file is written.
+- [ ] Tab buttons don't visually collide with the SMSWindow title bar; the My-Prefabs panel looks identical to before (grid same size) and still works (place a prefab, rename, undo).
+- [ ] The detail panel's multi-line text (name/author/tags/counts/description) renders on separate lines (not run together) — if this DCS build's Static ignores `\n`, note it.
+- [ ] Tag chips render without overlap/clipping when there are many or long tags; after a Refresh, old chips don't leave ghosts.
+- [ ] The "Imported ✓" state shows as disabled/non-actionable after importing (and re-importing the same prefab reports "Already imported." rather than duplicating).
+- [ ] Community panel looks correct at the default window size AND after resizing the window (its layout is static/non-resize-aware — confirm acceptable).
