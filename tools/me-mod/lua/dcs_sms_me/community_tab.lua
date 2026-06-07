@@ -96,15 +96,36 @@ local M = {}
 -- Grid columns. Module-level so render + selection share the layout.
 -- ---------------------------------------------------------------------------
 local COLS = {
-    { key = 'name',    label = 'Name',    width = 220 },
-    { key = 'author',  label = 'Author',  width = 120 },
-    { key = 'likes',   label = '\226\153\165', width = 45  },  -- ♥ (UTF-8)
-    { key = 'theatre', label = 'Theatre', width = 110 },
+    { key = 'name',    label = 'Name',    width = 220, numeric = false },
+    { key = 'author',  label = 'Author',  width = 120, numeric = false },
+    { key = 'likes',   label = '\226\153\165', width = 45, numeric = true },  -- ♥ (UTF-8)
+    { key = 'theatre', label = 'Theatre', width = 110, numeric = false },
 }
 
--- Sort keys cycled by the sort button, in display order.
-local SORT_KEYS = { 'likes', 'name', 'newest' }
-local SORT_LABEL = { likes = 'Most loved', name = 'Name', newest = 'Newest' }
+local function find_col(key)
+    for i, c in ipairs(COLS) do if c.key == key then return c, i end end
+end
+
+-- Generic stable sort by a column key + direction ('asc'|'desc'). Mirrors
+-- prefab_manager.sort_rows: numeric columns compare as numbers, others
+-- case-insensitively as strings, with the pre-sort index as a stable
+-- tiebreaker. Sorting lives here (header-click driven) rather than in
+-- community_manifest because the grid sorts by any column in either
+-- direction, which manifest.sort (fixed likes/name/newest) doesn't cover.
+local function sort_entries(list, key, dir)
+    local col = find_col(key)
+    local numeric = col and col.numeric
+    local asc = (dir ~= 'desc')
+    for i, e in ipairs(list) do e._sidx = i end
+    table.sort(list, function(a, b)
+        local av, bv = a[key], b[key]
+        if numeric then av, bv = tonumber(av) or 0, tonumber(bv) or 0
+        else av, bv = tostring(av or ''):lower(), tostring(bv or ''):lower() end
+        if av == bv then return a._sidx < b._sidx end
+        if asc then return av < bv else return av > bv end
+    end)
+    for _, e in ipairs(list) do e._sidx = nil end
+end
 
 -- ---------------------------------------------------------------------------
 -- Per-instance builder. Returns a panel_handle. Each call gets its own W so a
@@ -127,14 +148,17 @@ function M.build(parent, deps)
         visible    = {},     -- filtered + sorted subset shown in the grid
         selected_idx = nil,  -- index into W.visible
         search_text  = '',
-        sort_key     = 'likes',
+        sort_key     = 'likes',  -- default: most-loved first
+        sort_dir     = 'desc',   -- toggled by clicking the column header
+        grid_headers = {},    -- GridHeaderCell per column, for re-texting on sort
         active_tags  = {},    -- map tag -> true
         job          = nil,   -- in-flight community_fetch job
         job_kind     = nil,   -- 'manifest' | 'file'
         pending_import = nil, -- entry awaiting a file fetch → import
         last_synced  = nil,   -- 'HH:MM' string
         did_first_sync = false,
-        chips_y      = 0,     -- y baseline where chips are laid out (set below)
+        -- Right-column chip-band geometry, set by relayout(); layout_chips reads it.
+        chips_x = 0, chips_y = 0, chips_w = 300,
     }
 
     -- Register a widget for bulk show/hide and parent it under the window.
@@ -159,19 +183,15 @@ function M.build(parent, deps)
     end
 
     -- -----------------------------------------------------------------------
-    -- Layout. Bounds are absolute within the parent window content rect. The
-    -- Prefab Manager parents this panel under the shared window; we use a
-    -- fixed layout tuned to the manager's ~900px-wide content area. Bounds are
-    -- only applied once at build (the manager owns resize for the My-Prefabs
-    -- panel; the Community panel uses a static layout — noted for smoke).
+    -- Layout spacing. The actual widget bounds are computed responsively in
+    -- relayout(cw, ch) (called at build and on every window resize) from the
+    -- parent window's content size, so the panel reflows like the My-Prefabs
+    -- panel does.
     -- -----------------------------------------------------------------------
-    local PAD       = 12
-    local ROW_H     = 24
-    local TOP       = 44   -- below the manager's tab strip
-    local GRID_X    = PAD
-    local GRID_W    = 540
-    local DETAIL_X  = GRID_X + GRID_W + PAD
-    local DETAIL_W  = 320
+    local PAD   = 12
+    local ROW_H = 24
+    local TOP   = 44   -- below the manager's tab strip
+    local GAP   = 6
 
     -- Set bounds, guarded.
     local function bounds(widget, x, y, w, h)
@@ -217,6 +237,7 @@ function M.build(parent, deps)
     -- Forward decl (callbacks below reference these before assignment).
     local render_grid, recompute_visible, rebuild_chips, do_refresh
     local update_detail, update_import_btn, selected_entry, on_import_click
+    local update_header_labels, on_header_click, relayout, layout_chips
 
     selected_entry = function()
         if not W.selected_idx then return nil end
@@ -235,10 +256,10 @@ function M.build(parent, deps)
             if W.import_btn.setText then
                 W.import_btn:setText(imported and 'Imported \226\156\147' or '\239\188\139 Add to my library')
             end
-            -- Disable when already imported (or nothing selected).
-            if W.import_btn.setEnabled then
-                W.import_btn:setEnabled(e ~= nil and not imported)
-            end
+            -- NOTE: intentionally NOT using setEnabled here — a disabled dxgui
+            -- Button can render with no visible label on some builds. The label
+            -- conveys state ("Imported ✓" vs "Add to my library") and the click
+            -- handler guards the no-selection / already-imported cases.
         end)
     end
 
@@ -285,9 +306,7 @@ function M.build(parent, deps)
             local ok, res = pcall(manifest.filter, W.entries, { text = W.search_text, tags = tags })
             if ok and type(res) == 'table' then filtered = res end
         end
-        if manifest and manifest.sort then
-            pcall(manifest.sort, filtered, W.sort_key)
-        end
+        pcall(sort_entries, filtered, W.sort_key, W.sort_dir)
         W.visible = filtered
         -- Restore selection by identity (same entry table) if still visible.
         W.selected_idx = nil
@@ -305,6 +324,42 @@ function M.build(parent, deps)
             local idx = W.grid:getSelectedRow()
             if type(idx) ~= 'number' or idx < 0 then W.selected_idx = nil
             else W.selected_idx = idx + 1 end
+            update_detail()
+        end)
+    end
+
+    -- Re-text each header so the active sort column shows an up/down arrow.
+    update_header_labels = function()
+        pcall(function()
+            for i, c in ipairs(COLS) do
+                local hc = W.grid_headers[i]
+                if hc and hc.setText then
+                    local label = c.label
+                    if c.key == W.sort_key then
+                        -- ▼ (\226\150\188) for desc, ▲ (\226\150\178) for asc.
+                        label = label .. (W.sort_dir == 'desc' and ' \226\150\188' or ' \226\150\178')
+                    end
+                    hc:setText(label)
+                end
+            end
+        end)
+    end
+
+    -- Header click: same column toggles direction; a new column sorts by it
+    -- (numeric columns default to desc — most-loved first — text to asc).
+    on_header_click = function(key)
+        pcall(function()
+            local col = find_col(key)
+            if not col then return end
+            if W.sort_key == key then
+                W.sort_dir = (W.sort_dir == 'asc') and 'desc' or 'asc'
+            else
+                W.sort_key = key
+                W.sort_dir = col.numeric and 'desc' or 'asc'
+            end
+            update_header_labels()
+            recompute_visible()
+            render_grid()
             update_detail()
         end)
     end
@@ -336,19 +391,26 @@ function M.build(parent, deps)
         W.chips = {}
     end
 
-    -- Lay out the chip row at W.chips_y, wrapping naturally inside GRID_W.
-    local function layout_chips()
-        local x = GRID_X
-        local y = W.chips_y
+    -- Lay the tag chips out in the right column, wrapping within W.chips_w.
+    -- Returns the y just below the last chip row (or W.chips_y when there are
+    -- no chips) so relayout can place the detail block directly beneath them.
+    layout_chips = function()
+        local x0   = W.chips_x or 0
+        local y0   = W.chips_y or 0
+        local maxw = W.chips_w or 300
         local CHIP_H = 20
+        local cx, cy = x0, y0
         for _, chip in ipairs(W.chips) do
             local label = '#tag'
             pcall(function() if chip.getText then label = chip:getText() or label end end)
             local cw = math.max(40, 16 + #label * 7)
-            if x + cw > GRID_X + GRID_W then x = GRID_X; y = y + CHIP_H + 4 end
-            bounds(chip, x, y, cw, CHIP_H)
-            x = x + cw + 6
+            if cw > maxw then cw = maxw end
+            if cx + cw > x0 + maxw then cx = x0; cy = cy + CHIP_H + 4 end
+            bounds(chip, cx, cy, cw, CHIP_H)
+            cx = cx + cw + 6
         end
+        if #W.chips > 0 then return cy + CHIP_H end
+        return y0
     end
 
     rebuild_chips = function()
@@ -383,7 +445,9 @@ function M.build(parent, deps)
                     W.chips[#W.chips + 1] = chip
                 end
             end
-            layout_chips()
+            -- Re-flow the whole panel so the detail block drops below the new
+            -- chip band (its height depends on how many chips wrapped).
+            relayout(W.cw, W.ch)
         end)
     end
 
@@ -391,10 +455,11 @@ function M.build(parent, deps)
     -- Widget construction
     -- =======================================================================
 
-    -- Title / "last synced" line.
+    -- "Last synced HH:MM" label (right column, beside Refresh). Starts blank;
+    -- the dead "Community prefabs" title was dropped — it added nothing.
     W.synced_lbl = track(Static and Static.new())
     if W.synced_lbl then
-        pcall(function() if W.synced_lbl.setText then W.synced_lbl:setText('Community prefabs') end end)
+        pcall(function() if W.synced_lbl.setText then W.synced_lbl:setText('') end end)
         try_skin(W.synced_lbl, 'staticSkin_ME')
     end
 
@@ -410,35 +475,8 @@ function M.build(parent, deps)
         end
     end
 
-    -- Sort cycle button. Click cycles likes → name → newest.
-    W.sort_btn = track(Button and Button.new())
-    local function update_sort_label()
-        pcall(function()
-            if W.sort_btn and W.sort_btn.setText then
-                W.sort_btn:setText('Sort: ' .. (SORT_LABEL[W.sort_key] or W.sort_key))
-            end
-        end)
-    end
-    if W.sort_btn then
-        try_skin(W.sort_btn, 'sms_button')
-        update_sort_label()
-        if W.sort_btn.addChangeCallback then
-            pcall(function()
-                W.sort_btn:addChangeCallback(function()
-                    pcall(function()
-                        -- Advance to the next sort key in SORT_KEYS.
-                        local cur = 1
-                        for i, k in ipairs(SORT_KEYS) do if k == W.sort_key then cur = i; break end end
-                        W.sort_key = SORT_KEYS[(cur % #SORT_KEYS) + 1]
-                        update_sort_label()
-                        recompute_visible()
-                        render_grid()
-                        update_detail()
-                    end)
-                end)
-            end)
-        end
-    end
+    -- (Sorting is driven by clicking the grid column headers — see the Grid
+    -- construction below — so there's no separate Sort button.)
 
     -- Search input. clearable_edit preferred; raw TextBox/Static fallback.
     do
@@ -484,12 +522,20 @@ function M.build(parent, deps)
     if Grid and GridHeaderCell then
         W.grid = track(Grid.new())
         try_skin(W.grid, 'sms_grid')
-        for _, c in ipairs(COLS) do
+        for i, c in ipairs(COLS) do
             local hc = GridHeaderCell.new()
             try_skin(hc, 'sms_grid_header')
             if hc and hc.setText then hc:setText(c.label) end
             W.grid:insertColumn(c.width, hc)
+            W.grid_headers[i] = hc
+            -- Click a header to sort by that column (toggles asc/desc),
+            -- mirroring the My-Prefabs grid + Mass Edit.
+            if hc and hc.addChangeCallback then
+                local key = c.key
+                pcall(function() hc:addChangeCallback(function() on_header_click(key) end) end)
+            end
         end
+        update_header_labels()  -- show the initial sort arrow (likes ▼)
         -- Grid's default onMouseDown doesn't select; override like the manager.
         W.grid.onMouseDown = function(self, x, y, button)
             if button ~= 1 then return end
@@ -518,10 +564,14 @@ function M.build(parent, deps)
         pcall(function() if W.detail.setText then W.detail:setText(entry_detail_text(nil)) end end)
     end
 
-    -- ＋ Add to my library button.
+    -- ＋ Add to my library button. Set the label up front so it's never blank
+    -- before the first selection (update_import_btn refines it per-selection).
     W.import_btn = track(Button and Button.new())
     if W.import_btn then
         try_skin(W.import_btn, 'sms_button')
+        pcall(function()
+            if W.import_btn.setText then W.import_btn:setText('\239\188\139 Add to my library') end
+        end)
         if W.import_btn.addChangeCallback then
             pcall(function()
                 -- on_import_click is forward-declared above and assigned below
@@ -533,31 +583,56 @@ function M.build(parent, deps)
     end
 
     -- -----------------------------------------------------------------------
-    -- Static layout. The search row sits below the title/buttons row; chips
-    -- below that; grid + detail fill the rest.
+    -- Responsive layout. Left column: the search row, then the grid filling
+    -- the rest of the height. Right column: Refresh + last-synced on row 1,
+    -- the tag chips beneath, the detail block, and the import button pinned to
+    -- the bottom. Called once at build and from the Prefab Manager on every
+    -- window resize, so the panel reflows like the My-Prefabs panel.
     -- -----------------------------------------------------------------------
-    do
+    relayout = function(cw, ch)
+        cw = tonumber(cw) or W.cw or 920
+        ch = tonumber(ch) or W.ch or 612
+        W.cw, W.ch = cw, ch  -- remembered so rebuild_chips can re-flow
+        -- Reserve the sms_window footer band at the bottom: the footer
+        -- separator sits at h-76 and the status Static at h-73, so content
+        -- must stop above ~h-80 or it spills over / gets clipped.
+        local FOOTER = 82
+        local bottom = ch - FOOTER
+        local DETAIL_W = 300
+        local right_x  = math.max(PAD + 220, cw - PAD - DETAIL_W)
+        local detail_w = math.max(120, cw - PAD - right_x)
+        local grid_x   = PAD
+        local grid_w   = math.max(220, right_x - PAD - grid_x)
+
+        -- Row 1: search (left), Refresh + last-synced (right column).
         local y = TOP
-        bounds(W.synced_lbl, GRID_X, y, GRID_W, ROW_H)
-        bounds(W.refresh_btn, DETAIL_X, y, 100, ROW_H)
-        bounds(W.sort_btn,    DETAIL_X + 108, y, 140, ROW_H)
-        y = y + ROW_H + 6
-        -- Search input row. clearable_edit exposes set_bounds; raw widgets
-        -- use setBounds via the bounds() helper.
         if W.search_input and W.search_input.set_bounds then
-            pcall(function() W.search_input:set_bounds(GRID_X, y, GRID_W, ROW_H) end)
+            pcall(function() W.search_input:set_bounds(grid_x, y, grid_w, ROW_H) end)
         else
-            bounds(W.search_input, GRID_X, y, GRID_W, ROW_H)
+            bounds(W.search_input, grid_x, y, grid_w, ROW_H)
         end
-        y = y + ROW_H + 6
-        W.chips_y = y
-        -- Reserve up to two chip rows before the grid.
-        local chip_band = (ROW_H + 4) * 2
-        local grid_y = y + chip_band
-        local grid_h = 360
-        bounds(W.grid, GRID_X, grid_y, GRID_W, grid_h)
-        bounds(W.detail, DETAIL_X, grid_y, DETAIL_W, grid_h - ROW_H - 6)
-        bounds(W.import_btn, DETAIL_X, grid_y + grid_h - ROW_H, DETAIL_W, ROW_H)
+        local refresh_w = 100
+        bounds(W.refresh_btn, right_x, y, refresh_w, ROW_H)
+        bounds(W.synced_lbl, right_x + refresh_w + 8, y, math.max(0, detail_w - refresh_w - 8), ROW_H)
+
+        -- Left column: grid fills from row 2 down to just above the footer,
+        -- directly under the search bar.
+        local row2   = y + ROW_H + GAP
+        local grid_h = math.max(120, bottom - row2)
+        bounds(W.grid, grid_x, row2, grid_w, grid_h)
+
+        -- Right column: chips under row 1, detail below them, import pinned
+        -- just above the footer.
+        W.chips_x = right_x
+        W.chips_y = row2
+        W.chips_w = detail_w
+        local chips_bottom = layout_chips()
+        local import_h = ROW_H
+        local import_y = bottom - import_h
+        local detail_y = chips_bottom + GAP
+        local detail_h = math.max(60, import_y - GAP - detail_y)
+        bounds(W.detail, right_x, detail_y, detail_w, detail_h)
+        bounds(W.import_btn, right_x, import_y, detail_w, import_h)
     end
 
     -- =======================================================================
@@ -651,7 +726,7 @@ function M.build(parent, deps)
             W.last_synced = os.date('%H:%M')
             pcall(function()
                 if W.synced_lbl and W.synced_lbl.setText then
-                    W.synced_lbl:setText('Community prefabs — last synced ' .. tostring(W.last_synced))
+                    W.synced_lbl:setText('last synced ' .. tostring(W.last_synced))
                 end
             end)
             rebuild_chips()
@@ -757,13 +832,25 @@ function M.build(parent, deps)
         end)
     end
 
+    -- Reflow to a content size. Called by the Prefab Manager at build and on
+    -- every window resize so the panel tracks the window like My-Prefabs does.
+    function handle:relayout(cw, ch)
+        pcall(function() relayout(cw, ch) end)
+    end
+
     -- Expose a couple of internals for the manager / future tests. Harmless in
     -- production; mirrors prefab_manager.lua's M._foo exposure convention.
     handle._W = W
     handle._do_refresh = do_refresh
 
-    -- Initial population from cache so the tab shows the last catalog at once.
+    -- Initial layout (default size; the manager re-lays-out at the real content
+    -- size immediately after build) + populate from cache so the tab shows the
+    -- last catalog at once. update_detail() runs unconditionally afterward so
+    -- the detail block + import button start in a consistent state even when
+    -- there's no cache (load_from_cache returns early in that case).
+    relayout()
     load_from_cache()
+    update_detail()
 
     return handle
 end

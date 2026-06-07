@@ -90,6 +90,8 @@ local function try_skin(widget, skin_name)
         elseif skin_name == 'sms_status_yellow' then s = sms_skins.static_yellow()
         elseif skin_name == 'sms_status_red'    then s = sms_skins.static_red()
         elseif skin_name == 'sms_status_green'  then s = sms_skins.static_green()
+        elseif skin_name == 'sms_tab'         then s = sms_skins.tab()
+        elseif skin_name == 'sms_tab_off'     then s = sms_skins.tab_off()
         else
             local fn = Skin[skin_name]
             if not fn then return end
@@ -1833,6 +1835,13 @@ local function relayout(w, h)
     local place_click_x = stack_x + stack_w - place_click_w
     set(W.place_origin_btn, place_orig_x,  cur_y, place_orig_w,  row_h)
     set(W.place_click_btn,  place_click_x, cur_y, place_click_w, row_h)
+
+    -- Reflow the Community tab's panel to the same content size so it resizes
+    -- alongside the My-Prefabs panel. Safe no-op until the panel is built
+    -- (first switch to the Community tab).
+    if W.community and W.community ~= false and W.community.relayout then
+        pcall(function() W.community:relayout(w, h) end)
+    end
 end
 
 -- Folder operation handlers (Task 17). Confirmations use show_overlay;
@@ -2866,21 +2875,24 @@ function M.show()
                 W.place_origin_btn, W.place_click_btn,
             }
 
-            -- Show/hide every My-Prefabs widget. Handles the three visibility
-            -- shapes in play: raw dxgui widgets + clearable_edit (setVisible),
-            -- and the splitter (show/hide only).
+            -- Show/hide every My-Prefabs widget. MUST use pairs, not ipairs:
+            -- the list contains conditionally-created widgets (only ONE of
+            -- rotation_dial/rotation_spin/rotation_input exists; CheckBox /
+            -- splitter may be absent), so it has nil holes — ipairs would stop
+            -- at the first hole and leave the rest of the panel visible. pairs
+            -- visits every non-nil entry regardless of holes. Handles the
+            -- visibility shapes in play: raw dxgui widgets + clearable_edit
+            -- (setVisible/set_visible) and the splitter (show/hide only).
             local function set_my_prefabs_visible(vis)
-                for _, wdg in ipairs(W.my_prefab_widgets) do
-                    if wdg then
-                        if wdg.setVisible then
-                            pcall(function() wdg:setVisible(vis) end)
-                        elseif wdg.set_visible then
-                            pcall(function() wdg:set_visible(vis) end)
-                        elseif vis and wdg.show then
-                            pcall(function() wdg:show() end)
-                        elseif (not vis) and wdg.hide then
-                            pcall(function() wdg:hide() end)
-                        end
+                for _, wdg in pairs(W.my_prefab_widgets) do
+                    if wdg.setVisible then
+                        pcall(function() wdg:setVisible(vis) end)
+                    elseif wdg.set_visible then
+                        pcall(function() wdg:set_visible(vis) end)
+                    elseif vis and wdg.show then
+                        pcall(function() wdg:show() end)
+                    elseif (not vis) and wdg.hide then
+                        pcall(function() wdg:hide() end)
                     end
                 end
             end
@@ -2903,6 +2915,14 @@ function M.show()
                     return false
                 end
                 W.community = panel
+                -- Lay the freshly-built panel out to the current content size
+                -- (the manager's last relayout ran before this lazy build).
+                pcall(function()
+                    if W.community.relayout and W.window and W.window.getSize then
+                        local ww, wh = W.window:getSize()
+                        if ww and wh then W.community:relayout(ww, wh) end
+                    end
+                end)
                 -- Panels start hidden; My Prefabs is the default tab.
                 pcall(function() W.community:hide() end)
                 -- Register the community tick once (guarded against double
@@ -2917,21 +2937,25 @@ function M.show()
                 return true
             end
 
-            -- Reflect the active tab on the two buttons. ToggleButtons would
-            -- carry state natively, but plain Buttons are used for parity with
-            -- the rest of the manager's chrome, so we just retext to mark the
-            -- selection (pcall-guarded — setText may be absent on a fallback).
+            -- Reflect the active tab via a skin swap (mirrors Mass Edit's
+            -- scope tabs): the active tab gets the gold 'sms_tab' skin, the
+            -- inactive one 'sms_tab_off'. The recursion guard stops the
+            -- programmatic setState below from re-entering the tab change
+            -- callbacks (same pattern as mass_edit.set_tab_state).
+            local _tab_set_internal = false
+            local function set_tab_state(tab, on)
+                if not tab then return end
+                try_skin(tab, on and 'sms_tab' or 'sms_tab_off')
+                if tab.setState then
+                    _tab_set_internal = true
+                    pcall(function() tab:setState(on) end)
+                    _tab_set_internal = false
+                end
+            end
+
             local function update_tab_buttons()
-                pcall(function()
-                    if W.tab_my_btn and W.tab_my_btn.setText then
-                        W.tab_my_btn:setText(W.active_tab == 'my'
-                            and '[ My Prefabs ]' or 'My Prefabs')
-                    end
-                    if W.tab_community_btn and W.tab_community_btn.setText then
-                        W.tab_community_btn:setText(W.active_tab == 'community'
-                            and '[ Community ]' or 'Community')
-                    end
-                end)
+                set_tab_state(W.tab_my_btn,       W.active_tab == 'my')
+                set_tab_state(W.tab_community_btn, W.active_tab == 'community')
             end
 
             -- Switch tabs. 'my' always works; 'community' falls back to 'my'
@@ -2960,15 +2984,29 @@ function M.show()
             M._select_tab = select_tab  -- exposed for smoke/debug
 
             -- Tab buttons live in the top TAB_H band (above the name row).
-            W.tab_my_btn = Button.new()
-            try_skin(W.tab_my_btn, 'sms_button')
-            W.tab_my_btn:addChangeCallback(function() pcall(function() select_tab('my') end) end)
-            W.window:insertWidget(W.tab_my_btn)
-
-            W.tab_community_btn = Button.new()
-            try_skin(W.tab_community_btn, 'sms_button')
-            W.tab_community_btn:addChangeCallback(function() pcall(function() select_tab('community') end) end)
-            W.window:insertWidget(W.tab_community_btn)
+            -- ToggleButton so the active tab can stay visually 'pressed' via
+            -- the gold skin (set_tab_state); falls back to Button if the
+            -- ToggleButton class isn't bound. The change callback bails when
+            -- _tab_set_internal is set (our own setState echo).
+            local function make_tab(label, which)
+                local btn
+                if ToggleButton and ToggleButton.new then
+                    local ok_b, b = pcall(ToggleButton.new)
+                    if ok_b then btn = b end
+                end
+                if not btn then btn = Button.new() end
+                if btn.setText then pcall(function() btn:setText(label) end) end
+                if btn.addChangeCallback then
+                    btn:addChangeCallback(function()
+                        if _tab_set_internal then return end
+                        pcall(function() select_tab(which) end)
+                    end)
+                end
+                W.window:insertWidget(btn)
+                return btn
+            end
+            W.tab_my_btn       = make_tab('My Prefabs', 'my')
+            W.tab_community_btn = make_tab('Community', 'community')
 
             -- Position the two tabs at the very top, left-aligned.
             local tab_y, tab_h, tab_w, tab_gap = 4, 24, 110, 4
