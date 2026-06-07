@@ -39,7 +39,11 @@ end
 local function do_request(url)
     local mod = load_https()
     if not mod then return nil, 'LuaSec not installed (place ssl.dll + cacert.pem in dcs-sms\\lib)' end
-    local ltn12 = require('ltn12')
+    -- ltn12 co-installs with LuaSocket, but guard the require so a missing
+    -- dependency degrades to a returned error instead of throwing (ME-mod
+    -- never throws out of runtime code — AGENTS.md §2.11).
+    local ok_ltn, ltn12 = pcall(require, 'ltn12')
+    if not ok_ltn or type(ltn12) ~= 'table' then return nil, 'ltn12 unavailable' end
     local chunks = {}
     local ok, code = pcall(function()
         local _, c = mod.request{
