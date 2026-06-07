@@ -4,6 +4,11 @@
 -- acceptable for the manifest, which never uses null meaningfully).
 local M = {}
 
+-- Hard cap on object/array nesting. decode is pcall-guarded by callers, so a
+-- stack overflow on pathologically deep input already fails safe; this rejects
+-- hostile input with a clean error before that limit is reached.
+local MAX_DEPTH = 200
+
 local function skip_ws(s, i)
     local _, j = s:find('^[ \t\r\n]*', i)
     return (j or i - 1) + 1
@@ -58,14 +63,14 @@ local function decode_number(s, i)
     return n, i + #num
 end
 
-local function decode_array(s, i)
+local function decode_array(s, i, depth)
     i = i + 1  -- skip [
     local arr = {}
     i = skip_ws(s, i)
     if s:sub(i, i) == ']' then return arr, i + 1 end
     while true do
         local v
-        v, i = decode_value(s, i)
+        v, i = decode_value(s, i, depth + 1)
         arr[#arr + 1] = v
         i = skip_ws(s, i)
         local c = s:sub(i, i)
@@ -75,7 +80,7 @@ local function decode_array(s, i)
     end
 end
 
-local function decode_object(s, i)
+local function decode_object(s, i, depth)
     i = i + 1  -- skip {
     local obj = {}
     i = skip_ws(s, i)
@@ -87,7 +92,7 @@ local function decode_object(s, i)
         i = skip_ws(s, i)
         if s:sub(i, i) ~= ':' then error('expected : at ' .. i) end
         i = skip_ws(s, i + 1)
-        local v; v, i = decode_value(s, i)
+        local v; v, i = decode_value(s, i, depth + 1)
         obj[key] = v
         i = skip_ws(s, i)
         local c = s:sub(i, i)
@@ -97,11 +102,13 @@ local function decode_object(s, i)
     end
 end
 
-decode_value = function(s, i)
+decode_value = function(s, i, depth)
+    depth = depth or 0
+    if depth > MAX_DEPTH then error('nesting too deep (>' .. MAX_DEPTH .. ') at ' .. i) end
     i = skip_ws(s, i)
     local c = s:sub(i, i)
-    if c == '{' then return decode_object(s, i) end
-    if c == '[' then return decode_array(s, i) end
+    if c == '{' then return decode_object(s, i, depth) end
+    if c == '[' then return decode_array(s, i, depth) end
     if c == '"' then return decode_string(s, i) end
     if c == '-' or c:match('%d') then return decode_number(s, i) end
     if s:sub(i, i + 3) == 'true'  then return true,  i + 4 end

@@ -105,6 +105,14 @@ local function lex(src)
             -- 4294967041 instead of -255), so we negate the value instead.
             local value = tonumber(num)
             if negate then value = -value end
+            -- Reject non-finite results. '/' is disallowed (so NaN/inf written
+            -- as 0/0, 1/0 never lex), but a huge literal like 1e999 overflows
+            -- to inf via tonumber — shared prefabs must not carry inf/NaN (see
+            -- the header note), so reject it here rather than write it to disk.
+            if value == nil or value ~= value
+                or value == math.huge or value == -math.huge then
+                err('non-finite number not allowed', i)
+            end
             tokens[#tokens+1] = { type='number', value=value, pos=i }
             i = start + #num
         elseif c:match('[%a_]') then
@@ -135,8 +143,16 @@ end
 
 -- ---- Parser ----------------------------------------------------------------
 
+-- Hard cap on table-constructor nesting. The upstream pcall already fails
+-- safe if the interpreter's own stack overflows on a pathologically deep
+-- file, but an explicit cap rejects hostile input with a clean error well
+-- before that limit (and before any LuaJIT C-stack edge case in DCS). No
+-- real prefab nests anywhere near this deep.
+local MAX_DEPTH = 200
+
 local function parse(tokens)
     local p = 1
+    local depth = 0
     local function peek() return tokens[p] end
     local function next_tok() local t = tokens[p]; p = p + 1; return t end
     local function expect(ty, val)
@@ -167,6 +183,10 @@ local function parse(tokens)
 
     parse_table = function()
         expect('punct', '{')
+        depth = depth + 1
+        if depth > MAX_DEPTH then
+            error({ msg = 'table nesting too deep (>' .. MAX_DEPTH .. ')', pos = peek().pos }, 0)
+        end
         local tbl = {}
         local array_idx = 0
         while true do
@@ -204,6 +224,7 @@ local function parse(tokens)
             elseif is_punct(sep, '}') then -- loop handles close
             else error({ msg = 'expected "," ";" or "}" in table', pos = sep.pos }, 0) end
         end
+        depth = depth - 1
         return tbl
     end
 

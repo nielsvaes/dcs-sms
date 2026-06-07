@@ -63,5 +63,16 @@ rejects('return non-table', 'return 42')
 rejects('unterminated table', 'return { a = 1')
 rejects('index expression value', 'return { x = a[1] }')
 
+-- Reject: non-finite numbers (a huge literal overflows to inf via tonumber).
+rejects('positive infinity literal', 'return { x = 1e999 }')
+rejects('negative infinity literal', 'return { x = -1e999 }')
+rejects('infinity as key', 'return { [1e999] = 1 }')
+
+-- Nesting: accepted up to a generous cap, rejected (cleanly, no crash) beyond
+-- it. Reaching the interpreter's own stack limit would also be caught by the
+-- internal pcall, but the explicit cap rejects hostile input well before that.
+accepts('moderate nesting', 'return ' .. string.rep('{', 50) .. string.rep('}', 50))
+rejects('excessive nesting', 'return ' .. string.rep('{', 5000) .. string.rep('}', 5000))
+
 if failures > 0 then os.exit(1) end
 print('All prefab_safe_load tests passed.')

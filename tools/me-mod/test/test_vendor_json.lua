@@ -25,5 +25,12 @@ check('malformed rejected', not ok)
 local ok2, val = pcall(json.decode, 'true')
 check('top-level scalar', ok2 and val == true)
 
+-- Nesting: moderate depth decodes; pathologically deep input is rejected
+-- cleanly (no crash) by the depth cap.
+local deep_ok = json.decode(string.rep('[', 50) .. string.rep(']', 50))
+check('moderate nesting decodes', type(deep_ok) == 'table')
+local ok3 = pcall(json.decode, string.rep('[', 5000) .. string.rep(']', 5000))
+check('excessive nesting rejected', not ok3)
+
 if failures > 0 then os.exit(1) end
 print('All vendor json tests passed.')
