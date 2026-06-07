@@ -105,6 +105,19 @@ This is the first tag after a long quiet period — `sms.version` had been froze
 
 ## ME-mod
 
+### ME-mod 0.20.0
+
+- **Community prefab library (browse + import).** New **Community** tab in the
+  Prefab Manager browses a vetted, GitHub-hosted catalog over HTTPS, with
+  search, sort (most-loved / name / newest), tag filters, and one-click
+  "Add to my library" (imports land in a `Community/` folder). Community files
+  are loaded **parse-don't-execute** through a strict data-only validator and
+  verified by SHA-256 before they ever touch disk or `dofile`. Fetch runs
+  non-blocking on the editor tick; the last catalog is cached for offline use.
+- Requires the bundled LuaSec payload in `<Saved Games>/DCS/dcs-sms/lib/` for
+  HTTPS (see README). Without it, the tab shows the cached catalog and reports
+  that secure networking is unavailable.
+
 ### [0.19.1] — 2026-06-05
 
 **Changed**
