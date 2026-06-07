@@ -14,6 +14,7 @@ import (
 	"github.com/nielsvaes/dcs-sms/tools/internal/dcspath"
 	"github.com/nielsvaes/dcs-sms/tools/internal/elevate"
 	memod "github.com/nielsvaes/dcs-sms/tools/me-mod/lua"
+	luasec "github.com/nielsvaes/dcs-sms/tools/me-mod/luasec"
 )
 
 type installMeModOpts struct {
@@ -101,6 +102,40 @@ func installMeModCmd(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stdout, "removed stale %s\n", rel)
 	}
 
+	// Step 1b: deploy the optional LuaSec HTTPS payload (native module + CA
+	// bundle) so the Community prefab library can fetch over HTTPS.
+	//   payload/lib/* → <Saved Games>/DCS/dcs-sms/lib/   (Lua require path)
+	//   payload/bin/* → <install>/bin and /bin-mt        (native DLL deps)
+	// Entirely best-effort + additive (never pruned): a missing payload, an
+	// unresolved Saved Games path, or a read-only bin just logs and skips, so
+	// the core mod install always succeeds. README/dotfile placeholders in the
+	// embed are not copied (copyPayloadDir skips them).
+	if sg, derr := dcspath.Discover("", cfg); derr == nil {
+		libDst := filepath.Join(sg, "dcs-sms", "lib")
+		if n, cerr := copyPayloadDir(luasec.FS, "payload/lib", libDst); cerr != nil {
+			fmt.Fprintln(stderr, "dcs-sms install-me-mod: warning: LuaSec lib payload:", cerr)
+		} else if n > 0 {
+			fmt.Fprintf(stdout, "copied LuaSec lib payload (%d files) → %s\n", n, libDst)
+		}
+	} else {
+		fmt.Fprintln(stdout, "note: Saved Games path not resolved; skipped LuaSec lib payload")
+	}
+	binTotal := 0
+	for _, sub := range []string{"bin", "bin-mt"} {
+		binDst := filepath.Join(install, sub)
+		if _, serr := os.Stat(binDst); serr != nil {
+			continue // some installs don't have bin-mt
+		}
+		if n, cerr := copyPayloadDir(luasec.FS, "payload/bin", binDst); cerr != nil {
+			fmt.Fprintln(stderr, "dcs-sms install-me-mod: warning: LuaSec bin payload:", cerr)
+		} else {
+			binTotal += n
+		}
+	}
+	if binTotal > 0 {
+		fmt.Fprintf(stdout, "copied LuaSec bin payload (%d files) → %s\\bin[-mt]\n", binTotal, install)
+	}
+
 	// Step 2: patch MissionEditor.lua (idempotent).
 	meSrc, err := os.ReadFile(meFile)
 	if err != nil {
@@ -171,6 +206,47 @@ func copyEmbedDir(efs fs.FS, srcSubdir, dstDir string) error {
 		}
 		return os.WriteFile(target, data, 0o644)
 	})
+}
+
+// copyPayloadDir copies every real file under the embed subtree srcSubdir into
+// dstDir (creating directories), preserving structure, and returns the count
+// copied. Placeholder docs (README*, dotfiles) are skipped so they don't land
+// in the user's lib/ or the DCS bin. Additive only — it never prunes the
+// destination (unlike the installer-owned module dir). Returns 0 with no error
+// when the subtree holds only placeholders or doesn't exist.
+func copyPayloadDir(efs fs.FS, srcSubdir, dstDir string) (int, error) {
+	count := 0
+	err := fs.WalkDir(efs, srcSubdir, func(path string, d fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			// Missing subtree (payload not present) is not an error here.
+			if errors.Is(walkErr, fs.ErrNotExist) {
+				return fs.SkipDir
+			}
+			return walkErr
+		}
+		if d.IsDir() {
+			return nil
+		}
+		base := filepath.Base(path)
+		if strings.HasPrefix(base, ".") || strings.HasPrefix(strings.ToLower(base), "readme") {
+			return nil
+		}
+		rel := strings.TrimPrefix(strings.TrimPrefix(path, srcSubdir), "/")
+		target := filepath.Join(dstDir, filepath.FromSlash(rel))
+		data, err := fs.ReadFile(efs, path)
+		if err != nil {
+			return fmt.Errorf("read %s: %w", path, err)
+		}
+		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+			return err
+		}
+		if err := os.WriteFile(target, data, 0o644); err != nil {
+			return err
+		}
+		count++
+		return nil
+	})
+	return count, err
 }
 
 // pruneStaleEmbedDir removes any file or directory under dstDir that is not part
