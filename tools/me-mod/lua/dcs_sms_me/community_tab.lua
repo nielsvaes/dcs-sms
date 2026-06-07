@@ -54,6 +54,10 @@ local sms_skins; do local ok, m = pcall(require, 'dcs_sms_me.sms_skins');    if 
 -- unavailable (test VM / older dxgui).
 local clearable_edit; do local ok, m = pcall(require, 'dcs_sms_me.clearable_edit'); if ok then clearable_edit = m end end
 
+-- Themed editbox skin (house look + thin scrollbars) for the read-only,
+-- multi-line detail box. Guarded; falls back to editBoxSkin_ME if unavailable.
+local sms_scrollbars; do local ok, m = pcall(require, 'dcs_sms_me.sms_scrollbars'); if ok then sms_scrollbars = m end end
+
 -- ---------------------------------------------------------------------------
 -- Logic modules (all implemented + unit-tested). These are pure Lua and load
 -- fine anywhere, but guard the requires too so a single missing dependency
@@ -557,10 +561,24 @@ function M.build(parent, deps)
         if W.grid and W.grid.setText then pcall(function() W.grid:setText('Grid widget not available') end) end
     end
 
-    -- Detail block (multi-line Static).
-    W.detail = track(Static and Static.new())
+    -- Detail block: a READ-ONLY, multi-line EditBox (not a Static — a plain
+    -- dxgui Static renders only the first line and ignores the \n breaks, so
+    -- the description never showed). setMultiline must run BEFORE setSkin (it
+    -- rebuilds the scrollbar widgets); setReadOnly keeps it a display, not an
+    -- input. TextBox resolves to EditBox on real DCS; nil in the test VM.
+    W.detail = track(TextBox and TextBox.new())
     if W.detail then
-        try_skin(W.detail, 'staticSkin_ME')
+        pcall(function() if W.detail.setMultiline then W.detail:setMultiline(true) end end)
+        pcall(function() if W.detail.setTextWrapping then W.detail:setTextWrapping(true) end end)
+        local skinned = false
+        pcall(function()
+            if sms_scrollbars and sms_scrollbars.themed_editbox_skin and W.detail.setSkin then
+                W.detail:setSkin(sms_scrollbars.themed_editbox_skin({ mono = false }))
+                skinned = true
+            end
+        end)
+        if not skinned then try_skin(W.detail, 'editBoxSkin_ME') end
+        pcall(function() if W.detail.setReadOnly then W.detail:setReadOnly(true) end end)
         pcall(function() if W.detail.setText then W.detail:setText(entry_detail_text(nil)) end end)
     end
 
