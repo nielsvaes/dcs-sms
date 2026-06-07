@@ -11,8 +11,10 @@ local M = {}
 M.ROOT           = lfs.writedir() .. 'dcs-sms\\'
 M.OUTBOX_DIR     = M.ROOT .. 'me\\'
 M.PREFABS_DIR    = M.ROOT .. 'prefabs\\'
-M.WAREHOUSES_DIR = M.ROOT .. 'airbase-warehouses\\'
-M.LOG_TAG        = 'sms.me'
+M.WAREHOUSES_DIR       = M.ROOT .. 'airbase-warehouses\\'
+M.LIB_DIR              = M.ROOT .. 'lib\\'                       -- bundled LuaSec payload (user-supplied)
+M.COMMUNITY_CACHE_FILE = M.ROOT .. 'community-cache.json'        -- last-fetched manifest (offline)
+M.LOG_TAG              = 'sms.me'
 
 -- Translate an in-memory folder string ('', 'CAP', 'CAP/Tomcats') into
 -- an absolute filesystem path ending in '\'. '/' is the canonical
