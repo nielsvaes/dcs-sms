@@ -765,9 +765,8 @@ function M.build(parent, deps)
         end)
     end
 
-    local function on_file_done(job)
+    local function on_file_done(job, e)
         pcall(function()
-            local e = W.pending_import
             if not e then return end
             if not (importer and importer.import) then
                 set_status('Import unavailable in this build.', 'error'); return
@@ -834,21 +833,23 @@ function M.build(parent, deps)
             if s == 'running' or s == 'idle' then return end
             local job = W.job
             local kind = W.job_kind
-            -- Clear job state BEFORE running the completion handler so a
-            -- handler that kicks a new fetch (it won't today) can't be
-            -- clobbered, and a re-entrant tick sees idle.
+            -- Capture the pending entry, then clear ALL job state BEFORE running
+            -- the completion handler so a re-entrant tick sees idle and a handler
+            -- that kicks a new fetch (it won't today) can't be clobbered. The
+            -- captured entry is handed to on_file_done — it must NOT read the
+            -- now-cleared W.pending_import (clearing it first was the
+            -- import-never-fires bug).
+            local pending = W.pending_import
             W.job = nil
             W.job_kind = nil
-            if kind == 'file' then W.pending_import = nil end
+            W.pending_import = nil
             if s == 'done' then
                 if kind == 'manifest' then on_manifest_done(job)
-                elseif kind == 'file' then on_file_done(job) end
+                elseif kind == 'file' then on_file_done(job, pending) end
             elseif s == 'error' then
                 if kind == 'manifest' then on_manifest_error(job)
                 elseif kind == 'file' then on_file_error(job) end
             end
-            -- pending_import was consumed by on_file_done; clear defensively.
-            W.pending_import = nil
         end)
     end
 
