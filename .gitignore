@@ -21,6 +21,10 @@ tools/dcs-sms.exe
 tools/**/*.test
 tools/**/*.out
 
+# The LuaSec payload binaries are intentionally vendored so install-me-mod can
+# bundle them — override the global *.dll ignore for this folder only.
+!tools/me-mod/luasec/payload/**/*.dll
+
 # IDE
 .idea/
 .vscode/*

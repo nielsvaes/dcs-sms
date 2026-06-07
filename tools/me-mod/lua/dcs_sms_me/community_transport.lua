@@ -1,77 +1,170 @@
--- community_transport.lua — real HTTPS transport for community_fetch.
--- Satisfies the transport contract: request(url) -> req with :poll() ->
--- 'pending' | 'done',body | 'error',msg.
+-- community_transport.lua — NON-BLOCKING HTTPS GET for community_fetch.
 --
--- DCS ships LuaSocket but NOT LuaSec; the LuaSec payload (ssl.dll, OpenSSL
--- DLLs, ssl.lua, https.lua, cacert.pem) is expected under
--- <Saved Games>/DCS/dcs-sms/lib/ and wired onto package.cpath/path by
--- init.lua. If LuaSec is absent, M.available() is false and the UI degrades
--- gracefully ("secure networking unavailable").
+-- Satisfies the transport contract: request(url) -> req with :poll() returning
+--   'pending'              — not done yet, call again next tick
+--   'done', body           — full response body (headers stripped)
+--   'error', message       — failed
 --
--- NOTE: this initial transport performs a SINGLE blocking https.request()
--- inside the first poll() and returns the result immediately. The fetch
--- coroutine still yields between separate requests, but a single GitHub
--- request is small (manifest is a few KB) so the per-tick stall is minimal.
--- The non-blocking, across-ticks TLS handshake is the documented follow-on
--- hardening (see spec Constraints / risks). Keeping it behind the same
--- transport contract means that upgrade is a drop-in replacement.
+-- CRITICAL: the Mission Editor is single-threaded PUC Lua. A blocking socket
+-- call freezes (and can CRASH) the editor — so EVERY socket operation here runs
+-- with settimeout(0) and the request is advanced ONE non-blocking step per
+-- poll() (community_fetch pumps poll() once per UpdateManager tick via a
+-- coroutine). We use LuaSocket's raw TCP + LuaSec's ssl.wrap/dohandshake and
+-- speak HTTP/1.0 ourselves, rather than the blocking ssl.https/socket.http.
+--
+-- DCS ships LuaSocket but NOT LuaSec; the LuaSec payload (ssl.dll + ssl.lua +
+-- OpenSSL DLLs + cacert.pem) is deployed by `install-me-mod` to dcs-sms\lib\
+-- (+ DCS bin) and wired onto package.cpath/path by init.lua. When absent,
+-- M.available() is false and the UI degrades to "secure networking
+-- unavailable".
 
 local paths = require('dcs_sms_me.paths')
 local M = {}
 
-local https
-local function load_https()
-    if https ~= nil then return https end
-    local ok, mod = pcall(require, 'ssl.https')
-    if ok and type(mod) == 'table' then https = mod else https = false end
-    return https
+-- Lazy, cached require of LuaSec. false (not nil) once known-missing so the
+-- pcall cost is paid at most once.
+local ssl
+local function load_ssl()
+    if ssl ~= nil then return ssl end
+    local ok, mod = pcall(require, 'ssl')
+    ssl = (ok and type(mod) == 'table') and mod or false
+    return ssl
 end
 
 function M.available()
-    return load_https() ~= false
+    return load_ssl() ~= false
 end
 
--- Path to the bundled CA bundle. https.request uses it for peer verification.
-local function cafile()
-    return paths.LIB_DIR .. 'cacert.pem'
+-- Parse an https URL into host, port, path. Returns nil on a non-https URL.
+local function parse_url(url)
+    local host, rest = tostring(url or ''):match('^https://([^/]*)(.*)$')
+    if not host or host == '' then return nil end
+    local port = 443
+    local h, p = host:match('^(.-):(%d+)$')
+    if h then host, port = h, tonumber(p) end
+    if rest == '' then rest = '/' end
+    return host, port, rest
 end
 
-local function do_request(url)
-    local mod = load_https()
-    if not mod then return nil, 'LuaSec not installed (place ssl.dll + cacert.pem in dcs-sms\\lib)' end
-    -- ltn12 co-installs with LuaSocket, but guard the require so a missing
-    -- dependency degrades to a returned error instead of throwing (ME-mod
-    -- never throws out of runtime code — AGENTS.md §2.11).
-    local ok_ltn, ltn12 = pcall(require, 'ltn12')
-    if not ok_ltn or type(ltn12) ~= 'table' then return nil, 'ltn12 unavailable' end
-    local chunks = {}
-    local ok, code = pcall(function()
-        local _, c = mod.request{
-            url = url,
-            sink = ltn12.sink.table(chunks),
-            protocol = 'tlsv1_2',
-            verify = 'peer',
-            options = 'all',
-            cafile = cafile(),
-        }
-        return c
-    end)
-    if not ok then return nil, 'request error: ' .. tostring(code) end
-    if code ~= 200 then return nil, 'HTTP ' .. tostring(code) end
-    return table.concat(chunks)
+-- Split the raw HTTP response into status code + body (strip headers at the
+-- first blank line). Returns code (number) and body (string).
+local function split_response(raw)
+    local head, body = raw:match('^(.-)\r\n\r\n(.*)$')
+    if not head then head, body = raw, '' end
+    local code = tonumber(head:match('^HTTP/%d%.%d%s+(%d%d%d)')) or 0
+    return code, body
 end
+
+-- Safety cap so a stuck connection can never spin forever (each poll ≈ one ME
+-- tick). ~3600 ticks is well over a minute even at 60 fps.
+local MAX_POLLS = 3600
 
 function M.request(_, url)
-    local done = false
-    return {
-        poll = function()
-            if done then return 'error', 'already polled' end
-            done = true
-            local body, err = do_request(url)
-            if body then return 'done', body end
-            return 'error', err
-        end,
-    }
+    local mod = load_ssl()
+    if not mod then
+        return { poll = function() return 'error', 'LuaSec not installed (run dcs-sms install-me-mod)' end }
+    end
+    local socket_ok, socket = pcall(require, 'socket')
+    if not socket_ok or type(socket) ~= 'table' then
+        return { poll = function() return 'error', 'LuaSocket unavailable' end }
+    end
+    local host, port, path = parse_url(url)
+    if not host then
+        return { poll = function() return 'error', 'not an https URL: ' .. tostring(url) end }
+    end
+
+    local stage    = 'connect'   -- connect → wrap → handshake → send → recv → done
+    local sock, conn
+    local request  = string.format(
+        'GET %s HTTP/1.0\r\nHost: %s\r\nUser-Agent: dcs-sms\r\nAccept: */*\r\nConnection: close\r\n\r\n',
+        path, host)
+    local sent     = 0
+    local chunks   = {}
+    local polls    = 0
+
+    local function cleanup()
+        if conn then pcall(function() conn:close() end)
+        elseif sock then pcall(function() sock:close() end) end
+    end
+
+    -- One non-blocking step. Returns ('pending') | ('done', body) | ('error', msg).
+    local function step()
+        if stage == 'connect' then
+            if not sock then
+                local s, e = socket.tcp()
+                if not s then return 'error', 'tcp(): ' .. tostring(e) end
+                sock = s
+                sock:settimeout(0)
+            end
+            local r, e = sock:connect(host, port)
+            if r then stage = 'wrap'; return 'pending' end
+            -- Non-blocking connect: these all mean "still connecting".
+            if e == 'timeout' or e == 'Operation already in progress'
+               or e == 'Operation now in progress' then return 'pending' end
+            if e == 'already connected' then stage = 'wrap'; return 'pending' end
+            return 'error', 'connect: ' .. tostring(e)
+
+        elseif stage == 'wrap' then
+            local c, e = mod.wrap(sock, {
+                mode     = 'client',
+                protocol = 'any',
+                cafile   = paths.LIB_DIR .. 'cacert.pem',
+                verify   = 'peer',
+                options  = 'all',
+            })
+            if not c then return 'error', 'ssl.wrap: ' .. tostring(e) end
+            conn = c
+            pcall(function() conn:sni(host) end)  -- SNI: GitHub needs it
+            conn:settimeout(0)
+            stage = 'handshake'
+            return 'pending'
+
+        elseif stage == 'handshake' then
+            local r, e = conn:dohandshake()
+            if r then stage = 'send'; return 'pending' end
+            if e == 'wantread' or e == 'wantwrite' or e == 'timeout' then return 'pending' end
+            return 'error', 'handshake: ' .. tostring(e)
+
+        elseif stage == 'send' then
+            local i, e = conn:send(request, sent + 1)
+            if i then
+                sent = i
+                if sent >= #request then stage = 'recv' end
+                return 'pending'
+            end
+            if e == 'wantwrite' or e == 'wantread' or e == 'timeout' then return 'pending' end
+            return 'error', 'send: ' .. tostring(e)
+
+        elseif stage == 'recv' then
+            -- Non-blocking "*a": each call returns whatever bytes are available
+            -- as the 3rd value (partial); accumulate until the server closes.
+            local data, e, partial = conn:receive('*a')
+            if data and #data > 0 then chunks[#chunks + 1] = data end
+            if partial and #partial > 0 then chunks[#chunks + 1] = partial end
+            if e == nil or e == 'closed' then
+                cleanup()
+                local code, body = split_response(table.concat(chunks))
+                if code ~= 200 then return 'error', 'HTTP ' .. tostring(code) end
+                return 'done', body
+            end
+            if e == 'wantread' or e == 'wantwrite' or e == 'timeout' then return 'pending' end
+            return 'error', 'recv: ' .. tostring(e)
+        end
+        return 'error', 'bad stage'
+    end
+
+    local req = {}
+    function req.poll()
+        polls = polls + 1
+        if polls > MAX_POLLS then cleanup(); return 'error', 'timed out' end
+        local ok, status, payload = pcall(step)
+        if not ok then
+            cleanup()
+            return 'error', 'transport: ' .. tostring(status)
+        end
+        return status, payload
+    end
+    return req
 end
 
 return M
