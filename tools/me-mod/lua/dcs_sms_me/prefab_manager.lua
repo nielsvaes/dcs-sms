@@ -238,6 +238,7 @@ local W = {
 -- header-click handlers can share key + numeric-flag metadata.
 local COLS = {
     { key = 'name',            label = 'Name',      width = 190, numeric = false },
+    { key = 'author',          label = 'Author',    width = 110, numeric = false },
     { key = 'theatre',         label = 'Theatre',   width = 90,  numeric = false },
     { key = 'place_at_origin', label = 'Fixed Pos', width = 60,  numeric = false },
     { key = 'airbase_count',   label = 'AB',        width = 50,  numeric = true  },
@@ -590,19 +591,21 @@ local function render_grid()
                 W.grid:setCell(5, row, make_cell(''))
                 W.grid:setCell(6, row, make_cell(''))
                 W.grid:setCell(7, row, make_cell(''))
+                W.grid:setCell(8, row, make_cell(''))
             else
                 local ab_text = ''
                 if (r.airbase_count or 0) == 1 then ab_text = 'Yes'
                 elseif (r.airbase_count or 0) > 1 then ab_text = tostring(r.airbase_count)
                 end
                 W.grid:setCell(0, row, make_cell(r.name, r.name))
-                W.grid:setCell(1, row, make_cell(r.theatre or '?'))
-                W.grid:setCell(2, row, make_cell(r.place_at_origin and 'Yes' or ''))
-                W.grid:setCell(3, row, make_cell(ab_text))
-                W.grid:setCell(4, row, make_cell(r.group_count   or 0))
-                W.grid:setCell(5, row, make_cell(r.static_count  or 0))
-                W.grid:setCell(6, row, make_cell(r.zone_count    or 0))
-                W.grid:setCell(7, row, make_cell(r.drawing_count or 0))
+                W.grid:setCell(1, row, make_cell(r.author or ''))
+                W.grid:setCell(2, row, make_cell(r.theatre or '?'))
+                W.grid:setCell(3, row, make_cell(r.place_at_origin and 'Yes' or ''))
+                W.grid:setCell(4, row, make_cell(ab_text))
+                W.grid:setCell(5, row, make_cell(r.group_count   or 0))
+                W.grid:setCell(6, row, make_cell(r.static_count  or 0))
+                W.grid:setCell(7, row, make_cell(r.zone_count    or 0))
+                W.grid:setCell(8, row, make_cell(r.drawing_count or 0))
             end
         end
 
