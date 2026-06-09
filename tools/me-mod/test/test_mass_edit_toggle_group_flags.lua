@@ -304,5 +304,89 @@ do
     check('no-categories: g.hidden untouched',    g.hidden == false)
 end
 
+-- Case 14: hiddenOnPlanner applies to vehicle AND ship groups, not just
+-- aircraft. DCS's me_vehicle.lua / me_ship.lua both wire up the
+-- "HIDDEN ON PLANNER" checkbox (writing vdata.group.hiddenOnPlanner) —
+-- only setPlannerMission() hides it, which is a mode, not a category.
+do
+    reset()
+    mock.new_mission()
+    local g_veh  = mock.add_vehicle({ name = 'V' })
+    local g_ship = mock.add_ship({ name = 'S' })
+    g_veh.hiddenOnPlanner  = false
+    g_ship.hiddenOnPlanner = false
+    local result = form._apply(
+        { g_veh, g_ship },
+        { hiddenOnPlanner = true },
+        categories_map({ { g_veh, 'vehicle' }, { g_ship, 'ship' } })
+    )
+    check('planner-ground-naval: changed=2',            result.changed == 2)
+    check('planner-ground-naval: not_applicable=0',     (result.not_applicable or 0) == 0)
+    check('planner-ground-naval: vehicle.hiddenOnPlanner=true', g_veh.hiddenOnPlanner == true)
+    check('planner-ground-naval: ship.hiddenOnPlanner=true',    g_ship.hiddenOnPlanner == true)
+end
+
+-- Case 15: hiddenOnMFD applies to vehicle AND ship groups too (same
+-- DCS wiring — me_vehicle.lua:1147 / me_ship.lua:960 set
+-- vdata.group.hiddenOnMFD).
+do
+    reset()
+    mock.new_mission()
+    local g_veh  = mock.add_vehicle({ name = 'V' })
+    local g_ship = mock.add_ship({ name = 'S' })
+    g_veh.hiddenOnMFD  = false
+    g_ship.hiddenOnMFD = false
+    local result = form._apply(
+        { g_veh, g_ship },
+        { hiddenOnMFD = true },
+        categories_map({ { g_veh, 'vehicle' }, { g_ship, 'ship' } })
+    )
+    check('mfd-ground-naval: changed=2',            result.changed == 2)
+    check('mfd-ground-naval: not_applicable=0',     (result.not_applicable or 0) == 0)
+    check('mfd-ground-naval: vehicle.hiddenOnMFD=true', g_veh.hiddenOnMFD == true)
+    check('mfd-ground-naval: ship.hiddenOnMFD=true',    g_ship.hiddenOnMFD == true)
+end
+
+-- Case 16: "Visible before activation" (group.visible) applies to vehicle
+-- AND ship groups. DCS wires the checkbox only in me_vehicle.lua:538 /
+-- me_ship.lua:661 (writing vdata.group.visible) — ground + naval only.
+do
+    reset()
+    mock.new_mission()
+    local g_veh  = mock.add_vehicle({ name = 'V' })
+    local g_ship = mock.add_ship({ name = 'S' })
+    g_veh.visible  = false
+    g_ship.visible = false
+    local result = form._apply(
+        { g_veh, g_ship },
+        { visible = true },
+        categories_map({ { g_veh, 'vehicle' }, { g_ship, 'ship' } })
+    )
+    check('visible-ground-naval: changed=2',          result.changed == 2)
+    check('visible-ground-naval: not_applicable=0',   (result.not_applicable or 0) == 0)
+    check('visible-ground-naval: vehicle.visible=true', g_veh.visible == true)
+    check('visible-ground-naval: ship.visible=true',    g_ship.visible == true)
+end
+
+-- Case 17: "Visible before activation" is NOT applicable to aircraft or
+-- statics (no such checkbox in me_aircraft.lua / me_static.lua).
+do
+    reset()
+    mock.new_mission()
+    local g_plane = mock.add_plane({ name = 'P' })
+    local g_stat  = mock.add_static({ name = 'S' })
+    g_plane.visible = false
+    g_stat.visible  = false
+    local result = form._apply(
+        { g_plane, g_stat },
+        { visible = true },
+        categories_map({ { g_plane, 'plane' }, { g_stat, 'static' } })
+    )
+    check('visible-not-air-static: changed=0',         result.changed == 0)
+    check('visible-not-air-static: not_applicable=2',  result.not_applicable == 2)
+    check('visible-not-air-static: plane.visible untouched', g_plane.visible == false)
+    check('visible-not-air-static: static.visible untouched', g_stat.visible == false)
+end
+
 if failures > 0 then print(failures .. ' failure(s)'); os.exit(1) end
 print('All toggle_group_flags tests passed.')
