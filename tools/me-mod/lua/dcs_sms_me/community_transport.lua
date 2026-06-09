@@ -59,6 +59,13 @@ end
 -- tick). ~3600 ticks is well over a minute even at 60 fps.
 local MAX_POLLS = 3600
 
+-- Read at most this many bytes per poll. LuaSocket's '*a' pattern drains the
+-- whole socket buffer in a single call — on a fast/large download that is the
+-- entire response in one tick, which freezes the editor for the whole transfer.
+-- A bounded receive caps each tick's work so the download spreads across ticks
+-- and the editor stays responsive. 16 KB ≈ one TLS record.
+local RECV_CHUNK = 16384
+
 function M.request(_, url)
     local mod = load_ssl()
     if not mod then
@@ -136,18 +143,24 @@ function M.request(_, url)
             return 'error', 'send: ' .. tostring(e)
 
         elseif stage == 'recv' then
-            -- Non-blocking "*a": each call returns whatever bytes are available
-            -- as the 3rd value (partial); accumulate until the server closes.
-            local data, e, partial = conn:receive('*a')
+            -- Read at most RECV_CHUNK bytes per poll (NOT '*a', which drains the
+            -- whole buffer in one call and stalls the tick for the full
+            -- transfer). receive(n) returns: n bytes as `data` with no error
+            -- (more may remain → yield); or a short `partial` with
+            -- wantread/wantwrite/timeout (would block → yield); or `closed` with
+            -- the final partial (HTTP/1.0 Connection: close → body complete).
+            local data, e, partial = conn:receive(RECV_CHUNK)
             if data and #data > 0 then chunks[#chunks + 1] = data end
             if partial and #partial > 0 then chunks[#chunks + 1] = partial end
-            if e == nil or e == 'closed' then
+            if e == 'closed' then
                 cleanup()
                 local code, body = split_response(table.concat(chunks))
                 if code ~= 200 then return 'error', 'HTTP ' .. tostring(code) end
                 return 'done', body
             end
-            if e == 'wantread' or e == 'wantwrite' or e == 'timeout' then return 'pending' end
+            if e == nil or e == 'wantread' or e == 'wantwrite' or e == 'timeout' then
+                return 'pending'
+            end
             return 'error', 'recv: ' .. tostring(e)
         end
         return 'error', 'bad stage'

@@ -26,7 +26,6 @@ local function normalize_entry(raw)
         drawings    = as_number(raw.drawings),
         airbases    = as_number(raw.airbases),
         place_at_origin = raw.place_at_origin == true,
-        sha256      = as_string(raw.sha256):lower(),
         path        = as_string(raw.path),
     }
 end
@@ -43,8 +42,8 @@ function M.parse(decoded)
     for _, raw in ipairs(decoded.prefabs) do
         if type(raw) == 'table' then
             local e = normalize_entry(raw)
-            -- Skip entries that can't be downloaded or verified.
-            if e.name ~= '' and e.path ~= '' and e.sha256 ~= '' then
+            -- Skip entries that can't be downloaded.
+            if e.name ~= '' and e.path ~= '' then
                 entries[#entries + 1] = e
             end
         end

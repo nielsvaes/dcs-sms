@@ -54,9 +54,11 @@ local function new_conn()
         end,
         receive = function(_, pat)
             recvs = recvs + 1
-            if recvs == 1 then return nil, 'wantread', '' end        -- pending, no bytes
-            if recvs == 2 then return nil, 'timeout', scenario.part1 end -- partial body
-            return nil, 'closed', scenario.part2                     -- server closed → done
+            captured.recv_pat = pat
+            if recvs == 1 then return nil, 'wantread', '' end          -- pending, no bytes
+            if recvs == 2 then return scenario.chunk, nil end           -- full chunk read → pending
+            if recvs == 3 then return nil, 'timeout', scenario.part1 end -- partial → pending
+            return nil, 'closed', scenario.part2                       -- server closed → done
         end,
         close = function() end,
     }
@@ -90,7 +92,8 @@ check('available() true with ssl present', transport.available() == true)
 
 -- ---- Happy path: 200 with a body split across two partial receives ----------
 scenario = {
-    part1 = 'HTTP/1.0 200 OK\r\nContent-Type: text/plain\r\nServer: mock\r\n\r\nHELLO-',
+    chunk = 'HTTP/1.0 200 OK\r\nContent-Type: text/plain\r\nServer: mock\r\n\r\nHEL',
+    part1 = 'LO-',
     part2 = 'WORLD',
 }
 captured = {}
@@ -99,6 +102,8 @@ local seq, body, err = drive(req)
 
 check('completes with done (not error)', body ~= nil and err == nil, err)
 check('body = stripped, reassembled payload', body == 'HELLO-WORLD', body)
+check('reads in bounded chunks (receive(n), not *a)', type(captured.recv_pat) == 'number',
+      tostring(captured.recv_pat))
 -- Every step before the last is pending — one non-blocking step per poll.
 local all_pending = true
 for i = 1, #seq - 1 do if seq[i] ~= 'pending' then all_pending = false end end

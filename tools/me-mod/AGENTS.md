@@ -191,14 +191,12 @@ You do **not** have:
 | `community_config.lua` | Community-library endpoints + schema constants (`RAW_BASE`, manifest path, `Community` folder, schema version). |
 | `community_manifest.lua` | Parse/validate the `index.json` manifest + pure search/sort/tag-filter helpers. |
 | `community_cache.lua` | Persist/restore the last-fetched manifest JSON for offline browsing. |
-| `community_import.lua` | Adopt a community prefab: SHA-256 verify + data-only validate, then write into the user's `Community/` folder. |
+| `community_import.lua` | Adopt a community prefab: data-only validate (safe-load), then write into the user's `Community/` folder. No SHA-256 check — authenticity comes from the cert-verified HTTPS fetch. |
 | `community_fetch.lua` | Non-blocking fetch orchestration — a coroutine pumped by the UpdateManager tick over an injectable transport. |
-| `community_transport.lua` | Real LuaSec/LuaSocket HTTPS transport (DCS-only); degrades gracefully when LuaSec is absent. |
+| `community_transport.lua` | Real LuaSec/LuaSocket HTTPS transport (DCS-only); degrades gracefully when LuaSec is absent. Reads the response in bounded chunks per poll so a fast/large download never stalls the editor. |
 | `community_tab.lua` | The Community tab UI in the Prefab Manager (browse/search/sort/tags/detail/import). |
 | `lib_path.lua` | Builds the `package.cpath`/`path` entries for the bundled LuaSec payload under `dcs-sms/lib/`. |
 | `vendor/json.lua` | Vendored decode-only JSON. |
-| `vendor/bit_compat.lua` | 32-bit bitops: LuaJIT `bit` or a pure-Lua fallback (for the test VM). |
-| `vendor/sha256.lua` | Vendored pure-Lua SHA-256 (integrity check). |
 
 ## 2.3 The embed workflow
 
