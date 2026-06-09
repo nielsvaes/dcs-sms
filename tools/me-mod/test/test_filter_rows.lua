@@ -189,4 +189,17 @@ do
     eq('  -> CAP/Tomcats hidden',         has_tomcats, false)
 end
 
+-- Community folder is marked in the ListBox-fallback rows so users can tell
+-- it's the import-managed folder.
+do
+    local fset = { ['']=true, ['CAP']=true, ['Community']=true }
+    local root = window._build_tree(fset, '')
+    local rows = window._listbox_tree_rows(root, {}, 'Prefabs')
+    local function row_for(path) for _, r in ipairs(rows) do if r.path == path then return r end end end
+    local comm = row_for('Community')
+    local cap  = row_for('CAP')
+    eq('Community row carries marker', comm.text:find('(downloads)', 1, true) ~= nil, true)
+    eq('normal row has no marker',     cap.text:find('(downloads)', 1, true) == nil, true)
+end
+
 io.write('All filter_rows tests passed.\n')

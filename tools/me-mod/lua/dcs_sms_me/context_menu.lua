@@ -15,6 +15,7 @@ local Menu;              do local ok, m = pcall(require, 'Menu');              i
 local MenuItem;          do local ok, m = pcall(require, 'MenuItem');          if ok then MenuItem = m end end
 local MenuSeparatorItem; do local ok, m = pcall(require, 'MenuSeparatorItem'); if ok then MenuSeparatorItem = m end end
 local paths_mod;         do local ok, m = pcall(require, 'dcs_sms_me.paths');  if ok then paths_mod = m end end
+local cfg;               do local ok, m = pcall(require, 'dcs_sms_me.community_config'); if ok then cfg = m end end
 
 local M = {}
 
@@ -253,15 +254,22 @@ M._build_menu = build_menu                    -- exposed for tests
 --   Delete
 -- ---------------------------------------------------------------------------
 
-function M.show_for_tree_node(x, y, node, hooks)
-    if not node then return false end
+-- Build the tree-node entry list. Extracted from show_for_tree_node so the
+-- entry set (labels, visibility, hook wiring) is unit-testable without a live
+-- dxgui Menu — show_for_tree_node just feeds the result to build_menu.
+--
+-- The import-managed Community/ folder (and any subfolder of it) hides
+-- New subfolder + Rename — it only ever holds downloads and its name is the
+-- import target. Delete stays available (removing downloads is allowed).
+function M._tree_node_entries(node, hooks)
     hooks = hooks or {}
     local is_root = (node.path == '' or node.path == nil)
+    local is_community = (cfg and cfg.is_community_path(node.path or '')) or false
 
-    local entries = {
+    return {
         {
             label = 'New subfolder',
-            visible = true,
+            visible = not is_community,
             on_click = function() if hooks.on_new then hooks.on_new(node.path or '') end end,
         },
         {
@@ -270,7 +278,7 @@ function M.show_for_tree_node(x, y, node, hooks)
         },
         {
             label = 'Rename',
-            visible = not is_root,
+            visible = not is_root and not is_community,
             on_click = function() if hooks.on_rename then hooks.on_rename(node) end end,
         },
         {
@@ -292,8 +300,11 @@ function M.show_for_tree_node(x, y, node, hooks)
             end,
         },
     }
+end
 
-    local menu = build_menu(entries)
+function M.show_for_tree_node(x, y, node, hooks)
+    if not node then return false end
+    local menu = build_menu(M._tree_node_entries(node, hooks))
     return popup_menu(menu, x, y)
 end
 

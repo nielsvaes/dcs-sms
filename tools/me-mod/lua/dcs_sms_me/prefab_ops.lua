@@ -13,6 +13,7 @@ local serializer     = require('dcs_sms_me.serializer')
 local selection      = require('dcs_sms_me.selection')
 local warehouse_ops  = require('dcs_sms_me.warehouse_ops')
 local ship_warehouse = require('dcs_sms_me.ship_warehouse')
+local cfg            = require('dcs_sms_me.community_config')
 
 local M = {}
 
@@ -103,6 +104,7 @@ function M.save_selection(name, place_at_origin, airbases, folder)
     folder = folder or ''
     local valid, why = M._validate_folder_path(folder)
     if not valid then return nil, 'invalid folder: ' .. why end
+    if cfg.is_community_path(folder) then return nil, cfg.MANAGED_MSG end
 
     local snap = selection.snapshot()
     if not snap or not snap.ok then
@@ -178,6 +180,7 @@ function M.move_prefab(source_folder, name, target_folder)
     if not svalid then return nil, 'invalid source folder: ' .. swhy end
     local tvalid, twhy = M._validate_folder_path(target_folder)
     if not tvalid then return nil, 'invalid target folder: ' .. twhy end
+    if cfg.is_community_path(target_folder) then return nil, cfg.MANAGED_MSG end
 
     local source_path = paths.folder_to_abs(source_folder) .. name .. '.prefab'
     if not lfs.attributes(source_path) then
@@ -216,6 +219,12 @@ function M.rename_folder(old_rel, new_name)
     -- Compute new_rel by replacing the last segment.
     local parent = old_rel:match('^(.+)/[^/]+$') or ''
     local new_rel = (parent == '' and new_name) or (parent .. '/' .. new_name)
+
+    -- Community/ is import-managed: can't rename it (or a subfolder of it),
+    -- and can't rename another folder INTO the reserved name.
+    if cfg.is_community_path(old_rel) or cfg.is_community_path(new_rel) then
+        return nil, cfg.MANAGED_MSG
+    end
 
     local old_abs = paths.folder_to_abs(old_rel):sub(1, -2)  -- strip trailing '\'
     local new_abs = paths.folder_to_abs(new_rel):sub(1, -2)

@@ -147,4 +147,32 @@ do
     check('update entry hidden on error row', eupd ~= nil and eupd.visible == false)
 end
 
+-- Tree-node menu: the import-managed Community node hides New subfolder +
+-- Rename but keeps Delete (removing downloads is allowed). Normal folders show
+-- all; the root hides Rename/Delete.
+do
+    package.loaded['dcs_sms_me.context_menu'] = nil
+    local cm = require('dcs_sms_me.context_menu')
+    local function find(entries, label)
+        for _, e in ipairs(entries) do if e.label == label then return e end end
+        return nil
+    end
+
+    local comm = cm._tree_node_entries({ path = 'Community' }, {})
+    check('Community hides New subfolder', find(comm, 'New subfolder').visible == false)
+    check('Community hides Rename',        find(comm, 'Rename').visible == false)
+    check('Community keeps Delete',        find(comm, 'Delete').visible == true)
+
+    local sub = cm._tree_node_entries({ path = 'Community/CAP' }, {})
+    check('Community subfolder hides New subfolder', find(sub, 'New subfolder').visible == false)
+
+    local normal = cm._tree_node_entries({ path = 'CAP' }, {})
+    check('normal folder shows New subfolder', find(normal, 'New subfolder').visible == true)
+    check('normal folder shows Rename',        find(normal, 'Rename').visible == true)
+
+    local root = cm._tree_node_entries({ path = '' }, {})
+    check('root shows New subfolder', find(root, 'New subfolder').visible == true)
+    check('root hides Rename',        find(root, 'Rename').visible == false)
+end
+
 io.write('All context_menu clipboard tests passed.\n')
