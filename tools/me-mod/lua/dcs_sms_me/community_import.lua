@@ -1,9 +1,11 @@
 -- community_import.lua — adopt a community prefab into the user's library.
--- Verifies SHA-256 + data-only shape BEFORE writing. Imports land in the
--- reserved Community/ folder so they never collide with hand-made prefabs.
+-- Validates the data-only shape (safe-load) BEFORE writing. Imports land in
+-- the reserved Community/ folder so they never collide with hand-made prefabs.
+-- No SHA-256 integrity check: authenticity/integrity is already provided by the
+-- cert-verified HTTPS fetch from the catalog repo (see community_transport), and
+-- pure-Lua hashing of a large body would stall the single-threaded editor.
 local paths   = require('dcs_sms_me.paths')
 local cfg     = require('dcs_sms_me.community_config')
-local sha256  = require('dcs_sms_me.vendor.sha256')
 local safe    = require('dcs_sms_me.prefab_safe_load')
 local lfs     = require('lfs')
 
@@ -33,17 +35,12 @@ function M.import(entry, body)
     if type(entry) ~= 'table' then return false, 'entry required' end
     if type(body) ~= 'string' or body == '' then return false, 'empty body' end
 
-    -- 1. Integrity: hash must match the manifest.
-    local got = sha256.hex(body)
-    if got ~= tostring(entry.sha256 or ''):lower() then
-        return false, 'sha256 mismatch (expected ' .. tostring(entry.sha256) .. ', got ' .. got .. ')'
-    end
-
-    -- 2. Safety: must parse as pure data (never executed).
+    -- Safety: must parse as pure data (never executed). This is the security
+    -- boundary for untrusted community prefabs — it rejects anything with code.
     local tbl, perr = safe.load_string(body)
     if not tbl then return false, 'rejected by safe-load: ' .. tostring(perr) end
 
-    -- 3. Write verbatim into Community/.
+    -- Write verbatim into Community/.
     -- lfs.mkdir creates the parent and the Community/ folder if missing.
     local community_dir = paths.PREFABS_DIR .. cfg.COMMUNITY_FOLDER
     lfs.mkdir(paths.PREFABS_DIR)

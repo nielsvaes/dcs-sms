@@ -14,12 +14,19 @@ local decoded = {
           tags={'cap'}, likes=18, groups=1, sha256='bb', path='prefabs/cap.prefab' },
         { name='SA-6', author='Hawg', date='2026-05-20',
           tags={'sam'}, likes=27, sha256='cc', path='prefabs/sa6.prefab' },
+        -- No sha256: must still be accepted (integrity is not hash-checked).
+        { name='No Hash', author='Anon', date='2026-05-01',
+          tags={}, likes=0, path='prefabs/nohash.prefab' },
     },
 }
 
 local m, err = cm.parse(decoded)
 check('parse ok', m ~= nil, err)
-check('entries count', m and #m.entries == 3)
+check('entries count', m and #m.entries == 4)
+check('entry without sha256 is kept', (function()
+    for _, e in ipairs(m.entries) do if e.name == 'No Hash' then return true end end
+    return false
+end)())
 check('defaults theatre', m.entries[3].theatre == '' or m.entries[3].theatre == '?', m.entries[3].theatre)
 check('tags always table', type(m.entries[3].tags) == 'table' and m.entries[3].tags[1] == 'sam')
 check('numeric counts', m.entries[1].groups == 7 and m.entries[3].groups == 0)
