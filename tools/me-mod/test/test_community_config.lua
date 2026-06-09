@@ -16,5 +16,17 @@ check('manifest url ends in index.json', cfg.manifest_url():sub(-10) == 'index.j
 check('file url joins raw base + path', cfg.file_url('prefabs/a.prefab') == cfg.RAW_BASE .. 'prefabs/a.prefab', cfg.file_url('prefabs/a.prefab'))
 check('schema version is 1', cfg.SCHEMA_VERSION == 1)
 
+-- is_community_path: Community folder + its subtree (any case / separator).
+local ic = cfg.is_community_path
+check('Community matches',            ic('Community') == true, 'Community')
+check('Community/sub matches',        ic('Community/CAP') == true, 'Community/CAP')
+check('Community backslash matches',  ic('Community\\CAP') == true, 'Community\\CAP')
+check('lowercase community matches',  ic('community') == true, 'community')
+check('root does not match',          ic('') == false, "''")
+check('nil does not match',           ic(nil) == false, 'nil')
+check('normal folder no match',       ic('CAP') == false, 'CAP')
+check('CommunityCenter no match',     ic('CommunityCenter') == false, 'CommunityCenter')
+check('MANAGED_MSG non-empty',        type(cfg.MANAGED_MSG) == 'string' and #cfg.MANAGED_MSG > 0, cfg.MANAGED_MSG)
+
 if failures > 0 then os.exit(1) end
 print('All community_config tests passed.')
