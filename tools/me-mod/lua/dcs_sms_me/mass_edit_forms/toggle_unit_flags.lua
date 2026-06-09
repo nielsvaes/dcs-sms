@@ -1,81 +1,113 @@
--- mass_edit_forms/toggle_group_flags.lua -- Mass Edit form: flip the
--- boolean group properties (hidden / hiddenOnPlanner / hiddenOnMFD /
--- uncontrollable / uncontrolled / lateActivation / visible) on every
--- checked group.
+-- mass_edit_forms/toggle_unit_flags.lua -- Mass Edit (Unit scope) form:
+-- flip the per-UNIT boolean properties that DCS stores on individual
+-- vehicle units -- playerCanDrive and coldAtStart -- on every checked
+-- unit.
 --
--- Each property has its own tri-state control (LEAVE / ON / OFF).
--- LEAVE means "skip this property in this batch"; ON/OFF write
--- true/false respectively. Per-property applicability is hard-coded
--- in APPLIES_TO (mirrors the ME's per-category checkbox visibility) --
--- entity-field pairs that aren't applicable to the entity's category
--- are silently skipped; the entity is counted once toward
--- not_applicable if any of its requested fields was inapplicable.
+-- These live on the unit, not the group (me_vehicle.lua writes
+-- vdata.group.units[cur].playerCanDrive / .coldAtStart, lines 519 / 528),
+-- which is why they get their own Unit-scope form instead of riding in
+-- toggle_group_flags. They are ground-vehicle only -- aircraft, ships
+-- and statics have no such checkbox.
 --
--- The toggle fields have no side effects beyond their own value (no
--- coalition flip, no livery, no map-color shift like set_country
--- has), so the form writes fields directly rather than routing
--- through verbs. The standalone toggle verbs in verbs.lua exist for
--- CLI scripting (and are not called from here). Undo also writes
--- fields directly.
+-- Per-unit-TYPE gating mirrors ED's checkbox-enable logic
+-- (me_vehicle.lua:checkPlayerCanDrive):
+--   * playerCanDrive  -- only unit types whose db def has
+--                        enablePlayerCanDrive == true. ED disables (and
+--                        force-clears) the checkbox otherwise.
+--   * coldAtStart     -- every vehicle EXCEPT Infantry (ED disables it
+--                        for the Infantry category).
+-- Units a field can't apply to are skipped and counted toward
+-- not_applicable, the same way toggle_group_flags treats off-category
+-- fields.
+--
+-- Each property has its own tri-state control (LEAVE / ON / OFF). LEAVE
+-- skips the property; ON/OFF write true/false. Like toggle_group_flags
+-- the writes have no side effects beyond their own value, so the form
+-- mutates unit fields directly (no verb roundtrip) and undo restores them
+-- directly too.
 
 local M = {}
 
-M.scope = 'group'
-M.title = 'Visibility & control'
+M.scope = 'unit'
+M.title = 'Driver & start state'
+-- Category gray-out gate (mass_edit.lua reads form_module.applies_to).
+-- Ground vehicles only; the finer per-unit-type gating happens in _apply.
+M.applies_to = { vehicle = true }
 
 local undo             = require('dcs_sms_me.undo')
 local skin_helper      = require('dcs_sms_me.skin_helper')
+local applicability    = require('dcs_sms_me.applicability')
 local tri_state_button = require('dcs_sms_me.tri_state_button')
 local me_refresh;   do local ok, m = pcall(require, 'dcs_sms_me.me_refresh'); if ok then me_refresh = m end end
 
-local Static; do local ok, m = pcall(require, 'Static'); if ok then Static = m end end
 local Button; do local ok, m = pcall(require, 'Button'); if ok then Button = m end end
 
 -- ---------------------------------------------------------------------------
 -- Property metadata
 -- ---------------------------------------------------------------------------
 
--- Order = display order (top-to-bottom, left-to-right in the 3-col grid).
 local PROPS = {
-    { field = 'hidden',          label = 'Hidden on map'        },
-    { field = 'hiddenOnPlanner', label = 'Hidden on planner'    },
-    { field = 'hiddenOnMFD',     label = 'Hidden on MFD'        },
-    { field = 'uncontrollable',  label = 'Game Master Only'     },
-    { field = 'uncontrolled',    label = 'Uncontrolled'         },
-    { field = 'lateActivation',  label = 'Late activation'      },
-    { field = 'visible',         label = 'Visible bef. activation' },
+    { field = 'playerCanDrive', label = 'Player can drive' },
+    { field = 'coldAtStart',    label = 'Cold at start'    },
 }
 
 local PROP_BY_FIELD = {}
 for _, p in ipairs(PROPS) do PROP_BY_FIELD[p.field] = p end
 
--- Which categories each field is shown for in the ME GUI. Entries here
--- match me_aircraft.lua / me_vehicle.lua / me_ship.lua's per-category
--- checkbox visibility.
-local APPLIES_TO = {
-    hidden          = { plane = true, helicopter = true, vehicle = true, ship = true, static = true, train = true },
-    hiddenOnPlanner = { plane = true, helicopter = true, vehicle = true, ship = true },
-    hiddenOnMFD     = { plane = true, helicopter = true, vehicle = true, ship = true },
-    uncontrollable  = { plane = true, helicopter = true, vehicle = true, ship = true },
-    uncontrolled    = { plane = true, helicopter = true },
-    lateActivation  = { plane = true, helicopter = true, vehicle = true, ship = true },
-    -- "Visible bef. activation" (g.visible) is wired only in
-    -- me_vehicle.lua / me_ship.lua — aircraft and statics have no such
-    -- checkbox, so this is ground + naval only.
-    visible         = { vehicle = true, ship = true },
-}
+-- ---------------------------------------------------------------------------
+-- Per-unit-type capability resolver (injectable for tests).
+-- ---------------------------------------------------------------------------
+--
+-- caps_for(u) -> { playerCanDrive = bool, coldAtStart = bool } -- whether
+-- each FIELD is settable for that unit's type. Mirrors ED's
+-- checkPlayerCanDrive enable logic. Default reads me_db_api; tests inject
+-- a stub so they don't need a real ME db.
+local function _default_caps(u)
+    local utype = u and u.type
+    if type(utype) ~= 'string' or utype == '' then
+        return { playerCanDrive = false, coldAtStart = false }
+    end
+    local ok, DB = pcall(require, 'me_db_api')
+    if not (ok and type(DB) == 'table' and type(DB.unit_by_type) == 'table') then
+        -- db unavailable (bare test VM): can't confirm drivability, but
+        -- cold-at-start is valid for ~every non-Infantry vehicle, which we
+        -- also can't disprove here -- leave it enabled so the control isn't
+        -- silently useless if the db ever fails to load in production.
+        return { playerCanDrive = false, coldAtStart = true }
+    end
+    local def = DB.unit_by_type[utype]
+    if type(def) ~= 'table' then
+        return { playerCanDrive = false, coldAtStart = true }
+    end
+    -- Infantry detection mirrors me_vehicle.lua:updateCategory -- the
+    -- 'Infantry' tag on the unit def (or the legacy .category string on
+    -- tagless defs).
+    local infantry = false
+    if type(def.tags) == 'table' then
+        for _, t in pairs(def.tags) do
+            if t == 'Infantry' then infantry = true; break end
+        end
+    elseif def.category == 'Infantry' then
+        infantry = true
+    end
+    return {
+        playerCanDrive = def.enablePlayerCanDrive == true,
+        coldAtStart    = not infantry,
+    }
+end
+
+local _caps_resolver = _default_caps
+
+function M._set_caps_resolver(fn) _caps_resolver = fn or _default_caps end
 
 -- ---------------------------------------------------------------------------
 -- Apply (testable; no dxgui access).
 -- ---------------------------------------------------------------------------
 --
--- entities: array of group dicts (the host's get_checked() result)
--- settings: map { field = bool } -- only fields the user explicitly set
---           ON or OFF; LEAVE-state properties are absent
--- categories: optional map { entity = category_string } for applicability
---             lookup. When nil/empty, every entity is treated as
---             category 'unknown' which matches no APPLIES_TO entry -- so
---             nothing applies. The host always passes its W.categories.
+-- entities: array of unit dicts (the host's get_checked() result)
+-- settings: map { field = bool } -- only fields the user set ON or OFF
+-- categories: map { unit = category_string }; non-'vehicle' units match
+--             no field and count as not_applicable.
 function M._apply(entities, settings, categories)
     if type(entities) ~= 'table' or #entities == 0 then
         return {
@@ -96,30 +128,33 @@ function M._apply(entities, settings, categories)
 
     local changed_rows = {}
     local not_applicable_entities = 0
-    local refreshed = {}  -- entity -> true, so we refresh each entity once even if multiple fields changed
+    local touched = false  -- any field on any unit changed → refresh panels once
 
-    for _, e in ipairs(entities) do
-        local cat = categories[e] or 'unknown'
+    for _, u in ipairs(entities) do
+        -- Category gray-out gate (vehicle only) via the shared helper, same
+        -- as set_fuel_pct_unit -- keeps the apply-gate and the host's
+        -- panel-enable gate (both read M.applies_to) on one source of truth.
+        -- Finer per-unit-type gating then happens through _caps_resolver.
+        local caps = applicability.is_applicable(M.applies_to, u, categories)
+                     and _caps_resolver(u)
+                     or { playerCanDrive = false, coldAtStart = false }
         local entity_had_inapplicable = false
         for field, target_value in pairs(settings) do
-            local applies = PROP_BY_FIELD[field] and APPLIES_TO[field] and APPLIES_TO[field][cat]
-            if applies then
-                -- Capture current value BEFORE the mutation. Non-boolean
-                -- current values (e.g. hiddenOnMFD's {} default on a
-                -- freshly-created group) normalize to false in the
-                -- snapshot so undo restores a boolean rather than a
-                -- stale table reference.
-                local old_value = e[field]
+            if PROP_BY_FIELD[field] and caps[field] then
+                -- Capture current value BEFORE the mutation; non-boolean
+                -- current values normalize to false so undo restores a
+                -- boolean.
+                local old_value = u[field]
                 if type(old_value) ~= 'boolean' then old_value = false end
 
-                e[field] = target_value and true or false
+                u[field] = target_value and true or false
 
                 changed_rows[#changed_rows + 1] = {
-                    entity = e,
-                    field  = field,
-                    old    = old_value,
+                    unit  = u,
+                    field = field,
+                    old   = old_value,
                 }
-                refreshed[e] = true
+                touched = true
             else
                 entity_had_inapplicable = true
             end
@@ -129,27 +164,16 @@ function M._apply(entities, settings, categories)
         end
     end
 
-    -- Per-entity visibility refresh: mirrors what ED's own "HIDDEN ON
-    -- MAP" checkbox handler does -- MapWindow.updateHiddenGroup removes
-    -- the symbol and only recreates it when g.hidden is false.
-    -- update_group_map_objects / recreate_group_view alone don't drop
-    -- the icon when hidden flips to true. We call this for ANY touched
-    -- entity (cheap; only fields we care about visually are `hidden`
-    -- and possibly `lateActivation`, but the wrapper is safe to call
-    -- in all cases).
-    if me_refresh and type(me_refresh.update_hidden_group) == 'function' then
-        for e in pairs(refreshed) do pcall(me_refresh.update_hidden_group, e) end
-    end
-    -- If the user has a group panel open in the right pane and one of
-    -- the modified groups happens to be the actively-selected one, the
-    -- panel's checkboxes will now reflect the new state. No-op for the
-    -- other categories.
-    if me_refresh and type(me_refresh.refresh_group_panels) == 'function' and #changed_rows > 0 then
+    -- playerCanDrive / coldAtStart don't change the F10 map symbol, but if
+    -- a vehicle panel is open on one of the touched units its checkbox
+    -- should reflect the new value. refresh_group_panels re-runs the open
+    -- panel's update; no-op for the other categories.
+    if touched and me_refresh and type(me_refresh.refresh_group_panels) == 'function' then
         pcall(me_refresh.refresh_group_panels)
     end
 
     if #changed_rows > 0 then
-        undo.record_generic('mass_edit.toggle_group_flags', { rows = changed_rows })
+        undo.record_generic('mass_edit.toggle_unit_flags', { rows = changed_rows })
     end
 
     local changed = #changed_rows
@@ -175,56 +199,47 @@ function M._apply(entities, settings, categories)
 end
 
 -- ---------------------------------------------------------------------------
--- Undo handler -- registered at module load. Restores each row's old
--- value directly. Reverse-iterates so a multi-field change on a single
--- entity unwinds in the opposite order it applied.
+-- Undo handler -- restores each row's old value directly, reverse order.
 -- ---------------------------------------------------------------------------
 
-undo.register_handler('mass_edit.toggle_group_flags', function(snapshot)
+undo.register_handler('mass_edit.toggle_unit_flags', function(snapshot)
     if type(snapshot) ~= 'table' or type(snapshot.rows) ~= 'table' then
-        return nil, 'invalid mass_edit.toggle_group_flags undo snapshot'
+        return nil, 'invalid mass_edit.toggle_unit_flags undo snapshot'
     end
-    local refreshed = {}
+    local touched = false
     for i = #snapshot.rows, 1, -1 do
         local r = snapshot.rows[i]
-        if r and r.entity and r.field then
-            r.entity[r.field] = r.old and true or false
-            refreshed[r.entity] = true
+        if r and r.unit and r.field then
+            r.unit[r.field] = r.old and true or false
+            touched = true
         end
     end
-    if me_refresh and type(me_refresh.update_hidden_group) == 'function' then
-        for e in pairs(refreshed) do pcall(me_refresh.update_hidden_group, e) end
-    end
-    if me_refresh and type(me_refresh.refresh_group_panels) == 'function' then
+    if touched and me_refresh and type(me_refresh.refresh_group_panels) == 'function' then
         pcall(me_refresh.refresh_group_panels)
     end
     return true
 end)
 
 -- ---------------------------------------------------------------------------
--- Widget construction
+-- Widget construction (mirrors toggle_group_flags: one tri-state button
+-- per PROPS entry + an Apply button, laid out in a 3-col grid).
 -- ---------------------------------------------------------------------------
 
--- Tri-state behavior lives in tri_state_button.lua; this form just owns
--- one tri-state button per PROPS entry and reads its state on Apply.
 local STATE_LEAVE = tri_state_button.STATE_LEAVE
 local STATE_ON    = tri_state_button.STATE_ON
 local STATE_OFF   = tri_state_button.STATE_OFF
 
 local LAYOUT = {
-    PAD_X     = 8,
-    GAP_X     = 6,
-    GAP_Y     = 4,
-    ROW_H     = 24,
-    -- 90 matches every other form's right-edge action button so the
-    -- Apply column lines up across the whole right pane.
-    APPLY_W   = 90,
+    PAD_X      = 8,
+    GAP_X      = 6,
+    GAP_Y      = 4,
+    ROW_H      = 24,
+    APPLY_W    = 90,
     FOOTER_PAD = 6,
 }
 
 local function form_height()
     local L = LAYOUT
-    -- ceil(#PROPS / 3) rows of state buttons (3-col grid) + one Apply row + footer pad
     local nrows = math.ceil(#PROPS / 3)
     return nrows * (L.ROW_H + L.GAP_Y) + L.ROW_H + L.FOOTER_PAD
 end
@@ -238,9 +253,6 @@ function M.new(parent_raw, get_checked, on_after_apply, get_categories)
         return widget
     end
 
-    -- One tri-state button per property. tri_state_button owns the cycle
-    -- + skin swap + label suffix; we just hold the references and read
-    -- state on Apply.
     local tsb_by_field = {}
 
     local function reset_all_states()
@@ -254,14 +266,10 @@ function M.new(parent_raw, get_checked, on_after_apply, get_categories)
         local tsb = tri_state_button.new(parent_raw, p.label)
         if tsb then
             tsb_by_field[p.field] = tsb
-            -- Track the underlying widget in `owned` so show/hide and the
-            -- parent's insertWidget bookkeeping still work uniformly with
-            -- the Apply button below.
             owned[#owned + 1] = tsb:widget()
         end
     end
 
-    -- Apply button
     local apply_btn
     if Button and Button.new then
         local ok, b = pcall(Button.new)
@@ -289,8 +297,6 @@ function M.new(parent_raw, get_checked, on_after_apply, get_categories)
                 local categories = (type(get_categories) == 'function') and get_categories() or {}
                 local result = M._apply(entities, settings, categories)
                 if type(on_after_apply) == 'function' then on_after_apply(result) end
-                -- After any successful apply, reset all controls so the next
-                -- batch starts from a clean LEAVE state.
                 if result and result.changed and result.changed > 0 then
                     reset_all_states()
                 end
@@ -328,12 +334,10 @@ function M.new(parent_raw, get_checked, on_after_apply, get_categories)
             if widget and widget.setBounds then pcall(widget.setBounds, widget, px, py, pw, ph) end
         end
 
-        -- 3 columns × 2 rows across the form's content area.
         local content_w = w - 2 * L.PAD_X
         local col_w = math.floor((content_w - 2 * L.GAP_X) / 3)
         if col_w < 60 then col_w = 60 end
 
-        -- Place the state buttons left-to-right, top-to-bottom in a 3-col grid.
         for i = 1, #PROPS do
             local p = PROPS[i]
             if p then
@@ -346,7 +350,6 @@ function M.new(parent_raw, get_checked, on_after_apply, get_categories)
             end
         end
 
-        -- Apply button: right-anchored on a row below the grid.
         local nrows = math.ceil(#PROPS / 3)
         local apply_y = y + nrows * (L.ROW_H + L.GAP_Y)
         set(apply_btn, x + w - L.PAD_X - L.APPLY_W, apply_y, L.APPLY_W, L.ROW_H)
