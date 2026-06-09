@@ -157,4 +157,36 @@ if build_tree then
     eq('  -> Tomcats visible under it', #filtered.children[1].children, 1)
 end
 
+-- _listbox_tree_rows: the folder browser's ListBox-fallback row list. It must
+-- prepend a synthetic root row (path '') and indent the real folders one level
+-- beneath it, keeping row index aligned to folder path so ListBox selection
+-- maps to the right folder. Collapsing a folder hides its children.
+local listbox_rows = window._listbox_tree_rows
+assert(listbox_rows, 'window._listbox_tree_rows not exposed')
+do
+    local folder_set = { ['']=true, ['CAP']=true, ['CAP/Tomcats']=true, ['SAM']=true, ['Empty']=true }
+    local root = window._build_tree(folder_set, '')
+
+    local rows = listbox_rows(root, {}, 'Prefabs')
+    eq('row 1 is the root label',        rows[1].text, 'Prefabs')
+    eq('row 1 maps to show-all path',    rows[1].path, '')
+    eq('expanded tree row count',        #rows, 5)  -- Prefabs, CAP, CAP/Tomcats, Empty, SAM
+    eq('row 2 path = CAP',               rows[2].path, 'CAP')
+    eq('row 3 path = CAP/Tomcats',       rows[3].path, 'CAP/Tomcats')
+    eq('row 4 path = Empty',             rows[4].path, 'Empty')
+    eq('row 5 path = SAM',               rows[5].path, 'SAM')
+    eq('CAP row indented one level',     rows[2].text:sub(1, 2), '  ')
+    eq('CAP/Tomcats indented deeper',    rows[3].text:sub(1, 4), '    ')
+
+    -- Collapsing CAP hides CAP/Tomcats and flips its glyph to the collapsed mark.
+    local collapsed = listbox_rows(root, { ['CAP'] = true }, 'Prefabs')
+    eq('collapsed CAP drops its child',  #collapsed, 4)  -- Prefabs, CAP, Empty, SAM
+    eq('  -> CAP still present',          collapsed[2].path, 'CAP')
+    eq('  -> collapsed glyph on CAP',     collapsed[2].text:find('>', 1, true) ~= nil, true)
+    eq('  -> Empty now row 3',            collapsed[3].path, 'Empty')
+    local has_tomcats = false
+    for _, r in ipairs(collapsed) do if r.path == 'CAP/Tomcats' then has_tomcats = true end end
+    eq('  -> CAP/Tomcats hidden',         has_tomcats, false)
+end
+
 io.write('All filter_rows tests passed.\n')

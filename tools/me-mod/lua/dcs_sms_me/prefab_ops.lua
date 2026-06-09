@@ -397,12 +397,18 @@ local function row_from_prefab(name, path, prefab)
     local g_count, s_inline = split_group_counts(prefab.groups)
     local airbase_count = 0
     if type(meta.airbases) == 'table' then airbase_count = #meta.airbases end
+    -- Downloaded community prefabs carry meta.community = { author, source }
+    -- (stamped by the Discord catalog bot). Surface it so the library can show
+    -- the original author; own prefabs leave these unset.
+    local is_community = type(meta.community) == 'table'
     return {
         name            = meta.name or name,
         path            = path,
         theatre         = meta.theatre,
         source_dump     = meta.source_dump,
         place_at_origin = meta.place_at_origin == true,
+        community       = is_community,
+        author          = is_community and meta.community.author or nil,
         airbase_count   = airbase_count,
         group_count     = g_count,
         -- Statics from inline `type='static'` groups + any in the legacy

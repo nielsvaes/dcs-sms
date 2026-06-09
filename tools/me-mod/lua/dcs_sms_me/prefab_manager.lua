@@ -238,6 +238,7 @@ local W = {
 -- header-click handlers can share key + numeric-flag metadata.
 local COLS = {
     { key = 'name',            label = 'Name',      width = 190, numeric = false },
+    { key = 'author',          label = 'Author',    width = 110, numeric = false },
     { key = 'theatre',         label = 'Theatre',   width = 90,  numeric = false },
     { key = 'place_at_origin', label = 'Fixed Pos', width = 60,  numeric = false },
     { key = 'airbase_count',   label = 'AB',        width = 50,  numeric = true  },
@@ -465,15 +466,34 @@ local function walk_folders()
 end
 M._walk_folders = walk_folders  -- exposed for tests/inspection
 
--- Walk a tree-node depth-first, calling visit(node, depth) on each.
-local function for_each_node(node, depth, visit)
-    if not node then return end
-    for _, child in ipairs(node.children or {}) do
-        visit(child, depth)
-        if not W.folder_tree_collapse[child.path] then
-            for_each_node(child, depth + 1, visit)
+-- Label for the synthetic root node that always sits at the top of the folder
+-- browser. It maps to selected_folder '' (recursive show-all), so clicking it
+-- — or the default selection on open — shows every prefab, including those
+-- saved directly in the prefabs root.
+local ROOT_LABEL = 'Prefabs'
+
+-- Pure: flatten a build_tree result into ordered ListBox rows for the folder
+-- browser, with the synthetic root row (path '') first and the real folders
+-- indented one level beneath it. Returns { {text=, path=}, ... } in display
+-- order so row index N maps to entry N. `collapse` is a set of
+-- folder_path -> true (collapsed → its children are hidden). Exposed for tests.
+function M._listbox_tree_rows(tree_root, collapse, root_label)
+    collapse = collapse or {}
+    local rows = { { text = root_label, path = '' } }
+    local function walk(node, depth)
+        for _, child in ipairs((node and node.children) or {}) do
+            local indent = string.rep('  ', depth)
+            local glyph = (#(child.children or {}) > 0)
+                and ((collapse[child.path] and '> ') or 'v ')
+                or  '  '
+            rows[#rows + 1] = { text = indent .. glyph .. child.name, path = child.path }
+            if not collapse[child.path] then
+                walk(child, depth + 1)
+            end
         end
     end
+    walk(tree_root, 1)
+    return rows
 end
 
 -- Native-TreeView render path. DCS's TreeView is node-based — `addNode(text,
@@ -492,9 +512,19 @@ local function render_tree_native()
                 add_node(child, n)
             end
         end
-        add_node(W.folder_tree_root, nil)
+        -- Always render a clickable root node for the whole library so prefabs
+        -- saved directly in the prefabs root are never hidden behind "Show all".
+        -- It maps to path '' (recursive show-all); the real folders hang under it.
+        local root_node = W.folder_tree:addNode(ROOT_LABEL, nil, nil)
+        if type(root_node) == 'table' then root_node._sms_path = '' end
+        add_node(W.folder_tree_root, root_node)
         -- Expand everything by default so users see their structure.
         if W.folder_tree.expand then pcall(function() W.folder_tree:expand() end) end
+        -- Anchor the default / show-all state to a highlighted root node so the
+        -- full list (incl. root-level prefabs) reads as "selected", not hidden.
+        if W.selected_folder == '' and W.folder_tree.selectNode and type(root_node) == 'table' then
+            pcall(function() W.folder_tree:selectNode(root_node) end)
+        end
     end)
 end
 
@@ -506,21 +536,23 @@ local function render_tree_listbox()
         if W.folder_tree.removeAllItems then W.folder_tree:removeAllItems()
         elseif W.folder_tree.removeAll   then W.folder_tree:removeAll()
         end
+        local ListBoxItem; do local ok, m = pcall(require, 'ListBoxItem'); if ok then ListBoxItem = m end end
+        -- Root row (path '') first, real folders indented beneath it. Same
+        -- ordered rows the unit test pins down, so index N maps to path N.
+        local rows = M._listbox_tree_rows(W.folder_tree_root, W.folder_tree_collapse, ROOT_LABEL)
         W._tree_listbox_paths = {}
-        for_each_node(W.folder_tree_root, 0, function(node, depth)
-            local indent = string.rep('  ', depth)
-            local glyph = (#node.children > 0)
-                and ((W.folder_tree_collapse[node.path] and '> ') or 'v ')
-                or  '  '
-            local text = indent .. glyph .. node.name
-            local ListBoxItem; do local ok, m = pcall(require, 'ListBoxItem'); if ok then ListBoxItem = m end end
+        for _, r in ipairs(rows) do
             if ListBoxItem and W.folder_tree.insertItem then
                 local it = ListBoxItem.new()
-                it:setText(text)
+                it:setText(r.text)
                 W.folder_tree:insertItem(it)
             end
-            W._tree_listbox_paths[#W._tree_listbox_paths + 1] = node.path
-        end)
+            W._tree_listbox_paths[#W._tree_listbox_paths + 1] = r.path
+        end
+        -- Anchor the default / show-all state to the highlighted root row.
+        if W.selected_folder == '' and W.folder_tree.setSelectedItem then
+            pcall(function() W.folder_tree:setSelectedItem(0) end)
+        end
     end)
 end
 
@@ -590,19 +622,21 @@ local function render_grid()
                 W.grid:setCell(5, row, make_cell(''))
                 W.grid:setCell(6, row, make_cell(''))
                 W.grid:setCell(7, row, make_cell(''))
+                W.grid:setCell(8, row, make_cell(''))
             else
                 local ab_text = ''
                 if (r.airbase_count or 0) == 1 then ab_text = 'Yes'
                 elseif (r.airbase_count or 0) > 1 then ab_text = tostring(r.airbase_count)
                 end
                 W.grid:setCell(0, row, make_cell(r.name, r.name))
-                W.grid:setCell(1, row, make_cell(r.theatre or '?'))
-                W.grid:setCell(2, row, make_cell(r.place_at_origin and 'Yes' or ''))
-                W.grid:setCell(3, row, make_cell(ab_text))
-                W.grid:setCell(4, row, make_cell(r.group_count   or 0))
-                W.grid:setCell(5, row, make_cell(r.static_count  or 0))
-                W.grid:setCell(6, row, make_cell(r.zone_count    or 0))
-                W.grid:setCell(7, row, make_cell(r.drawing_count or 0))
+                W.grid:setCell(1, row, make_cell(r.author or ''))
+                W.grid:setCell(2, row, make_cell(r.theatre or '?'))
+                W.grid:setCell(3, row, make_cell(r.place_at_origin and 'Yes' or ''))
+                W.grid:setCell(4, row, make_cell(ab_text))
+                W.grid:setCell(5, row, make_cell(r.group_count   or 0))
+                W.grid:setCell(6, row, make_cell(r.static_count  or 0))
+                W.grid:setCell(7, row, make_cell(r.zone_count    or 0))
+                W.grid:setCell(8, row, make_cell(r.drawing_count or 0))
             end
         end
 
