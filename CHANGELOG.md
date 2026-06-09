@@ -105,18 +105,25 @@ This is the first tag after a long quiet period — `sms.version` had been froze
 
 ## ME-mod
 
-### ME-mod 0.20.0
+### [0.20.0] — 2026-06-09
 
+**Added**
 - **Community prefab library (browse + import).** New **Community** tab in the
   Prefab Manager browses a vetted, GitHub-hosted catalog over HTTPS, with
   search, sort (most-loved / name / newest), tag filters, and one-click
   "Add to my library" (imports land in a `Community/` folder). Community files
-  are loaded **parse-don't-execute** through a strict data-only validator and
-  verified by SHA-256 before they ever touch disk or `dofile`. Fetch runs
-  non-blocking on the editor tick; the last catalog is cached for offline use.
-- Requires the bundled LuaSec payload in `<Saved Games>/DCS/dcs-sms/lib/` for
-  HTTPS (see README). Without it, the tab shows the cached catalog and reports
-  that secure networking is unavailable.
+  are loaded **parse-don't-execute** through a strict data-only validator
+  before they ever touch disk or `dofile`; authenticity comes from the
+  cert-verified HTTPS fetch from the catalog repo. Both the catalog fetch and
+  the import run non-blocking on the editor tick (the download streams in
+  bounded chunks), so the editor stays responsive even on large prefabs; the
+  last catalog is cached for offline use. Requires the bundled LuaSec payload in
+  `<Saved Games>/DCS/dcs-sms/lib/` for HTTPS (see README) — without it, the tab
+  shows the cached catalog and reports that secure networking is unavailable.
+- **Author column** in the My Prefabs grid — downloaded community prefabs show
+  their original author (blank for your own hand-made prefabs).
+- **Always-visible "Prefabs" root** in the folder browser, so prefabs saved
+  directly in the prefabs root never appear to vanish behind "Show all".
 
 ### [0.19.1] — 2026-06-05
 
