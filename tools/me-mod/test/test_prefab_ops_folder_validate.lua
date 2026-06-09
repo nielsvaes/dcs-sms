@@ -61,4 +61,29 @@ check('reserved segment rejected', not vp('CAP/CON'))
 check('trailing slash OK',         vp('CAP/'))    -- single empty segment after split = no segments, so OK
 check('reserved char rejected',    not vp('CAP/Bad>Name'))
 
+-- Community/ is import-only: user writes targeting it are rejected with the
+-- shared managed-folder message (imports bypass prefab_ops, so they're
+-- unaffected — see community_import.import).
+local cfg = require('dcs_sms_me.community_config')
+local function rejects(label, ok, err)
+    check(label .. ' returns nil', ok == nil)
+    check(label .. ' returns managed message', err == cfg.MANAGED_MSG)
+end
+do
+    local ok, err = prefab_ops.save_selection('mine', false, nil, 'Community')
+    rejects('save into Community', ok, err)
+    local ok2, err2 = prefab_ops.save_selection('mine', false, nil, 'Community/CAP')
+    rejects('save into Community subfolder', ok2, err2)
+    local ok3, err3 = prefab_ops.move_prefab('CAP', 'mine', 'Community')
+    rejects('move into Community', ok3, err3)
+    local ok4, err4 = prefab_ops.rename_folder('Community', 'Renamed')
+    rejects('rename Community', ok4, err4)
+    local ok5, err5 = prefab_ops.rename_folder('CAP', 'Community')
+    rejects('rename a folder TO Community', ok5, err5)
+    -- Control: a normal folder is NOT community-blocked (it fails later for an
+    -- unrelated reason — empty selection — never with the managed message).
+    local _, err6 = prefab_ops.save_selection('mine', false, nil, 'CAP')
+    check('normal folder not community-blocked', err6 ~= cfg.MANAGED_MSG)
+end
+
 io.write('All _validate_folder_name tests passed.\n')
