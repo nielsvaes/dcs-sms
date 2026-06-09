@@ -66,6 +66,7 @@ local splitter_mod  = require('dcs_sms_me.splitter')
 local clearable_edit = require('dcs_sms_me.clearable_edit')
 local prefab_naming = require('dcs_sms_me.prefab_naming')
 local sms_scrollbars = require('dcs_sms_me.sms_scrollbars')
+local community_config = require('dcs_sms_me.community_config')
 
 -- Apply a skin by name. Resolves in this order:
 --   * 'sms_button' / 'sms_grid' / 'sms_grid_header' → the DCS-SMS house skins
@@ -486,7 +487,8 @@ function M._listbox_tree_rows(tree_root, collapse, root_label)
             local glyph = (#(child.children or {}) > 0)
                 and ((collapse[child.path] and '> ') or 'v ')
                 or  '  '
-            rows[#rows + 1] = { text = indent .. glyph .. child.name, path = child.path }
+            local marker = community_config.is_community_path(child.path) and '  (downloads)' or ''
+            rows[#rows + 1] = { text = indent .. glyph .. child.name .. marker, path = child.path }
             if not collapse[child.path] then
                 walk(child, depth + 1)
             end
@@ -500,6 +502,27 @@ end
 -- parentNode, index)` returns a node table; we stash `_sms_path` on it so the
 -- selection callback can map back to a folder. `clear()` wipes all nodes.
 -- (Earlier draft assumed an `insertItem` API that doesn't exist in DCS dxgui.)
+-- Tint a folder-tree node's label to mark the import-managed Community folder.
+-- Clones the tree's item sub-skin, repaints the unselected text colour to a
+-- distinct accent, and applies it to the node's TreeViewItem (node.item) — the
+-- same per-item skin mechanism TreeView.addNode itself uses. dxgui-bound and
+-- pcall-guarded so a skin/binding gap degrades to "no tint" rather than
+-- breaking the render.
+local COMMUNITY_TINT = '0xf0c674ff'  -- warm gold, legible on the dark tree bkg
+local function apply_community_node_tint(node)
+    if type(node) ~= 'table' or not node.item or not node.item.setSkin then return end
+    pcall(function()
+        local Skin_mod = require('Skin')
+        local s = Skin_mod.treeViewSkin_ME and Skin_mod.treeViewSkin_ME()
+        local item = s and s.skinData and s.skinData.skins and s.skinData.skins.item
+        local rel = item and item.skinData and item.skinData.states and item.skinData.states.released
+        if not rel then return end
+        if rel[1] and rel[1].text then rel[1].text.color = COMMUNITY_TINT end
+        if rel[2] and rel[2].text then rel[2].text.color = COMMUNITY_TINT end
+        node.item:setSkin(item)
+    end)
+end
+
 local function render_tree_native()
     if not W.folder_tree or W.folder_tree_uses_listbox then return end
     if not W.folder_tree.addNode then return end
@@ -508,7 +531,12 @@ local function render_tree_native()
         local function add_node(node_data, parent_node)
             for _, child in ipairs(node_data.children or {}) do
                 local n = W.folder_tree:addNode(child.name, parent_node, nil)
-                if type(n) == 'table' then n._sms_path = child.path end
+                if type(n) == 'table' then
+                    n._sms_path = child.path
+                    if community_config.is_community_path(child.path) then
+                        apply_community_node_tint(n)
+                    end
+                end
                 add_node(child, n)
             end
         end
@@ -1894,6 +1922,10 @@ local function on_new_folder(parent_path)
                 return
             end
             local rel = (parent_path == '' and name) or (parent_path .. '/' .. name)
+            if community_config.is_community_path(rel) then
+                set_status(community_config.MANAGED_MSG, 'error')
+                return
+            end
             local abs = require('dcs_sms_me.paths').folder_to_abs(rel):sub(1, -2)
             if require('lfs').attributes(abs) then
                 set_status('Folder already exists: ' .. rel, 'error')
@@ -2033,6 +2065,17 @@ local function open_move_modal(row)
     -- Build the folder set + tree, render into the picker.
     local folder_set = walk_folders()
     local tree = build_tree(folder_set, '')
+    -- Community/ is import-only — never a move destination. Drop it (and its
+    -- subtree, which hangs beneath it) from the picker.
+    do
+        local kept = {}
+        for _, child in ipairs(tree.children or {}) do
+            if not community_config.is_community_path(child.path) then
+                kept[#kept + 1] = child
+            end
+        end
+        tree.children = kept
+    end
     local picker_paths = {}
     local function render_picker()
         pcall(function()
