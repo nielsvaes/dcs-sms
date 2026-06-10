@@ -181,6 +181,13 @@ You do **not** have:
 | `prefab_manager.lua` | The Prefab Manager window (uses `sms_window`). Library list, place-at-click / place-at-original, rotation, country override, undo. |
 | `context_menu.lua` | Right-click context menus for the Prefab Manager. Owns the dxgui `Menu` construction and the clipboard probe. Used by the file-row menu (Update Prefab with selection / Move to… / Copy file contents / Copy place snippet / Show in Explorer) and the tree-node menu (New subfolder / Rename / Delete). |
 | `prefab_distill.lua`, `prefab_ops.lua` | Prefab save/load/placement core. |
+| `base64.lua` | Pure-Lua base64 encode/decode for prefab-embedded media. |
+| `trigger_schema.lua` | ED trigger-descriptor cache + field-kind classification, shared by trigger export/import. Deliberately duplicates `verbs/trigger_verbs.lua` locals — see header comment. |
+| `trigger_export.lua` | trigrules → portable prefab `triggers` form; related-trigger detection for save bundling; structured-field flag scan. |
+| `trigger_import.lua` | Portable triggers → resolution plan (id-map / name / default / unresolved) → factory-built trigrules entries; media + dict re-keying; trigger-panel refresh. |
+| `trigger_media.lua` | ResKey read/add over ED's `dictionary` resource API (`getValueResource` / `setValueToResource`). |
+| `trigger_dialogs.lua` | Save-time bundle checklist + combined post-place import dialog. |
+| `triggers_tab.lua` | The Prefab Manager Triggers tab (checkable master–detail over mission.trigrules + save form). |
 | `serializer.lua` | Lua-table serializer used to write prefab files. |
 | `warehouse_ops.lua`, `ship_warehouse.lua` | Airbase + per-ship warehouse capture for the Prefab Manager. |
 | `airbase_detect.lua` | Detect when a marquee selection includes an airbase. |

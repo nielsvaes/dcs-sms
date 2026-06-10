@@ -28,7 +28,11 @@ local log = sms.log.module("sms.prefab.distill")
 -- inside `drawing.mapData.points` (and other geometry sub-arrays). Files
 -- saved at 0.1.0 had broken vertex deltas; me-mod's place path keeps a
 -- compensating un-rebase shim for those, gated on this version field.
-local PREFAB_VERSION = "0.3.0"
+-- 0.4.0: prefabs may carry an optional `triggers` array plus
+-- meta.resources (base64 media) and meta.flags_used. Loaders that
+-- pre-date 0.4.0 ignore the extra keys; 0.4.0 loads older files
+-- unchanged. See docs/superpowers/specs/2026-06-10-prefab-triggers-design.md.
+local PREFAB_VERSION = "0.4.0"
 
 -- ---------------------------------------------------------------------------
 -- Helpers

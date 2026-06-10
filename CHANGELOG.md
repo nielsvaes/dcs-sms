@@ -105,6 +105,16 @@ This is the first tag after a long quiet period — `sms.version` had been froze
 
 ## ME-mod
 
+### [0.22.0] — 2026-06-10
+
+**Added**
+- **Triggers in prefabs** — new Triggers tab in the Prefab Manager (check
+  mission triggers → save to a prefab); normal saves offer to bundle
+  triggers that reference the selection; placement imports bundled
+  triggers with reference rebinding, embedded media (pictures/sounds/
+  script files), a manual-map dialog for unresolved references, and a
+  flag-overlap warning. Prefab format 0.4.0 (older files load unchanged).
+
 ### [0.21.0] — 2026-06-10
 
 **Changed**

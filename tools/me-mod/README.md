@@ -300,6 +300,25 @@ Everything in the catalog is vetted: community files are validated as pure data
 and never run as code, and each download is checked against a SHA-256 hash
 before it's saved.
 
+### Triggers
+
+The **Triggers tab** (third tab in the Prefab Manager) lists every trigger in the open mission with its condition and action counts. Check the ones you want to keep, give the prefab a name, and click **Save triggers** — a triggers-only prefab is written to your library just like a regular prefab, but with no map footprint.
+
+When you save a **normal prefab** (groups, zones, drawings), the manager scans for triggers that reference the selection. If it finds any, a checklist overlay appears with those triggers pre-checked — confirm to bundle them into the prefab alongside the entities.
+
+**Placing a prefab with triggers** shows an import dialog before anything lands in your mission:
+
+- References to groups, zones, and units placed by the prefab are resolved automatically from the placement id-map.
+- Unresolved references (entities that aren't in the prefab) get a manual-map dropdown so you can point them at an existing group or zone in the current mission.
+- Embedded media — pictures, sounds, and do-script files — is decoded from the prefab and registered into the mission automatically; no manual file copying needed.
+- If any trigger flags overlap with flags already in use in the target mission, a warning lists the conflicts before you import.
+
+**Triggers-only prefabs** skip the map-click step entirely — the import dialog appears immediately when you click Place.
+
+**Undo** (`Ctrl-Z`) after a triggered placement removes both the placed entities and the imported triggers, and refreshes the Triggers panel if it's open.
+
+Community prefabs that contain triggers show a trigger count in their detail panel so you know what you're importing before you click **Add to my library**.
+
 ## ⌨️ Hotkey Manager
 
 **DCS-SMS → Hotkey Manager** opens a window with an **Action | Binding** table of native Mission-Editor actions grouped under collapsible category rows (Map/Selection, Object-add, Panel toggles) — click a category row to fold it away. **Single-click** a row to select it, **double-click** to capture a new key. The footer has **↩ Reset selected** (reverts the selected row) and **Reset all** (reverts everything); any binding changed from its default shows in **amber italic**. Bindings persist across sessions in `<Saved Games>\DCS\dcs-sms\me_hotkeys.lua`.
