@@ -1551,7 +1551,6 @@ local function on_place_click()
         return
     end
     if is_triggers_only(prefab) then
-        undo.record({ groups = {}, zones = {}, drawings = {} })  -- slot for add_triggers
         run_trigger_import(prefab, nil)
         return
     end
@@ -1790,6 +1789,13 @@ run_trigger_import = function(prefab, rec)
                         return base .. '-' .. n
                     end,
                 })
+                -- Triggers-only placements (rec == nil) have no entity
+                -- record; open the empty undo slot only NOW that triggers
+                -- were actually imported — recording it up front would
+                -- clobber the previous placement's undo even on Skip.
+                if rec == nil and result.count > 0 then
+                    undo.record({ groups = {}, zones = {}, drawings = {} })
+                end
                 undo.add_triggers(result.entries)
                 timport.panel_refresh()
                 -- Keep the Prefab Manager's Triggers tab in step too (it
@@ -1829,7 +1835,6 @@ local function on_place_origin_click()
         return
     end
     if is_triggers_only(prefab) then
-        undo.record({ groups = {}, zones = {}, drawings = {} })  -- slot for add_triggers
         run_trigger_import(prefab, nil)
         return
     end
