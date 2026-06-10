@@ -37,13 +37,9 @@ local t_refs = {
                   file = 'ResKey_Action_36', seconds = 10 } },
 }
 
--- refs_summary: '✓' when portable; badges otherwise (sorted, deduped).
--- Decimal escapes (\226\156\147 = U+2713): Lua 5.1 has no \xNN hex
--- escapes — both sides of the old hex-escape comparison degraded
--- identically, which is exactly how the bug slipped past this test.
-check(tab.refs_summary(t_portable_ok, s) == '\226\156\147', 'portable → ✓ (utf8 check)')
-check(tab.refs_summary(t_portable_ok, s) ~= 'xE2x9Cx93',
-      'checkmark is not the degraded hex-escape literal')
+-- refs_summary: 'none' when fully portable; badges otherwise (sorted,
+-- deduped).
+check(tab.refs_summary(t_portable_ok, s) == 'none', 'portable → none')
 local summary = tab.refs_summary(t_refs, s)
 check(summary:find('group') and summary:find('zone') and summary:find('media'),
       'badges for group/zone/media')

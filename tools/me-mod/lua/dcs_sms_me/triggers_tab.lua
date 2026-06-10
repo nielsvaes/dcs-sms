@@ -40,15 +40,15 @@ local function walk_badges(t, schema, fn)
     end
 end
 
--- refs_summary(trigger, schema) → '✓' | 'group zone media' (sorted unique)
+-- refs_summary(trigger, schema) → 'none' | 'group zone media' (sorted
+-- unique). 'none' = fully portable: no entity references, no embedded
+-- media — the trigger transfers to another mission with zero rebinding.
 function M.refs_summary(t, schema)
     local seen, badges = {}, {}
     walk_badges(t, schema, function(b)
         if not seen[b] then seen[b] = true; badges[#badges + 1] = b end
     end)
-    -- \226\156\147 = ✓ (U+2713). DECIMAL escapes only: Lua 5.1 has no \xNN
-    -- hex escapes (5.2+); DCS's lexer renders them as literal text.
-    if #badges == 0 then return '\226\156\147' end
+    if #badges == 0 then return 'none' end
     table.sort(badges)
     return table.concat(badges, ' ')
 end
