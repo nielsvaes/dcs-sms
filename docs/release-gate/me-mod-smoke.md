@@ -463,6 +463,7 @@ For each form above: run the apply, hit Ctrl+Z (or whatever the ME's undo key is
 - [ ] Open the Prefab Manager → a `[My Prefabs] [Community]` tab strip is visible; My Prefabs is selected by default and looks unchanged.
 - [ ] Click **Community** the first time → it auto-syncs: status shows "Syncing…", then "Synced N prefabs." within a second or two, and the editor never freezes during the fetch (pan/zoom the map mid-sync to confirm).
 - [ ] The list shows name / author / ♥ / theatre; selecting a row fills the detail panel (description, tags, counts).
+- [ ] A thin vertical splitter handle sits in the gutter between the entry list (left) and the detail/description column (right). Click + drag it left → the description widens and the list shrinks; drag right → the reverse. Both panes clamp to a usable minimum. Releasing stops the drag, and resizing the whole window afterwards keeps the chosen split. Switching to My Prefabs and back hides/shows the handle with the rest of the tab (it never lingers over the My Prefabs panel).
 - [ ] Type in the search box → list filters by name/author/tag live. Click a tag chip → list filters to that tag; click again → clears.
 - [ ] Change sort (likes / name / newest) → order updates.
 - [ ] Click **＋ Add to my library** → status confirms "Imported … → Community/"; switch to My Prefabs → a `Community` folder now holds the prefab; place it normally.

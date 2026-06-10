@@ -54,6 +54,11 @@ local sms_skins; do local ok, m = pcall(require, 'dcs_sms_me.sms_skins');    if 
 -- unavailable (test VM / older dxgui).
 local clearable_edit; do local ok, m = pcall(require, 'dcs_sms_me.clearable_edit'); if ok then clearable_edit = m end end
 
+-- Vertical drag splitter (the same module the My-Prefabs tree/grid splitter
+-- uses) so the Community-tab description column can be resized. Guarded so a
+-- load failure in a non-DCS VM just disables it (W.splitter stays nil).
+local splitter_mod; do local ok, m = pcall(require, 'dcs_sms_me.splitter'); if ok then splitter_mod = m end end
+
 -- Themed editbox skin (house look + thin scrollbars) for the read-only,
 -- multi-line detail box. Guarded; falls back to editBoxSkin_ME if unavailable.
 local sms_scrollbars; do local ok, m = pcall(require, 'dcs_sms_me.sms_scrollbars'); if ok then sms_scrollbars = m end end
@@ -163,6 +168,9 @@ function M.build(parent, deps)
         did_first_sync = false,
         -- Right-column chip-band geometry, set by relayout(); layout_chips reads it.
         chips_x = 0, chips_y = 0, chips_w = 300,
+        -- Right-column (detail/description) width, dragged by the splitter.
+        -- Was the constant DETAIL_W; now mutable so the user can resize it.
+        detail_w = 300,
     }
 
     -- Register a widget for bulk show/hide and parent it under the window.
@@ -196,6 +204,16 @@ function M.build(parent, deps)
     local ROW_H = 24
     local TOP   = 44   -- below the manager's tab strip
     local GAP   = 6
+
+    -- Splitter geometry (mirrors prefab_manager): a SPLIT-thick grab bar
+    -- centered in a SPLIT_GUTTER strip with SPLITTER_MARGIN of breathing room
+    -- on each side. DETAIL_MIN / GRID_MIN keep both panes usable as the
+    -- splitter (and window resizes) push the boundary around.
+    local SPLIT           = 6
+    local SPLITTER_MARGIN = 10
+    local SPLIT_GUTTER    = SPLITTER_MARGIN + SPLIT + SPLITTER_MARGIN  -- 26
+    local DETAIL_MIN      = 200   -- description column never narrower than this
+    local GRID_MIN        = 300   -- the entry list never narrower than this
 
     -- Set bounds, guarded.
     local function bounds(widget, x, y, w, h)
@@ -600,6 +618,31 @@ function M.build(parent, deps)
         end
     end
 
+    -- Vertical splitter in the gutter between the entry list (left) and the
+    -- detail/description column (right) — the same drag handle the My-Prefabs
+    -- tree/grid use. invert=true because the tracked value is the RIGHT pane's
+    -- width: dragging the handle right shrinks the description, dragging left
+    -- grows it. Parented straight to the window (like the My-Prefabs splitter)
+    -- and appended to W.widgets directly — NOT via track(), which would
+    -- double-insert it — so the tab's show/hide toggles it with everything
+    -- else. on_drag mutates W.detail_w and re-runs relayout (forward-declared
+    -- above; resolved as an upvalue by drag time).
+    W.splitter = splitter_mod and splitter_mod.new(parent, {
+        initial = W.detail_w,
+        min     = DETAIL_MIN,
+        max     = 800,   -- tightened per-window in relayout via set_range
+        invert  = true,
+        skin    = 'sms_splitter',
+        on_drag = function(new_detail_w)
+            W.detail_w = new_detail_w
+            relayout(W.cw, W.ch)
+        end,
+    })
+    if W.splitter and W.splitter.widget then
+        local sw = W.splitter:widget()
+        if sw then W.widgets[#W.widgets + 1] = sw end
+    end
+
     -- -----------------------------------------------------------------------
     -- Responsive layout. Left column: the search row, then the grid filling
     -- the rest of the height. Right column: Refresh + last-synced on row 1,
@@ -616,11 +659,19 @@ function M.build(parent, deps)
         -- must stop above ~h-80 or it spills over / gets clipped.
         local FOOTER = 82
         local bottom = ch - FOOTER
-        local DETAIL_W = 300
-        local right_x  = math.max(PAD + 220, cw - PAD - DETAIL_W)
-        local detail_w = math.max(120, cw - PAD - right_x)
+
+        -- The right (detail/description) column width is user-adjustable via
+        -- the splitter. Clamp it to what the window can afford BEFORE reading
+        -- it (mirrors prefab_manager's tree_w clamp): the grid keeps GRID_MIN,
+        -- the gutter keeps SPLIT_GUTTER, and PAD sits on each outer edge.
+        local max_detail = math.max(DETAIL_MIN, cw - PAD - SPLIT_GUTTER - GRID_MIN - PAD)
+        if W.detail_w < DETAIL_MIN  then W.detail_w = DETAIL_MIN  end
+        if W.detail_w > max_detail  then W.detail_w = max_detail  end
+
+        local detail_w = W.detail_w
+        local right_x  = cw - PAD - detail_w
         local grid_x   = PAD
-        local grid_w   = math.max(220, right_x - PAD - grid_x)
+        local grid_w   = math.max(GRID_MIN, right_x - SPLIT_GUTTER - grid_x)
 
         -- Row 1: search (left), Refresh + last-synced (right column).
         local y = TOP
@@ -638,6 +689,19 @@ function M.build(parent, deps)
         local row2   = y + ROW_H + GAP
         local grid_h = math.max(120, bottom - row2)
         bounds(W.grid, grid_x, row2, grid_w, grid_h)
+
+        -- Splitter centered in the SPLIT_GUTTER strip between the grid and the
+        -- right column, spanning the grid's height. Range is refreshed every
+        -- relayout so a window shrink tightens the max before the user can drag
+        -- the grid below GRID_MIN; set_value keeps the handle in sync if
+        -- W.detail_w was clamped above.
+        local splitter_x = right_x - SPLIT_GUTTER + SPLITTER_MARGIN
+        local splitter_h = math.max(60, bottom - row2)
+        if W.splitter then
+            if W.splitter.set_bounds then W.splitter:set_bounds(splitter_x, row2, SPLIT, splitter_h) end
+            if W.splitter.set_range  then W.splitter:set_range(DETAIL_MIN, max_detail) end
+            if W.splitter.set_value  then W.splitter:set_value(W.detail_w) end
+        end
 
         -- Right column: chips under row 1, detail below them, import pinned
         -- just above the footer.

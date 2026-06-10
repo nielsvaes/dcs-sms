@@ -105,6 +105,15 @@ This is the first tag after a long quiet period — `sms.version` had been froze
 
 ## ME-mod
 
+### [0.21.0] — 2026-06-10
+
+**Changed**
+- **Resizable description column in the Community tab.** Added the same draggable
+  vertical splitter the My Prefabs tab uses, sitting in the gutter between the
+  entry list and the detail/description column — drag it left to widen the
+  description, right to give the list more room. The width clamps so neither pane
+  collapses, and the boundary survives window resizes.
+
 ### [0.20.0] — 2026-06-09
 
 **Added**
