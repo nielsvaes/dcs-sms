@@ -66,6 +66,21 @@ function M.add_airbase_snapshots(snaps)
     end
 end
 
+-- Augment the pending prefab undo slot with imported trigger entries
+-- (trigrules tables, by identity). Called by the post-place trigger
+-- import (spec 2026-06-10-prefab-triggers-design.md §3). Safe no-op when
+-- no prefab slot is pending.
+function M.add_triggers(entries)
+    if type(entries) ~= 'table' or #entries == 0 then return end
+    if not (slot and slot.handler == 'prefab' and type(slot.payload) == 'table') then
+        return
+    end
+    slot.payload.triggers = slot.payload.triggers or {}
+    for _, e in ipairs(entries) do
+        slot.payload.triggers[#slot.payload.triggers + 1] = e
+    end
+end
+
 function M.has_record() return slot ~= nil end
 function M.clear() slot = nil end
 
@@ -139,12 +154,38 @@ local function restore_airbases(arr)
     return errors
 end
 
+-- Remove imported triggers from mission.trigrules by table identity.
+-- Returns the number of entries that could NOT be removed.
+local function remove_triggers(entries)
+    if type(entries) ~= 'table' or #entries == 0 then return 0 end
+    local ok_m, Mission = pcall(require, 'me_mission')
+    if not (ok_m and Mission and type(Mission.mission) == 'table'
+            and type(Mission.mission.trigrules) == 'table') then
+        return #entries
+    end
+    local trigrules = Mission.mission.trigrules
+    local errors = 0
+    for _, e in ipairs(entries) do
+        local found = false
+        for i = #trigrules, 1, -1 do
+            if trigrules[i] == e then
+                table.remove(trigrules, i)
+                found = true
+                break
+            end
+        end
+        if not found then errors = errors + 1 end
+    end
+    return errors
+end
+
 M.register_handler('prefab', function(r)
     local errors = 0
     errors = errors + remove_groups(r.groups)
     errors = errors + remove_zones(r.zones)
     errors = errors + remove_drawings(r.drawings)
     errors = errors + restore_airbases(r.airbase_snapshots)
+    errors = errors + remove_triggers(r.triggers)
     return true, errors > 0 and (errors .. ' partial failures') or nil
 end)
 
