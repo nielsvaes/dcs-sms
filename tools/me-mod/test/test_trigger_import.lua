@@ -18,6 +18,11 @@ local s = schema.new({
     triggersDescr = descr.triggersDescr, field_kind_fn = descr.field_kind,
 })
 
+-- Regression guard: the dialogs module must stay loadable without dxgui
+-- (an unguarded dxgui require there would otherwise pass the suite unseen).
+check(type(require('dcs_sms_me.trigger_dialogs')) == 'table',
+      'dialogs module loads headless')
+
 -- Portable triggers (shape produced by trigger_export.to_portable).
 local portable = {
     { name = 'activate HornetCap', type = 'once', eventlist = '',

@@ -760,8 +760,13 @@ function M.build(host)
                          .. tostring(payload.warnings[1]))
             end
 
-            if prefab_ops.exists(name) then
-                set_status('A prefab named "' .. name .. '" already exists — pick another name.', 'error')
+            -- Collision check must look in the TARGET folder — exists()
+            -- concatenates onto PREFABS_DIR, so prefix the folder path.
+            local exists_key = (folder ~= '' and (folder .. '/' .. name)) or name
+            if prefab_ops.exists(exists_key) then
+                set_status('A prefab named "' .. name .. '" already exists in '
+                           .. (folder == '' and 'the library root' or folder)
+                           .. ' — pick another name.', 'error')
                 return
             end
 
@@ -823,23 +828,27 @@ function M.build(host)
         bounds(W.grid, PAD, row2, grid_w, body_h)
         bounds(W.detail, detail_x, TOP, detail_w, form_y - GAP - TOP)
 
-        -- Form row: bulk buttons left, save pinned right, name input takes
-        -- the slack between the labels.
+        -- Form row: bulk buttons left, save pinned right, folder label +
+        -- input right-anchored next to it, name input absorbs the slack.
+        -- Widths scale down with the window so the row still fits at the
+        -- manager's MIN_W (580): everything right of the name input is
+        -- anchored from the right edge, never from the running x.
         local x = PAD
-        bounds(W.sel_all_btn, x, form_y, 90, ROW_H); x = x + 90 + GAP
-        bounds(W.sel_clr_btn, x, form_y, 70, ROW_H); x = x + 70 + 2 * GAP
+        bounds(W.sel_all_btn, x, form_y, 80, ROW_H); x = x + 80 + GAP
+        bounds(W.sel_clr_btn, x, form_y, 60, ROW_H); x = x + 60 + 2 * GAP
 
-        local save_w  = 170
-        local save_x  = w - PAD - save_w
-        local fold_w  = 130
+        local save_w  = math.min(170, math.max(110, math.floor(w * 0.22)))
+        local fold_w  = math.min(130, math.max(80, math.floor(w * 0.16)))
         local fold_lw = 48
         local name_lw = 44
+        local save_x  = w - PAD - save_w
         local fold_x  = save_x - GAP - fold_w
-        local name_w  = math.max(80, fold_x - GAP - fold_lw - GAP - (x + name_lw + GAP))
+        local fold_lx = fold_x - GAP - fold_lw
 
-        bounds(W.name_lbl,     x, form_y, name_lw, ROW_H); x = x + name_lw + GAP
-        bounds(W.name_input,   x, form_y, name_w, ROW_H);  x = x + name_w + GAP
-        bounds(W.folder_lbl,   x, form_y, fold_lw, ROW_H)
+        bounds(W.name_lbl,   x, form_y, name_lw, ROW_H); x = x + name_lw + GAP
+        local name_w = math.max(60, fold_lx - GAP - x)
+        bounds(W.name_input,   x, form_y, name_w, ROW_H)
+        bounds(W.folder_lbl,   fold_lx, form_y, fold_lw, ROW_H)
         bounds(W.folder_input, fold_x, form_y, fold_w, ROW_H)
         bounds(W.save_btn,     save_x, form_y, save_w, ROW_H)
     end
