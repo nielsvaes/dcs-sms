@@ -247,6 +247,7 @@ local COLS = {
     { key = 'static_count',    label = 'S',         width = 35,  numeric = true  },
     { key = 'zone_count',      label = 'Z',         width = 35,  numeric = true  },
     { key = 'drawing_count',   label = 'D',         width = 35,  numeric = true  },
+    { key = 'trigger_count',   label = 'T',         width = 35,  numeric = true  },
 }
 
 local function find_col(key)
@@ -651,6 +652,7 @@ local function render_grid()
                 W.grid:setCell(6, row, make_cell(''))
                 W.grid:setCell(7, row, make_cell(''))
                 W.grid:setCell(8, row, make_cell(''))
+                W.grid:setCell(9, row, make_cell(''))
             else
                 local ab_text = ''
                 if (r.airbase_count or 0) == 1 then ab_text = 'Yes'
@@ -665,6 +667,7 @@ local function render_grid()
                 W.grid:setCell(6, row, make_cell(r.static_count  or 0))
                 W.grid:setCell(7, row, make_cell(r.zone_count    or 0))
                 W.grid:setCell(8, row, make_cell(r.drawing_count or 0))
+                W.grid:setCell(9, row, make_cell(r.trigger_count or 0))
             end
         end
 

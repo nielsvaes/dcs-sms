@@ -248,7 +248,12 @@ function M.build(parent, deps)
         add_count('zones',    e.zones)
         add_count('drawings', e.drawings)
         add_count('airbases', e.airbases)
+        add_count('triggers', e.triggers)
         if #counts > 0 then lines[#lines + 1] = table.concat(counts, ', ') end
+        if (e.triggers or 0) > 0 then
+            lines[#lines + 1] = '\226\154\145 includes ' .. e.triggers
+                .. ' trigger(s) — may contain Lua that runs when the mission runs'
+        end
         if e.description and e.description ~= '' then
             lines[#lines + 1] = ''
             lines[#lines + 1] = e.description
