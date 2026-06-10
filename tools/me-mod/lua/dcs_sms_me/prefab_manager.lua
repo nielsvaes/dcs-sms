@@ -1061,6 +1061,7 @@ end
 
 local exit_place_pending           -- forward declaration; assigned below
 local run_airbase_apply            -- forward decl: referenced by the click-place closure
+local run_trigger_import           -- forward decl: referenced by the click-place closure
 local selected_country_coalition   -- forward decl: referenced by the click-place closure
 local read_naming_opts             -- forward decl: referenced by the click-place closure
 
@@ -1358,6 +1359,7 @@ local function enter_place_pending(prefab_name, prefab_table, rotation_deg)
                     set_status(placement_msg, sev)
                     log.write('sms.me.prefab', log.INFO, 'placed ' .. prefab_name)
                     run_airbase_apply(prefab_table)
+                    run_trigger_import(prefab_table, rec)
                 else
                     set_status('Place failed: ' .. tostring(err), 'error')
                     log.write('sms.me.prefab', log.ERROR, 'place failed: ' .. tostring(err))
@@ -1525,6 +1527,14 @@ read_naming_opts = function()
     }
 end
 
+-- Triggers-only prefab: nothing positional to anchor — skip the map
+-- click / place call and go straight to the import dialog (spec §3).
+local function is_triggers_only(p)
+    return p and type(p.triggers) == 'table' and #p.triggers > 0
+       and #(p.groups or {}) == 0 and #(p.statics or {}) == 0
+       and #(p.zones or {}) == 0 and #(p.drawings or {}) == 0
+end
+
 local function on_place_click()
     if W.place_pending then
         -- Acting as Cancel.
@@ -1538,6 +1548,11 @@ local function on_place_click()
     if not prefab then
         set_status('Load failed: ' .. tostring(lerr), 'error')
         log.write('sms.me.prefab', log.ERROR, 'load failed for ' .. row.path .. ': ' .. tostring(lerr))
+        return
+    end
+    if is_triggers_only(prefab) then
+        undo.record({ groups = {}, zones = {}, drawings = {} })  -- slot for add_triggers
+        run_trigger_import(prefab, nil)
         return
     end
     enter_place_pending(row.name, prefab, get_rotation_deg())
@@ -1641,6 +1656,169 @@ run_airbase_apply = function(prefab)
     }, 'question', 'Apply Airbase Supplies')
 end
 
+-- Post-place trigger import (spec §3). Mirrors run_airbase_apply's
+-- position in the flow: runs after undo.record + naming. `rec` may be
+-- nil for the triggers-only path (no entities were placed).
+run_trigger_import = function(prefab, rec)
+    if not (prefab and type(prefab.triggers) == 'table' and #prefab.triggers > 0) then
+        return
+    end
+    local ok, err = pcall(function()
+        local schema_mod     = require('dcs_sms_me.trigger_schema')
+        local timport        = require('dcs_sms_me.trigger_import')
+        local export         = require('dcs_sms_me.trigger_export')
+        local trigger_media  = require('dcs_sms_me.trigger_media')
+        local trigger_dialogs = require('dcs_sms_me.trigger_dialogs')
+        local Mission        = require('me_mission')
+        local b64            = require('dcs_sms_me.base64')
+
+        local schema = schema_mod.from_editor()
+        if not schema then
+            set_status('Trigger import unavailable (descriptors missing)', 'warning')
+            return
+        end
+        local trigrules = Mission.mission and Mission.mission.trigrules
+        if type(trigrules) ~= 'table' then
+            Mission.mission.trigrules = {}
+            trigrules = Mission.mission.trigrules
+        end
+
+        -- Rebind maps from the placement record (zone map by NAME —
+        -- prefab zones carry no ids).
+        local maps = { gid_map = rec and rec.gid_map or {},
+                       uid_map = rec and rec.uid_map or {},
+                       zone_by_name = {} }
+        for _, z in ipairs(rec and rec.zones or {}) do
+            if z.orig_name and z.runtime_id then
+                maps.zone_by_name[z.orig_name] = z.runtime_id
+            end
+        end
+
+        local find_by_name = function(kind, name)
+            if kind == 'group' and Mission.group_by_name then
+                local g = Mission.group_by_name[name]
+                return g and g.groupId
+            elseif kind == 'unit' and Mission.unit_by_name then
+                local u = Mission.unit_by_name[name]
+                return u and u.unitId
+            elseif kind == 'zone' then
+                local ok_t, TZD = pcall(require, 'Mission.TriggerZoneData')
+                if ok_t and TZD and type(TZD.getTriggerZoneIds) == 'function' then
+                    for _, zid in ipairs(TZD.getTriggerZoneIds() or {}) do
+                        if TZD.getTriggerZoneName(zid) == name then return zid end
+                    end
+                end
+            end
+        end
+
+        local plan = timport.resolve(prefab.triggers, maps, {
+            schema = schema,
+            find_by_name = find_by_name,
+            target_flags = export.extract_flags(trigrules, schema),
+            prefab_flags = (prefab.meta and prefab.meta.flags_used) or {},
+        })
+
+        -- Entity options for the manual-map dropdowns.
+        local entity_options = function(kind)
+            local out = {}
+            if kind == 'group' and type(Mission.group_by_name) == 'table' then
+                for name, g in pairs(Mission.group_by_name) do
+                    out[#out + 1] = { id = g.groupId, name = name }
+                end
+            elseif kind == 'unit' and type(Mission.unit_by_name) == 'table' then
+                for name, u in pairs(Mission.unit_by_name) do
+                    out[#out + 1] = { id = u.unitId, name = name }
+                end
+            elseif kind == 'zone' then
+                local ok_t, TZD = pcall(require, 'Mission.TriggerZoneData')
+                if ok_t and TZD and type(TZD.getTriggerZoneIds) == 'function' then
+                    for _, zid in ipairs(TZD.getTriggerZoneIds() or {}) do
+                        out[#out + 1] = { id = zid, name = TZD.getTriggerZoneName(zid) or '?' }
+                    end
+                end
+            end
+            table.sort(out, function(a, b) return tostring(a.name) < tostring(b.name) end)
+            return out
+        end
+
+        -- Embedded resources indexed by short name for inject.
+        local resources = {}
+        for _, r in ipairs((prefab.meta and prefab.meta.resources) or {}) do
+            if r.name and r.data then resources[r.name] = r.data end
+        end
+
+        trigger_dialogs.show_import_dialog({
+            plan = plan,
+            entity_options = entity_options,
+            on_import = function(decisions)
+                local result = timport.inject(plan, decisions, {
+                    schema = schema,
+                    create_trigger = function(d)
+                        return require('me_trigrules').createTrigger(d)
+                    end,
+                    create_rule = function(d)
+                        return require('me_predicates').createRule(d)
+                    end,
+                    create_action = function(d)
+                        return require('me_trigrules').createAction(d)
+                    end,
+                    fix_dict = function(entry, field, literal, label)
+                        local ok_d, dict = pcall(require, 'dictionary')
+                        if ok_d and type(dict.fixDict) == 'function' then
+                            pcall(dict.fixDict, entry, field, literal, label)
+                        else
+                            entry[field] = literal
+                        end
+                    end,
+                    media_add = function(short, data_b64, prefix)
+                        local bytes = b64.decode(data_b64)
+                        if not bytes then return nil, 'bad base64' end
+                        return trigger_media.add(short, bytes, { prefix = prefix })
+                    end,
+                    resources = resources,
+                    trigrules = trigrules,
+                    unique_name = function(base)
+                        -- mirror trigger_verbs' _trigger_unique_name
+                        local function exists(n)
+                            for _, t in ipairs(trigrules) do
+                                if t.comment == n then return true end
+                            end
+                        end
+                        if not exists(base) then return base end
+                        local n = 2
+                        while exists(base .. '-' .. n) do n = n + 1 end
+                        return base .. '-' .. n
+                    end,
+                })
+                undo.add_triggers(result.entries)
+                timport.panel_refresh()
+                -- Keep the Prefab Manager's Triggers tab in step too (it
+                -- shows mission.trigrules rows when built).
+                pcall(function()
+                    if W.triggers and W.triggers ~= false then W.triggers:refresh() end
+                end)
+                local msg = 'Imported ' .. result.count .. ' trigger(s)'
+                if #result.skipped > 0 then
+                    msg = msg .. ', ' .. #result.skipped .. ' skipped ('
+                          .. tostring(result.skipped[1].reason) .. ')'
+                end
+                if #result.errors > 0 then
+                    msg = msg .. ' — ' .. #result.errors .. ' issue(s), see dcs.log'
+                    for _, e in ipairs(result.errors) do
+                        log.write('sms.me.prefab', log.WARNING, 'trigger import: ' .. e)
+                    end
+                end
+                set_status(msg, (#result.skipped + #result.errors > 0) and 'warning' or 'success')
+            end,
+            on_skip = function() set_status('Triggers not imported.') end,
+        })
+    end)
+    if not ok then
+        set_status('Trigger import failed: ' .. tostring(err), 'error')
+        log.write('sms.me.prefab', log.ERROR, 'trigger import: ' .. tostring(err))
+    end
+end
+
 local function on_place_origin_click()
     local row = require_selection('place at original location')
     if not row then return end
@@ -1648,6 +1826,11 @@ local function on_place_origin_click()
     if not prefab then
         set_status('Load failed: ' .. tostring(lerr), 'error')
         log.write('sms.me.prefab', log.ERROR, 'load failed for ' .. row.path .. ': ' .. tostring(lerr))
+        return
+    end
+    if is_triggers_only(prefab) then
+        undo.record({ groups = {}, zones = {}, drawings = {} })  -- slot for add_triggers
+        run_trigger_import(prefab, nil)
         return
     end
     local rotation_deg = get_rotation_deg()
@@ -1681,6 +1864,7 @@ local function on_place_origin_click()
         set_status(placement_msg, sev)
         log.write('sms.me.prefab', log.INFO, 'placed ' .. row.name .. ' at original')
         run_airbase_apply(prefab)
+        run_trigger_import(prefab, rec)
     else
         set_status('Place failed: ' .. tostring(err), 'error')
         log.write('sms.me.prefab', log.ERROR, 'place at original location failed: ' .. tostring(err))
@@ -1804,6 +1988,11 @@ local function on_undo_click()
         local ok, err = undo.undo()
         if ok then
             set_status('Undid last placement' .. (err and (' (' .. err .. ')') or ''))
+            -- Undo may have removed imported triggers — keep the Triggers
+            -- tab's rows in step (it shows mission.trigrules when built).
+            pcall(function()
+                if W.triggers and W.triggers ~= false then W.triggers:refresh() end
+            end)
         else
             set_status('Undo failed: ' .. tostring(err), 'error')
         end

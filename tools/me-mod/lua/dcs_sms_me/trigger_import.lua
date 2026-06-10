@@ -316,4 +316,31 @@ function M.inject(plan, decisions, env)
     return out
 end
 
+-- Best-effort trigger-panel refresh after mutation. Mirrors
+-- verbs/trigger_verbs.lua's _trigger_panel_refresh: rebind the listbox
+-- via predicates.rulesToList — NEVER Trigger.show(true), whose
+-- fixTriggers purge would delete action-less triggers mid-edit.
+-- (Deliberate duplication, same rationale as trigger_schema: zero
+-- regression risk to the shipped verb surface.)
+function M.panel_refresh()
+    local ok_t, Trigger = pcall(require, 'me_trigrules')
+    if not ok_t or type(Trigger) ~= 'table' then return end
+    local visible = false
+    if type(Trigger.triggersWindow) == 'table'
+            and type(Trigger.triggersWindow.isVisible) == 'function' then
+        local ok_vis, vis = pcall(Trigger.triggersWindow.isVisible, Trigger.triggersWindow)
+        visible = ok_vis and vis == true
+    end
+    if not visible then return end
+    local ok_p, predicates = pcall(require, 'me_predicates')
+    if not ok_p or type(predicates) ~= 'table'
+            or type(predicates.rulesToList) ~= 'function' then return end
+    local box = Trigger.triggersWindow.Box
+    if type(box) ~= 'table' or type(box.triggersList) ~= 'table' then return end
+    local ok_m, Mission = pcall(require, 'me_mission')
+    if not ok_m or type(Mission.mission) ~= 'table' then return end
+    pcall(predicates.rulesToList, box.triggersList,
+          Mission.mission.trigrules or {}, Trigger.cdata)
+end
+
 return M
