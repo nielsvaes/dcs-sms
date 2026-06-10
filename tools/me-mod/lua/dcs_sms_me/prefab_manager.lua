@@ -789,14 +789,135 @@ local function read_fixed_check()
     return v
 end
 
-local function do_save(name, place_at_origin, airbases, folder)
+-- checked_indices are 1-based indices into mission.trigrules. Builds the
+-- to_portable payload with the live-editor env. Returns payload | nil.
+local function build_triggers_payload(checked_indices)
+    local payload
+    pcall(function()
+        local schema_mod   = require('dcs_sms_me.trigger_schema')
+        local export       = require('dcs_sms_me.trigger_export')
+        local trigger_media = require('dcs_sms_me.trigger_media')
+        local Mission      = require('me_mission')
+        local schema = schema_mod.from_editor()
+        if not schema then return end
+        local trigrules = Mission.mission and Mission.mission.trigrules or {}
+        local entries = {}
+        for _, i in ipairs(checked_indices) do
+            if trigrules[i] then entries[#entries + 1] = trigrules[i] end
+        end
+        local dict_get = function(key)
+            local ok_d, d = pcall(require, 'dictionary')
+            if ok_d and type(d.getValueDict) == 'function' then
+                local ok2, v = pcall(d.getValueDict, key)
+                if ok2 then return v end
+            end
+        end
+        local entity_name = function(kind, id)
+            local m = Mission
+            if kind == 'group' and m.group_by_id and m.group_by_id[id] then
+                return m.group_by_id[id].name
+            elseif kind == 'unit' and m.unit_by_id and m.unit_by_id[id] then
+                return m.unit_by_id[id].name
+            elseif kind == 'zone' then
+                local ok_t, TZD = pcall(require, 'Mission.TriggerZoneData')
+                if ok_t and TZD and type(TZD.getTriggerZoneName) == 'function' then
+                    local ok2, n = pcall(TZD.getTriggerZoneName, id)
+                    if ok2 then return n end
+                end
+            end
+        end
+        payload = export.to_portable(entries, {
+            schema = schema,
+            dict_get = dict_get,
+            entity_name = entity_name,
+            media_read = function(key) return trigger_media.read(key) end,
+        })
+        if payload and #payload.warnings > 0 then
+            set_status(payload.warnings[1]
+                .. (#payload.warnings > 1
+                    and (' (+' .. (#payload.warnings - 1) .. ' more — see dcs.log)') or ''),
+                'warning')
+            for _, w in ipairs(payload.warnings) do
+                log.write('sms.me.prefab', log.WARNING, 'trigger export: ' .. w)
+            end
+        end
+    end)
+    return payload
+end
+
+-- Detect triggers related to the current selection (spec §2 Flow B) and
+-- ask via the bundle checklist. Calls k(triggers_payload_or_nil);
+-- payload nil = save without triggers (none detected / none checked /
+-- detection unavailable). Never blocks the save on errors.
+local function with_bundled_triggers(k)
+    local related, env
+    local ok = pcall(function()
+        local schema_mod = require('dcs_sms_me.trigger_schema')
+        local export     = require('dcs_sms_me.trigger_export')
+        local selection  = require('dcs_sms_me.selection')
+        local Mission    = require('me_mission')
+
+        local schema = schema_mod.from_editor()
+        if not schema then return end
+        local snap = selection.snapshot()
+        if not (snap and snap.ok) then return end
+
+        -- Build the selected-id sets. Zones: selection objects carry no
+        -- ids — map selected names → ids via TriggerZoneData.
+        local sel = { group_ids = {}, unit_ids = {}, zone_ids = {} }
+        for _, g in ipairs(snap.groups or {}) do
+            if g.groupId then sel.group_ids[g.groupId] = true end
+            for _, u in ipairs(g.units or {}) do
+                if u.unitId then sel.unit_ids[u.unitId] = true end
+            end
+        end
+        if #(snap.zones or {}) > 0 then
+            local zone_id_by_name = {}
+            local ok_tzd, TZD = pcall(require, 'Mission.TriggerZoneData')
+            if ok_tzd and TZD and type(TZD.getTriggerZoneIds) == 'function' then
+                for _, zid in ipairs(TZD.getTriggerZoneIds() or {}) do
+                    local nm = TZD.getTriggerZoneName(zid)
+                    if nm then zone_id_by_name[nm] = zid end
+                end
+            end
+            for _, z in ipairs(snap.zones) do
+                local zid = z.name and zone_id_by_name[z.name]
+                if zid then sel.zone_ids[zid] = true end
+            end
+        end
+
+        local trigrules = Mission.mission and Mission.mission.trigrules or {}
+        related = export.find_related(trigrules, sel, schema)
+        env = { schema = schema }
+    end)
+    if not ok or not related or #related == 0 then
+        k(nil)
+        return
+    end
+
+    local trigger_dialogs = require('dcs_sms_me.trigger_dialogs')
+    local triggers_tab    = require('dcs_sms_me.triggers_tab')
+    trigger_dialogs.show_bundle_dialog({
+        related = related,
+        summarize = function(t) return triggers_tab.refs_summary(t, env.schema) end,
+        on_confirm = function(checked_indices)
+            if #checked_indices == 0 then k(nil); return end
+            local payload = build_triggers_payload(checked_indices)
+            k(payload)
+        end,
+        on_cancel = function() k(nil) end,
+    })
+end
+
+local function do_save(name, place_at_origin, airbases, folder, triggers_payload)
     folder = folder or ''
-    local ok, path_or_err = prefab_ops.save_selection(name, place_at_origin, airbases, folder)
+    local ok, path_or_err = prefab_ops.save_selection(name, place_at_origin, airbases, folder, triggers_payload)
     if ok then
         local extras = {}
         if folder ~= '' then extras[#extras + 1] = 'in ' .. folder end
         if place_at_origin then extras[#extras + 1] = 'fixed' end
         if airbases and #airbases > 0 then extras[#extras + 1] = #airbases .. ' airbase(s)' end
+        if triggers_payload then extras[#extras + 1] = #triggers_payload.triggers .. ' trigger(s)' end
         local suffix = #extras > 0 and ' [' .. table.concat(extras, ', ') .. ']' or ''
         set_status('Saved ' .. name .. suffix .. ' → ' .. tostring(path_or_err))
         log.write('sms.me.prefab', log.INFO, 'saved ' .. name .. ' in folder "' .. folder .. '"')
@@ -824,7 +945,9 @@ local function on_save_click()
             set_status('Empty name — using timestamped fallback. See dcs.log.', 'warning')
             name = 'prefab-' .. os.date('!%Y%m%dT%H%M%SZ')
             log.write('sms.me.prefab', log.WARNING, 'save with empty name → ' .. name)
-            do_save(name, fixed, airbases, W.selected_folder)
+            with_bundled_triggers(function(tp)
+                do_save(name, fixed, airbases, W.selected_folder, tp)
+            end)
             return
         end
 
@@ -832,7 +955,11 @@ local function on_save_click()
             show_overlay(
                 'Prefab "' .. name .. '" already exists.\n\nOverwrite, rename, or cancel?',
                 {
-                    { label = 'Overwrite', on_click = function() do_save(name, fixed, airbases, W.selected_folder) end },
+                    { label = 'Overwrite', on_click = function()
+                        with_bundled_triggers(function(tp)
+                            do_save(name, fixed, airbases, W.selected_folder, tp)
+                        end)
+                    end },
                     { label = 'Rename',    on_click = function() focus_name_input(); set_status('Type a new name and click Save.') end },
                     { label = 'Cancel',    on_click = function() set_status('Save cancelled.') end },
                 },
@@ -841,7 +968,9 @@ local function on_save_click()
             return
         end
 
-        do_save(name, fixed, airbases, W.selected_folder)
+        with_bundled_triggers(function(tp)
+            do_save(name, fixed, airbases, W.selected_folder, tp)
+        end)
     end)
 end
 
@@ -850,13 +979,20 @@ end
 -- Fixed toggle and any captured airbases) but skips name entry and gates on a
 -- prefab-specific confirm. The menu entry is hidden on error rows, so row is
 -- expected to be a healthy prefab; we still guard defensively.
+--
+-- Trigger bundling: context_menu.lua's "Update Prefab with selection" routes
+-- here (hooks.on_update → on_update_prefab → do_save), so wrapping the Update
+-- button in with_bundled_triggers covers that path too — no separate hook in
+-- context_menu.lua needed.
 local function on_update_prefab(row)
     if not row or row.error then return end
     show_overlay(
         'This will overwrite "' .. tostring(row.name) .. '" with your current selection.',
         {
             { label = 'Update', on_click = function()
-                do_save(row.name, read_fixed_check(), W.pending_airbases, row.folder or '')
+                with_bundled_triggers(function(tp)
+                    do_save(row.name, read_fixed_check(), W.pending_airbases, row.folder or '', tp)
+                end)
             end },
             { label = 'Cancel', on_click = function() set_status('Update cancelled.') end },
         },
