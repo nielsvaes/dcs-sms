@@ -49,16 +49,30 @@ function M.resolve(portable, maps, env)
     if type(portable) ~= 'table' or type(env.schema) ~= 'table' then
         return plan
     end
+    -- Accept either the triggers array itself or the whole to_portable
+    -- bundle ({triggers=..., resources=...}) — passing the bundle is an
+    -- easy caller mistake that would otherwise yield a silently empty plan.
+    if type(portable.triggers) == 'table' and portable[1] == nil then
+        portable = portable.triggers
+    end
     local schema = env.schema
 
-    for t_idx, trig in ipairs(portable) do
+    for t_idx, raw_trig in ipairs(portable) do
+        local trig = type(raw_trig) == 'table' and raw_trig or {}
         local refs, unresolved = {}, 0
         local actions_with_unresolved = {}
 
         local function scan(list_name, entries)
-            for e_idx, entry in ipairs(entries or {}) do
-                local _, _, descr = schema:resolve(entry.predicate)
-                for field, v in pairs(entry.fields or {}) do
+            if type(entries) ~= 'table' then return end
+            for e_idx, entry in ipairs(entries) do
+                -- Prefab files are user-editable (and Community ones are
+                -- untrusted): tolerate malformed entries rather than throw.
+                local fields = type(entry) == 'table' and entry.fields or nil
+                local _, _, descr
+                if type(entry) == 'table' then
+                    _, _, descr = schema:resolve(entry.predicate)
+                end
+                for field, v in pairs(type(fields) == 'table' and fields or {}) do
                     if type(v) == 'table' and v.ref then
                         local resolution, value =
                             resolve_one(v.ref, v.id, v.name, maps, env, descr, field)
@@ -93,13 +107,17 @@ function M.resolve(portable, maps, env)
         }
     end
 
-    -- Flag overlap: values present in both arrays (spec decision 6: warn only).
+    -- Flag overlap: values present in both arrays (spec decision 6: warn
+    -- only). Compare by tostring — ED stores flag fields as number OR
+    -- string depending on entry path, so 100 in one mission and '100' in
+    -- another are the same flag.
     local target_set = {}
-    for _, fv in ipairs(env.target_flags or {}) do target_set[fv] = true end
+    for _, fv in ipairs(env.target_flags or {}) do target_set[tostring(fv)] = true end
     local seen = {}
     for _, fv in ipairs(env.prefab_flags or {}) do
-        if target_set[fv] and not seen[fv] then
-            seen[fv] = true
+        local k = tostring(fv)
+        if target_set[k] and not seen[k] then
+            seen[k] = true
             plan.flag_overlaps[#plan.flag_overlaps + 1] = fv
         end
     end

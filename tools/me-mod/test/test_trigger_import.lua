@@ -104,6 +104,30 @@ check(plan2.triggers[1].would_lose_all_actions == true,
 check(type(portable[1].conditions[1].fields.group) == 'table'
       and portable[1].conditions[1].fields.group.id == 12, 'input unmutated')
 
+-- malformed prefab data must not throw (prefab files are user-editable;
+-- Community ones are untrusted — safe_load checks grammar, not shape)
+local ok_mal, plan_mal = pcall(timport.resolve, {
+    'not a trigger table',
+    { name = 'half-formed', type = 'once',
+      conditions = { 'junk entry', { predicate = 'c_flag_is_true', fields = 'junk' } },
+      actions = { { predicate = 'a_do_script', fields = { text = 'x()' } } } },
+}, {}, { schema = s, find_by_name = function() return nil end,
+         target_flags = {}, prefab_flags = {} })
+check(ok_mal == true and #plan_mal.triggers == 2, 'malformed entries tolerated, no throw')
+check(plan_mal.triggers[2].unresolved == 0, 'junk entries contribute no refs')
+
+-- whole to_portable bundle accepted (not just the bare triggers array)
+local plan_bundle = timport.resolve({ triggers = p2, resources = {} }, {},
+    { schema = s, find_by_name = function() return nil end,
+      target_flags = {}, prefab_flags = {} })
+check(#plan_bundle.triggers == 1, 'to_portable bundle shape accepted')
+
+-- flag overlap is type-insensitive: 100 (number) vs '100' (string) match
+local plan_flags = timport.resolve({}, {}, { schema = s,
+    find_by_name = function() return nil end,
+    target_flags = { 100 }, prefab_flags = { '100' } })
+check(#plan_flags.flag_overlaps == 1, 'numeric vs string flag values overlap')
+
 print(string.format('test_trigger_import: %d passed, %d failed', passed, failed))
 for _, e in ipairs(errors) do print('  FAIL ' .. e) end
 os.exit(failed == 0 and 0 or 1)

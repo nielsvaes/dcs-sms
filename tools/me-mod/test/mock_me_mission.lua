@@ -102,6 +102,15 @@ function M.new_mission()
         Iran        = { color = { 1, 0, 0, 1 } },
         Switzerland = { color = { 0.5, 0.5, 0.5, 1 } },
     }
+    -- Mirror the real ME's Mission.missionCountry: country NAME → the same
+    -- country table that lives under mission.coalition.<side>.country.
+    -- resolve_country in prefab_ops walks this to inject groups.
+    M.missionCountry = {}
+    for _, side in pairs(M.mission.coalition) do
+        for _, c in ipairs(side.country) do
+            M.missionCountry[c.name] = c
+        end
+    end
     M.create_group_objects_calls = 0
     M.fixWaypointForGroup_calls = 0
     M.fixAddPropAircraft_calls = 0

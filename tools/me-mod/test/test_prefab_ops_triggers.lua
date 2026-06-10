@@ -62,6 +62,30 @@ check(type(rec.uid_map) == 'table' and rec.uid_map[34] ~= nil, 'rec.uid_map old�
 check(rec.zones[1] and rec.zones[1].orig_name == 'Ambush Zone'
       and rec.zones[1].runtime_id ~= nil, 'zone record pairs orig_name → runtime_id')
 
+-- A2) a group whose injection FAILS is pruned from the exposed maps —
+-- a trigger rebound through a stale entry would point at a never-created
+-- id. The 'Atlantis' country resolves nowhere in the mock.
+mock.new_mission()
+local prefab_bad = {
+    meta = { name = 'pb', world_anchor = { x = 0, y = 0 } },
+    groups = {
+        { name = 'Good', type = 'vehicle', country = 2, country_name = 'USA', groupId = 50,
+          x = 0, y = 0,
+          units = { { name = 'Good-1', type = 'BTR-80', unitId = 60, x = 0, y = 0, heading = 0 } },
+          route = { points = {} } },
+        { name = 'Bad', type = 'vehicle', country = 999, country_name = 'Atlantis', groupId = 51,
+          x = 0, y = 0,
+          units = { { name = 'Bad-1', type = 'BTR-80', unitId = 61, x = 0, y = 0, heading = 0 } },
+          route = { points = {} } },
+    },
+    statics = {}, drawings = {}, zones = {},
+}
+local rec2 = prefab_ops.place(prefab_bad, { anchor = { x = 0, y = 0 }, rotation = 0 })
+check(rec2 ~= nil and #rec2.errors >= 1, 'partial place returns record with errors')
+check(rec2.gid_map[50] ~= nil and rec2.uid_map[60] ~= nil, 'successful group keeps map entries')
+check(rec2.gid_map[51] == nil and rec2.uid_map[61] == nil,
+      'failed group pruned from gid/uid maps')
+
 -- B) row_from_prefab counts triggers (exposed for scan rows).
 local row = prefab_ops._row_from_prefab('x', 'c:/x.prefab', {
     meta = { name = 'x' }, groups = {}, zones = {}, drawings = {},

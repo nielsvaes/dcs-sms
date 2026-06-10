@@ -1434,6 +1434,15 @@ function M.place(prefab, opts)
         else
             record.errors[#record.errors + 1] = label .. ' ' .. tostring(p.template.name)
                 .. ': ' .. tostring(err)
+            -- Prune this placeable's entries from the exposed id maps —
+            -- a trigger rebound through a map entry whose group never got
+            -- injected would silently point at a nonexistent id.
+            if p.template.groupId then gid_map[p.template.groupId] = nil end
+            if type(p.template.units) == 'table' then
+                for _, u in ipairs(p.template.units) do
+                    if type(u) == 'table' and u.unitId then uid_map[u.unitId] = nil end
+                end
+            end
         end
     end
 
