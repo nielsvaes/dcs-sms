@@ -425,8 +425,11 @@ local function row_from_prefab(name, path, prefab)
         static_count    = s_inline + count(prefab.statics),
         zone_count      = count(prefab.zones),
         drawing_count   = count(prefab.drawings),
+        trigger_count   = count(prefab.triggers),
     }
 end
+
+M._row_from_prefab = row_from_prefab
 
 function M.scan_dir()
     paths.ensure_prefabs()
@@ -1391,6 +1394,12 @@ function M.place(prefab, opts)
             end
         end
     end
+
+    -- Expose the old→new id maps for post-place consumers (trigger
+    -- import rebinds saved trigger references through these — spec
+    -- 2026-06-10-prefab-triggers-design.md §3).
+    record.gid_map = gid_map
+    record.uid_map = uid_map
 
     -- Pass C: remap. Rewrites group.groupId / unit.unitId AND every nested
     -- id reference (linkUnit, helipadId, missionUnitId, task params, ...)
