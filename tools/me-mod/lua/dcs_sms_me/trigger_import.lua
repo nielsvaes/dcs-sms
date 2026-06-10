@@ -126,8 +126,6 @@ function M.resolve(portable, maps, env)
     return plan
 end
 
-local b64 = require('dcs_sms_me.base64')
-
 -- Action fields that round-trip through the dictionary (mirrors ED's
 -- saveTriggers / trigger_verbs' ACTION_DICT_FIELDS). a_do_script's text
 -- is a raw script literal — never dict-keyed.
@@ -141,6 +139,13 @@ local ACTION_DICT_FIELDS = {
 -- Returns entry | nil (dropped), err_or_nil.
 local function build_entry(portable_entry, kind, t_idx, list_name, e_idx,
                            resolved_by_key, decisions, env, media_cache, errors)
+    -- Same tolerance as resolve: prefab files are user-editable and
+    -- Community ones are untrusted — a malformed entry drops with an
+    -- error instead of throwing.
+    if type(portable_entry) ~= 'table' then
+        errors[#errors + 1] = list_name .. '[' .. e_idx .. ']: malformed entry dropped'
+        return nil, nil
+    end
     local schema = env.schema
     local canonical, _, descr, err = schema:resolve(portable_entry.predicate, kind)
     if err then return nil, err end
@@ -156,9 +161,10 @@ local function build_entry(portable_entry, kind, t_idx, list_name, e_idx,
 
     local bindings = (decisions and decisions.bindings) or {}
 
-    for field, v in pairs(portable_entry.fields or {}) do
+    local fields = type(portable_entry.fields) == 'table' and portable_entry.fields or {}
+    for field, v in pairs(fields) do
         if type(v) == 'table' and v.ref then
-            local key = string.format('%d/%s/%d/%s', t_idx, list_name, e_idx, field)
+            local key = ref_key(t_idx, list_name, e_idx, field)
             local planned = resolved_by_key[key]
             local value
             if planned and planned.resolution ~= 'unresolved' then
@@ -168,7 +174,15 @@ local function build_entry(portable_entry, kind, t_idx, list_name, e_idx,
                 if b == 'skip' then
                     return nil, nil  -- user chose to drop this condition/action
                 end
-                value = b
+                -- Entity-ref bindings are always numeric ids; coerce so a
+                -- dialog bug can't write garbage into trigrules (and the
+                -- .miz on next save).
+                value = tonumber(b)
+                if b ~= nil and value == nil then
+                    errors[#errors + 1] = key .. ': non-numeric binding ('
+                        .. tostring(b) .. ') rejected — entry dropped'
+                    return nil, nil
+                end
             end
             if value == nil then
                 -- Unresolved and unbound: drop the entry, report.
@@ -179,30 +193,31 @@ local function build_entry(portable_entry, kind, t_idx, list_name, e_idx,
             end
             entry[field] = value
         elseif type(v) == 'table' and v.res then
+            -- media_cache: ResKey on success, false on failure — a failed
+            -- resource referenced by N actions reports once, not N times.
             local res_key = media_cache[v.res]
             if res_key == nil then
                 local data = env.resources and env.resources[v.res]
                 if type(data) == 'string' then
-                    local bytes = b64.decode(data)
-                    if bytes then
-                        local prefix = (canonical == 'a_do_script_file' and field == 'file')
-                                       and 'advancedFile' or 'Action'
-                        local k2, merr = env.media_add(v.res, data, prefix)
-                        if k2 then
-                            res_key = k2
-                            media_cache[v.res] = k2
-                        else
-                            errors[#errors + 1] = 'media add failed for ' .. v.res
-                                .. ': ' .. tostring(merr)
-                        end
+                    -- data stays base64 through the env contract; the
+                    -- media_add adapter decodes exactly once.
+                    local prefix = (canonical == 'a_do_script_file' and field == 'file')
+                                   and 'advancedFile' or 'Action'
+                    local k2, merr = env.media_add(v.res, data, prefix)
+                    if k2 then
+                        res_key = k2
+                        media_cache[v.res] = k2
                     else
-                        errors[#errors + 1] = 'embedded media corrupt (bad base64): ' .. v.res
+                        errors[#errors + 1] = 'media add failed for ' .. v.res
+                            .. ': ' .. tostring(merr)
+                        media_cache[v.res] = false
                     end
                 else
                     errors[#errors + 1] = 'prefab has no embedded data for media: ' .. v.res
+                    media_cache[v.res] = false
                 end
             end
-            if res_key == nil then
+            if not res_key then
                 return nil, nil  -- media-bearing entry without media: drop it
             end
             entry[field] = res_key
@@ -235,8 +250,10 @@ function M.inject(plan, decisions, env)
 
     for t_idx, pt in ipairs(plan.triggers or {}) do
         repeat
+            -- checked semantics: only an explicit false skips; absent (nil)
+            -- imports — matches the dialog's all-checked-by-default model.
             if checked[t_idx] == false then break end
-            local trig = pt.portable
+            local trig = type(pt.portable) == 'table' and pt.portable or {}
 
             -- Index this trigger's planned resolutions by ref key.
             local resolved_by_key = {}

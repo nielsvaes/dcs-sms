@@ -103,11 +103,58 @@ local function any_selection(snap)
         or (#(snap.drawings or {}) > 0)
 end
 
+-- Capture the current theatre via Mission.TheatreOfWarData.getName(); same
+-- accessor ME core uses when serializing a mission (me_mission.lua ~4505)
+-- and when MissionEditor.lua bootstraps. The require path is
+-- `Mission.TheatreOfWarData`, NOT bare `TheatreOfWarData` — the bare path
+-- silently fails the require (was an actual bug here, fixed 2026-05-03).
+-- pcall-guarded so the standalone test VM (no DCS modules) and any future
+-- API rename degrade to no-theatre rather than failing the save.
+local function current_theatre()
+    local theatre
+    pcall(function()
+        local TheatreOfWarData = require('Mission.TheatreOfWarData')
+        if TheatreOfWarData and type(TheatreOfWarData.getName) == 'function' then
+            theatre = TheatreOfWarData.getName()
+        end
+    end)
+    return theatre
+end
+
+-- Shared guard + write tail for the two save paths. Validates the prefab
+-- NAME as a single filesystem segment (same rule rename_file applies —
+-- rejects separators, '..', DOS device names: a path-bearing name would
+-- otherwise write outside the prefabs tree), validates the folder,
+-- enforces the Community guard, serializes and writes.
+-- Returns true, path | nil, err.
+local function write_prefab_file(name, folder, prefab)
+    local nvalid, nwhy = M._validate_folder_name(name)
+    if not nvalid then return nil, 'invalid name: ' .. nwhy end
+    folder = folder or ''
+    local valid, why = M._validate_folder_path(folder)
+    if not valid then return nil, 'invalid folder: ' .. why end
+    if cfg.is_community_path(folder) then return nil, cfg.MANAGED_MSG end
+
+    local serialized = serializer.serialize(prefab)
+    if type(serialized) ~= 'string' then
+        return nil, 'serialize returned non-string'
+    end
+    paths.ensure_prefab_folder(folder)
+    local path = paths.folder_to_abs(folder) .. name .. '.prefab'
+    local f, oerr = io.open(path, 'w')
+    if not f then return nil, 'open failed: ' .. tostring(oerr) end
+    f:write(serialized)
+    f:close()
+    return true, path
+end
+
 function M.save_selection(name, place_at_origin, airbases, folder, triggers_payload)
     if type(name) ~= 'string' or name == '' then
         return nil, 'name required'
     end
     folder = folder or ''
+    local nvalid, nwhy = M._validate_folder_name(name)
+    if not nvalid then return nil, 'invalid name: ' .. nwhy end
     local valid, why = M._validate_folder_path(folder)
     if not valid then return nil, 'invalid folder: ' .. why end
     if cfg.is_community_path(folder) then return nil, cfg.MANAGED_MSG end
@@ -121,21 +168,7 @@ function M.save_selection(name, place_at_origin, airbases, folder, triggers_payl
     end
 
     local dump = selection_to_dump(snap)
-
-    -- Capture the current theatre via Mission.TheatreOfWarData.getName(); same
-    -- accessor ME core uses when serializing a mission (me_mission.lua ~4505)
-    -- and when MissionEditor.lua bootstraps. The require path is
-    -- `Mission.TheatreOfWarData`, NOT bare `TheatreOfWarData` — the bare path
-    -- silently fails the require (was an actual bug here, fixed 2026-05-03).
-    -- pcall-guarded so the standalone test VM (no DCS modules) and any future
-    -- API rename degrade to no-theatre rather than failing the save.
-    local theatre
-    pcall(function()
-        local TheatreOfWarData = require('Mission.TheatreOfWarData')
-        if TheatreOfWarData and type(TheatreOfWarData.getName) == 'function' then
-            theatre = TheatreOfWarData.getName()
-        end
-    end)
+    local theatre = current_theatre()
 
     local prefab = distill(dump, {
         name             = name,
@@ -160,21 +193,7 @@ function M.save_selection(name, place_at_origin, airbases, folder, triggers_payl
         M.attach_triggers(prefab, triggers_payload)
     end
 
-    local serialized = serializer.serialize(prefab)
-    if type(serialized) ~= 'string' then
-        return nil, 'serialize returned non-string'
-    end
-
-    paths.ensure_prefab_folder(folder)
-    local path = paths.folder_to_abs(folder) .. name .. '.prefab'
-    local f, oerr = io.open(path, 'w')
-    if not f then
-        return nil, 'open failed: ' .. tostring(oerr)
-    end
-    f:write(serialized)
-    f:close()
-
-    return true, path
+    return write_prefab_file(name, folder, prefab)
 end
 
 -- Splice a trigger_export payload into a distilled prefab table, in
@@ -203,19 +222,12 @@ function M.build_trigger_prefab(name, payload)
             or #payload.triggers == 0 then
         return nil, 'no triggers in payload'
     end
-    local theatre
-    pcall(function()
-        local TheatreOfWarData = require('Mission.TheatreOfWarData')
-        if TheatreOfWarData and type(TheatreOfWarData.getName) == 'function' then
-            theatre = TheatreOfWarData.getName()
-        end
-    end)
     local prefab = {
         meta = {
             sms_prefab_version = TRIGGERS_ONLY_PREFAB_VERSION,
             name        = name,
             created_utc = os.date('!%Y-%m-%dT%H:%M:%SZ'),
-            theatre     = theatre,
+            theatre     = current_theatre(),
         },
         groups = {}, statics = {}, zones = {}, drawings = {},
     }
@@ -223,29 +235,13 @@ function M.build_trigger_prefab(name, payload)
     return prefab
 end
 
--- Write a triggers-only prefab to <folder>/<name>.prefab. Same folder
--- validation + Community guard as save_selection. Returns true, path |
--- nil, err.
+-- Write a triggers-only prefab to <folder>/<name>.prefab. Name + folder
+-- validation and the Community guard live in write_prefab_file (shared
+-- with save_selection). Returns true, path | nil, err.
 function M.save_trigger_prefab(name, folder, payload)
-    folder = folder or ''
-    local valid, why = M._validate_folder_path(folder)
-    if not valid then return nil, 'invalid folder: ' .. why end
-    if cfg.is_community_path(folder) then return nil, cfg.MANAGED_MSG end
-
     local prefab, berr = M.build_trigger_prefab(name, payload)
     if not prefab then return nil, berr end
-
-    local serialized = serializer.serialize(prefab)
-    if type(serialized) ~= 'string' then
-        return nil, 'serialize returned non-string'
-    end
-    paths.ensure_prefab_folder(folder)
-    local path = paths.folder_to_abs(folder) .. name .. '.prefab'
-    local f, oerr = io.open(path, 'w')
-    if not f then return nil, 'open failed: ' .. tostring(oerr) end
-    f:write(serialized)
-    f:close()
-    return true, path
+    return write_prefab_file(name, folder, prefab)
 end
 
 -- Move a prefab file from <source_folder>/<name>.prefab to

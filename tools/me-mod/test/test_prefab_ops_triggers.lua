@@ -131,6 +131,22 @@ check(#tbl.triggers == 1, 'triggers present')
 local none, nerr = prefab_ops.build_trigger_prefab('x', { triggers = {} })
 check(none == nil and nerr ~= nil, 'empty triggers payload rejected')
 
+-- D2) save_trigger_prefab guard branches (all fail before any disk write).
+local sv, se = prefab_ops.save_trigger_prefab('a/b', '', payload)
+check(sv == nil and se and se:find('invalid name'), 'path-bearing name rejected')
+sv, se = prefab_ops.save_trigger_prefab('..', '', payload)
+check(sv == nil and se ~= nil, 'dot-dot name rejected')
+sv, se = prefab_ops.save_trigger_prefab('CON', '', payload)
+check(sv == nil and se and se:find('invalid name'), 'DOS device name rejected')
+sv, se = prefab_ops.save_trigger_prefab('ok', 'bad\\folder', payload)
+check(sv == nil and se and se:find('invalid folder'), 'backslash folder rejected')
+sv, se = prefab_ops.save_trigger_prefab('ok', 'Community', payload)
+check(sv == nil and se ~= nil, 'Community folder refused')
+
+-- save_selection now applies the same name guard
+sv, se = prefab_ops.save_selection('../evil', false, nil, '')
+check(sv == nil and se and se:find('invalid name'), 'save_selection name guard')
+
 -- E) serialize → safe_load round-trip survives base64 + ref tables.
 local text = serializer.serialize(tbl)
 check(type(text) == 'string', 'serializes to string')

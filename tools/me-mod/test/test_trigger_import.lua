@@ -255,6 +255,52 @@ local r6 = timport.inject(plan_nr, {}, inject_env)
 check(r6.count == 1 and #trigrules[1].actions == 1 and #r6.errors >= 1,
       'missing resource drops only that action')
 
+-- inject tolerates malformed entries (same untrusted-input rule as resolve)
+local p_malformed = {
+    { name = 'survivor', type = 'once', eventlist = '',
+      conditions = { 42 },
+      actions = { true,
+                  { predicate = 'a_do_script', fields = { text = 'z()' } } } },
+}
+local plan_m = timport.resolve(p_malformed, {}, { schema = s,
+    find_by_name = function() return nil end, target_flags = {}, prefab_flags = {} })
+trigrules = {}; inject_env.trigrules = trigrules
+local ok_inj, r7 = pcall(timport.inject, plan_m, {}, inject_env)
+check(ok_inj == true, 'inject does not throw on malformed entries')
+check(r7.count == 1 and #trigrules[1].rules == 0 and #trigrules[1].actions == 1,
+      'malformed entries dropped, valid action survives')
+
+-- non-numeric garbage binding rejected (entity-ref bindings are numeric ids)
+trigrules = {}; inject_env.trigrules = trigrules
+local r8 = timport.inject(plan_skip, { bindings = {
+    ['1/conditions/1/unit'] = 'skip',
+    ['1/actions/1/group']   = { evil = true },
+} }, inject_env)
+check(r8.count == 0 and #r8.errors >= 1, 'garbage binding rejected, entry dropped')
+
+-- numeric-string binding coerced ('42' from a dialog combo is fine)
+trigrules = {}; inject_env.trigrules = trigrules
+local r9 = timport.inject(plan_skip, { bindings = {
+    ['1/conditions/1/unit'] = 'skip',
+    ['1/actions/1/group']   = '42',
+} }, inject_env)
+check(r9.count == 1 and trigrules[1].actions[1].group == 42,
+      'numeric-string binding coerced to number')
+
+-- failed media reports ONCE even when referenced by multiple actions
+local p_nores2 = {
+    { name = 'nores2', type = 'once', eventlist = '', conditions = {},
+      actions = { { predicate = 'a_out_sound', fields = { file = { res = 'gone.ogg' } } },
+                  { predicate = 'a_out_picture', fields = { file = { res = 'gone.ogg' }, seconds = 5 } },
+                  { predicate = 'a_do_script', fields = { text = 'y()' } } } },
+}
+local plan_nr2 = timport.resolve(p_nores2, {}, { schema = s,
+    find_by_name = function() return nil end, target_flags = {}, prefab_flags = {} })
+trigrules = {}; inject_env.trigrules = trigrules
+local r10 = timport.inject(plan_nr2, {}, inject_env)
+check(r10.count == 1 and #trigrules[1].actions == 1 and #r10.errors == 1,
+      'failed media cached: one error for two referencing actions')
+
 print(string.format('test_trigger_import: %d passed, %d failed', passed, failed))
 for _, e in ipairs(errors) do print('  FAIL ' .. e) end
 os.exit(failed == 0 and 0 or 1)
