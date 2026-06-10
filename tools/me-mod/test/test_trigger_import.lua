@@ -128,6 +128,133 @@ local plan_flags = timport.resolve({}, {}, { schema = s,
     target_flags = { 100 }, prefab_flags = { '100' } })
 check(#plan_flags.flag_overlaps == 1, 'numeric vs string flag values overlap')
 
+-- ---------------- inject (Task 7) ----------------
+local function find_descr(list, name)
+    for _, d in pairs(list) do if d.name == name then return d end end
+end
+
+local trigrules = {}
+local media_calls = {}
+local dict_calls = {}
+local inject_env = {
+    schema = s,
+    create_trigger = descr.createTrigger,
+    create_rule    = descr.createRule,
+    create_action  = descr.createAction,
+    fix_dict = function(entry, field, literal, label)
+        dict_calls[#dict_calls + 1] = { field = field, literal = literal, label = label }
+        entry[field] = 'DictKey_' .. label .. '_900'
+        entry['KeyDict_' .. field] = entry[field]
+    end,
+    media_add = function(short, data, prefix)
+        media_calls[#media_calls + 1] = { short = short, prefix = prefix }
+        return 'ResKey_' .. prefix .. '_55'
+    end,
+    resources = { ['brief.png'] = 'UE5HQllURVM=' },  -- base64('PNGBYTES')
+    trigrules = trigrules,
+    unique_name = function(base) return base .. '-2' end,
+}
+
+local inj_portable = {
+    { name = 'activate HornetCap', type = 'once', eventlist = '',
+      conditions = {
+        { predicate = 'c_all_of_group_in_zone',
+          fields = { group = { ref = 'group', id = 12, name = 'Enemy Convoy' },
+                     zone  = { ref = 'zone',  id = 99, name = 'Ambush Zone' } } } },
+      actions = {
+        { predicate = 'a_activate_group',
+          fields = { group = { ref = 'group', id = 7, name = 'HornetCap' } } },
+        { predicate = 'a_out_text_delay',
+          fields = { text = 'Station established', seconds = 10 } },
+        { predicate = 'a_out_picture',
+          fields = { file = { res = 'brief.png' }, seconds = 10 } },
+        { predicate = 'a_do_script',
+          fields = { text = 'env.info("hi")' } },
+      } },
+}
+local inj_plan = timport.resolve(inj_portable, {
+    gid_map = { [12] = 200 }, zone_by_name = { ['Ambush Zone'] = 31 },
+}, { schema = s,
+     find_by_name = function(kind, name)
+         if kind == 'group' and name == 'HornetCap' then return 77 end
+     end,
+     target_flags = {}, prefab_flags = {} })
+
+local result = timport.inject(inj_plan, {}, inject_env)
+check(result.count == 1 and #trigrules == 1, 'one trigger injected')
+local e = trigrules[1]
+check(e.comment == 'activate HornetCap-2', 'name went through unique_name')
+check(type(e.predicate) == 'table' and e.predicate.name == 'triggerOnce',
+      'trigger predicate stays a descriptor table')
+check(e.rules[1].group == 200 and e.rules[1].zone == 31, 'condition refs rebound')
+check(e.actions[1].group == 77, 'action ref rebound via name')
+check(dict_calls[1] and dict_calls[1].field == 'text'
+      and dict_calls[1].label == 'ActionText'
+      and e.actions[2].text == 'DictKey_ActionText_900', 'dict text re-keyed')
+check(media_calls[1] and media_calls[1].short == 'brief.png'
+      and media_calls[1].prefix == 'Action'
+      and e.actions[3].file == 'ResKey_Action_55', 'media re-added and re-keyed')
+check(e.actions[4].text == 'env.info("hi")', 'do-script text NOT dict-keyed')
+check(type(e.actions[1].predicate) == 'table', 'action predicate stays descriptor table')
+
+-- unchecked trigger skipped
+trigrules = {}; inject_env.trigrules = trigrules
+local r2 = timport.inject(inj_plan, { checked = { [1] = false } }, inject_env)
+check(r2.count == 0 and #trigrules == 0, 'unchecked trigger not injected')
+
+-- binding 'skip' drops the condition; binding id rebinds; zero-actions guard
+local p_skip = {
+    { name = 'needs map', type = 'once', eventlist = '',
+      conditions = { { predicate = 'c_unit_alive',
+                       fields = { unit = { ref = 'unit', id = 500, name = 'Gone' } } } },
+      actions = { { predicate = 'a_activate_group',
+                    fields = { group = { ref = 'group', id = 1, name = 'AlsoGone' } } } } },
+}
+local plan_skip = timport.resolve(p_skip, {}, { schema = s,
+    find_by_name = function() return nil end, target_flags = {}, prefab_flags = {} })
+
+trigrules = {}; inject_env.trigrules = trigrules
+local r3 = timport.inject(plan_skip, { bindings = {
+    ['1/conditions/1/unit'] = 'skip',
+    ['1/actions/1/group']   = 42,
+} }, inject_env)
+check(r3.count == 1 and #trigrules[1].rules == 0 and trigrules[1].actions[1].group == 42,
+      'skip drops condition, binding rebinds action')
+
+trigrules = {}; inject_env.trigrules = trigrules
+local r4 = timport.inject(plan_skip, { bindings = {
+    ['1/conditions/1/unit'] = 'skip',
+    ['1/actions/1/group']   = 'skip',
+} }, inject_env)
+check(r4.count == 0 and #r4.skipped == 1, 'zero-actions trigger skipped with reason')
+
+-- unknown predicate → trigger skipped, others continue
+local p_unknown = {
+    { name = 'bad', type = 'once', eventlist = '', conditions = {},
+      actions = { { predicate = 'a_not_a_real_action', fields = {} } } },
+    { name = 'good', type = 'start', eventlist = '', conditions = {},
+      actions = { { predicate = 'a_do_script', fields = { text = 'x()' } } } },
+}
+local plan_u = timport.resolve(p_unknown, {}, { schema = s,
+    find_by_name = function() return nil end, target_flags = {}, prefab_flags = {} })
+trigrules = {}; inject_env.trigrules = trigrules
+local r5 = timport.inject(plan_u, {}, inject_env)
+check(r5.count == 1 and #r5.skipped == 1 and trigrules[1].comment:find('good'),
+      'unknown predicate skips that trigger only')
+
+-- missing embedded resource → action dropped, error recorded
+local p_nores = {
+    { name = 'nores', type = 'once', eventlist = '', conditions = {},
+      actions = { { predicate = 'a_out_sound', fields = { file = { res = 'gone.ogg' } } },
+                  { predicate = 'a_do_script', fields = { text = 'y()' } } } },
+}
+local plan_nr = timport.resolve(p_nores, {}, { schema = s,
+    find_by_name = function() return nil end, target_flags = {}, prefab_flags = {} })
+trigrules = {}; inject_env.trigrules = trigrules
+local r6 = timport.inject(plan_nr, {}, inject_env)
+check(r6.count == 1 and #trigrules[1].actions == 1 and #r6.errors >= 1,
+      'missing resource drops only that action')
+
 print(string.format('test_trigger_import: %d passed, %d failed', passed, failed))
 for _, e in ipairs(errors) do print('  FAIL ' .. e) end
 os.exit(failed == 0 and 0 or 1)
