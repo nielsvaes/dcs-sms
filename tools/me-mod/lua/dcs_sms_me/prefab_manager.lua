@@ -1904,6 +1904,12 @@ local function relayout(w, h)
     if W.community and W.community ~= false and W.community.relayout then
         pcall(function() W.community:relayout(w, h) end)
     end
+
+    -- Same deal for the Triggers tab's panel (triggers_tab self-offsets its
+    -- TOP/FOOTER bands from the full content size, like community_tab).
+    if W.triggers and W.triggers ~= false and W.triggers.relayout then
+        pcall(function() W.triggers:relayout(w, h) end)
+    end
 end
 
 -- Folder operation handlers (Task 17). Confirmations use show_overlay;
@@ -3014,6 +3020,36 @@ function M.show()
                 return true
             end
 
+            -- Lazy-build the Triggers tab panel (mirrors ensure_community).
+            -- Returns truthy when the panel is usable; false caches a failed
+            -- build for the session so we don't retry every click.
+            local function ensure_triggers()
+                if W.triggers ~= nil then return W.triggers end
+                local ok_build, panel = pcall(function()
+                    local triggers_tab = require('dcs_sms_me.triggers_tab')
+                    return triggers_tab.build({
+                        raw = W.window,
+                        set_status = set_status,
+                        refresh_library = refresh_list,
+                    })
+                end)
+                W.triggers = (ok_build and panel) or false
+                if W.triggers == false then
+                    log.write('sms.me.prefab', log.ERROR,
+                        'triggers tab build failed: ' .. tostring(panel))
+                    return W.triggers
+                end
+                -- Lay the freshly-built panel out to the current content size
+                -- (triggers_tab.build self-laid-out at its default size only).
+                pcall(function()
+                    if W.triggers.relayout and W.window and W.window.getSize then
+                        local ww, wh = W.window:getSize()
+                        if ww and wh then W.triggers:relayout(ww, wh) end
+                    end
+                end)
+                return W.triggers
+            end
+
             -- Reflect the active tab via a skin swap (mirrors Mass Edit's
             -- scope tabs): the active tab gets the gold 'sms_tab' skin, the
             -- inactive one 'sms_tab_off'. The recursion guard stops the
@@ -3031,29 +3067,45 @@ function M.show()
             end
 
             local function update_tab_buttons()
-                set_tab_state(W.tab_my_btn,       W.active_tab == 'my')
+                set_tab_state(W.tab_my_btn,        W.active_tab == 'my')
                 set_tab_state(W.tab_community_btn, W.active_tab == 'community')
+                set_tab_state(W.tab_triggers_btn,  W.active_tab == 'triggers')
             end
 
-            -- Switch tabs. 'my' always works; 'community' falls back to 'my'
-            -- if the panel couldn't be built.
+            -- Switch tabs. 'my' always works; 'community' and 'triggers'
+            -- fall back to 'my' if their panel couldn't be built.
             local function select_tab(which)
                 if which == 'community' then
                     if not ensure_community() then which = 'my' end
+                elseif which == 'triggers' then
+                    if not ensure_triggers() then which = 'my' end
                 end
                 W.active_tab = which
                 if which == 'community' then
                     set_my_prefabs_visible(false)
+                    pcall(function()
+                        if W.triggers and W.triggers ~= false then W.triggers:hide() end
+                    end)
                     pcall(function() W.community:show() end)
                     -- First switch kicks the once-per-session auto-sync.
                     if not W.community_first_shown then
                         W.community_first_shown = true
                         pcall(function() W.community:on_first_show() end)
                     end
+                elseif which == 'triggers' then
+                    set_my_prefabs_visible(false)
+                    if W.community and W.community ~= false then
+                        pcall(function() W.community:hide() end)
+                    end
+                    -- show() re-reads the trigger list from mission.trigrules.
+                    pcall(function() W.triggers:show() end)
                 else
                     if W.community and W.community ~= false then
                         pcall(function() W.community:hide() end)
                     end
+                    pcall(function()
+                        if W.triggers and W.triggers ~= false then W.triggers:hide() end
+                    end)
                     set_my_prefabs_visible(true)
                 end
                 update_tab_buttons()
@@ -3082,13 +3134,15 @@ function M.show()
                 W.window:insertWidget(btn)
                 return btn
             end
-            W.tab_my_btn       = make_tab('My Prefabs', 'my')
+            W.tab_my_btn        = make_tab('My Prefabs', 'my')
             W.tab_community_btn = make_tab('Community', 'community')
+            W.tab_triggers_btn  = make_tab('Triggers', 'triggers')
 
-            -- Position the two tabs at the very top, left-aligned.
+            -- Position the three tabs at the very top, left-aligned.
             local tab_y, tab_h, tab_w, tab_gap = 4, 24, 110, 4
             pcall(function() W.tab_my_btn:setBounds(10, tab_y, tab_w, tab_h) end)
             pcall(function() W.tab_community_btn:setBounds(10 + tab_w + tab_gap, tab_y, tab_w, tab_h) end)
+            pcall(function() W.tab_triggers_btn:setBounds(10 + 2 * (tab_w + tab_gap), tab_y, tab_w, tab_h) end)
 
             -- Default to the My Prefabs tab.
             W.active_tab = 'my'
