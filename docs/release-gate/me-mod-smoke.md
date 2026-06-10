@@ -476,3 +476,31 @@ For each form above: run the apply, hit Ctrl+Z (or whatever the ME's undo key is
 - [ ] Tag chips render without overlap/clipping when there are many or long tags; after a Refresh, old chips don't leave ghosts.
 - [ ] The "Imported ✓" state shows as disabled/non-actionable after importing (and re-importing the same prefab reports "Already imported." rather than duplicating).
 - [ ] Community panel looks correct at the default window size AND after resizing the window (its layout is static/non-resize-aware — confirm acceptable).
+
+## Prefab triggers (me-mod ≥ 0.22.0)
+
+Setup: open a mission with ≥10 triggers incl. at least one zone-referencing
+condition, one out-picture/out-sound action, one do-script.
+
+- [ ] Triggers tab lists every trigger with correct C/A counts; filter works;
+      shift-click range-fills checkboxes; detail pane shows resolved
+      conditions/actions + portability section.
+- [ ] Save 3 checked triggers → file appears in the library (T column = 3);
+      file under Saved Games/dcs-sms/prefabs/<folder> parses (open in editor).
+- [ ] Save a normal prefab whose selection is referenced by a trigger →
+      bundle checklist appears pre-checked; saving with it stores triggers +
+      embedded media in the .prefab.
+- [ ] New mission → place that prefab → import dialog appears; bundled
+      group/zone refs auto-bound (rename via Name/Prefix forms first to
+      prove id-map rebinding survives renames); import → triggers appear at
+      the end of the trigger list; out-picture works (media landed).
+- [ ] Place a triggers-only prefab → no map click required; dialog appears
+      immediately.
+- [ ] A trigger referencing a group NOT in the prefab: manual-map dropdown
+      binds it to an existing group; 'skip' on a sole action auto-unchecks
+      the trigger with a reason.
+- [ ] Flag overlap warning shows when target mission reuses a flag.
+- [ ] Ctrl+Z after import removes placed entities AND imported triggers;
+      trigger panel refreshes if open.
+- [ ] Save the mission, reopen the .miz → imported triggers + media survived
+      ED's save round-trip.
