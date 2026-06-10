@@ -124,9 +124,9 @@ do
           captured.content and captured.content:find('"Muwaffaq Salti"', 1, true) ~= nil)
     check('saved content has BLUE coalition inside airbases',
           captured.content and captured.content:find('"BLUE"', 1, true) ~= nil)
-    check('saved content version bumped to 0.3.0',
-          captured.content and captured.content:find('"0%.3%.0"', 1) ~= nil,
-          'version not 0.3.0')
+    check('saved content version bumped to 0.4.0',
+          captured.content and captured.content:find('"0%.4%.0"', 1) ~= nil,
+          'version not 0.4.0')
 end
 
 -- Case: place_at_origin omitted (default false) does not write the field.

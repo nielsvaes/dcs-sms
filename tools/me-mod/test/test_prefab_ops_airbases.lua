@@ -84,7 +84,7 @@ do
     check('captured content loads', fn ~= nil, tostring(err))
     local prefab = fn and fn()
     check('prefab table returned', type(prefab) == 'table' and prefab.meta ~= nil)
-    check('prefab.meta.sms_prefab_version == 0.3.0', prefab.meta.sms_prefab_version == '0.3.0',
+    check('prefab.meta.sms_prefab_version == 0.4.0', prefab.meta.sms_prefab_version == '0.4.0',
           'got ' .. tostring(prefab and prefab.meta and prefab.meta.sms_prefab_version))
     check('prefab.meta.airbases has 2 entries',
           type(prefab.meta.airbases) == 'table' and #prefab.meta.airbases == 2,
