@@ -31,6 +31,8 @@ package.path = '../lua/dcs_sms_me/?.lua;../lua/?.lua;' .. package.path
 
 local mock = require('mock_me_mission')
 local prefab_ops = require('dcs_sms_me.prefab_ops')
+local serializer = require('dcs_sms_me.serializer')
+local safe_load  = require('dcs_sms_me.prefab_safe_load')
 
 local passed, failed, errors = 0, 0, {}
 local function check(cond, name)
@@ -95,6 +97,48 @@ check(row.trigger_count == 2, 'row trigger_count')
 local row0 = prefab_ops._row_from_prefab('y', 'c:/y.prefab',
     { meta = { name = 'y' }, groups = {} })
 check(row0.trigger_count == 0, 'row trigger_count default 0')
+
+-- C) attach_triggers splices a payload into a distilled prefab.
+local prefab_t = { meta = { name = 'p' }, groups = {}, zones = {}, drawings = {} }
+local payload = {
+    triggers   = { { name = 'a', type = 'once', eventlist = '',
+                     conditions = {}, actions = {
+                         { predicate = 'a_do_script', fields = { text = 'x()' } } } } },
+    resources  = { { name = 'brief.png', data = 'UE5HQllURVM=' } },
+    flags_used = { 100 },
+}
+prefab_ops.attach_triggers(prefab_t, payload)
+check(#prefab_t.triggers == 1, 'attach_triggers sets triggers')
+check(prefab_t.meta.resources[1].name == 'brief.png', 'attach_triggers sets meta.resources')
+check(prefab_t.meta.flags_used[1] == 100, 'attach_triggers sets meta.flags_used')
+
+-- empty payload pieces are NOT attached (no key noise in old-style prefabs)
+local prefab_e = { meta = { name = 'q' }, groups = {} }
+prefab_ops.attach_triggers(prefab_e, { triggers = {}, resources = {}, flags_used = {} })
+check(prefab_e.triggers == nil and prefab_e.meta.resources == nil
+      and prefab_e.meta.flags_used == nil, 'empty payload attaches nothing')
+
+-- D) triggers-only prefab table builder (pure; file write tested via smoke)
+local tbl, berr = prefab_ops.build_trigger_prefab('My Triggers', payload)
+check(tbl ~= nil and berr == nil, 'build_trigger_prefab ok')
+check(tbl.meta.name == 'My Triggers' and tbl.meta.world_anchor == nil,
+      'triggers-only meta has no world_anchor')
+check(tbl.meta.sms_prefab_version == '0.4.0', 'triggers-only stamps 0.4.0')
+check(#tbl.groups == 0 and #tbl.zones == 0 and #tbl.drawings == 0 and #tbl.statics == 0,
+      'entity arrays empty')
+check(#tbl.triggers == 1, 'triggers present')
+
+local none, nerr = prefab_ops.build_trigger_prefab('x', { triggers = {} })
+check(none == nil and nerr ~= nil, 'empty triggers payload rejected')
+
+-- E) serialize → safe_load round-trip survives base64 + ref tables.
+local text = serializer.serialize(tbl)
+check(type(text) == 'string', 'serializes to string')
+local parsed = safe_load.load_string(text)
+check(type(parsed) == 'table' and parsed.triggers
+      and parsed.triggers[1].actions[1].fields.text == 'x()'
+      and parsed.meta.resources[1].data == 'UE5HQllURVM=',
+      'safe_load round-trip preserves triggers + base64')
 
 print(string.format('test_prefab_ops_triggers: %d passed, %d failed', passed, failed))
 for _, e in ipairs(errors) do print('  FAIL ' .. e) end

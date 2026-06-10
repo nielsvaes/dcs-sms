@@ -15,6 +15,12 @@ local warehouse_ops  = require('dcs_sms_me.warehouse_ops')
 local ship_warehouse = require('dcs_sms_me.ship_warehouse')
 local cfg            = require('dcs_sms_me.community_config')
 
+-- Prefab data-format version stamped on triggers-only prefabs (which
+-- never pass through distill). MUST match PREFAB_VERSION in
+-- prefab_distill.lua (both copies) — bumped together in the same
+-- change-set per AGENTS.md §4.
+local TRIGGERS_ONLY_PREFAB_VERSION = '0.4.0'
+
 local M = {}
 
 local function prefab_path(name)
@@ -97,7 +103,7 @@ local function any_selection(snap)
         or (#(snap.drawings or {}) > 0)
 end
 
-function M.save_selection(name, place_at_origin, airbases, folder)
+function M.save_selection(name, place_at_origin, airbases, folder, triggers_payload)
     if type(name) ~= 'string' or name == '' then
         return nil, 'name required'
     end
@@ -148,6 +154,12 @@ function M.save_selection(name, place_at_origin, airbases, folder)
     -- bloating the file.
     pcall(ship_warehouse.attach_to_prefab, prefab)
 
+    -- Bundled triggers (spec §2 Flow B): payload prepared by the caller
+    -- (prefab_manager save flow) from the user-confirmed checklist.
+    if triggers_payload then
+        M.attach_triggers(prefab, triggers_payload)
+    end
+
     local serialized = serializer.serialize(prefab)
     if type(serialized) ~= 'string' then
         return nil, 'serialize returned non-string'
@@ -162,6 +174,77 @@ function M.save_selection(name, place_at_origin, airbases, folder)
     f:write(serialized)
     f:close()
 
+    return true, path
+end
+
+-- Splice a trigger_export payload into a distilled prefab table, in
+-- place. Empty pieces are NOT attached so old-style prefabs stay
+-- byte-stable on resave. payload = { triggers, resources, flags_used }.
+function M.attach_triggers(prefab, payload)
+    if type(prefab) ~= 'table' or type(payload) ~= 'table' then return end
+    if type(payload.triggers) == 'table' and #payload.triggers > 0 then
+        prefab.triggers = payload.triggers
+        prefab.meta = prefab.meta or {}
+        if type(payload.resources) == 'table' and #payload.resources > 0 then
+            prefab.meta.resources = payload.resources
+        end
+        if type(payload.flags_used) == 'table' and #payload.flags_used > 0 then
+            prefab.meta.flags_used = payload.flags_used
+        end
+    end
+end
+
+-- Build a triggers-only prefab table (spec §2 Flow A). Does NOT call
+-- distill: there is nothing positionable, so no world_anchor and no
+-- centroid math. Returns table | nil, err.
+function M.build_trigger_prefab(name, payload)
+    if type(name) ~= 'string' or name == '' then return nil, 'name required' end
+    if type(payload) ~= 'table' or type(payload.triggers) ~= 'table'
+            or #payload.triggers == 0 then
+        return nil, 'no triggers in payload'
+    end
+    local theatre
+    pcall(function()
+        local TheatreOfWarData = require('Mission.TheatreOfWarData')
+        if TheatreOfWarData and type(TheatreOfWarData.getName) == 'function' then
+            theatre = TheatreOfWarData.getName()
+        end
+    end)
+    local prefab = {
+        meta = {
+            sms_prefab_version = TRIGGERS_ONLY_PREFAB_VERSION,
+            name        = name,
+            created_utc = os.date('!%Y-%m-%dT%H:%M:%SZ'),
+            theatre     = theatre,
+        },
+        groups = {}, statics = {}, zones = {}, drawings = {},
+    }
+    M.attach_triggers(prefab, payload)
+    return prefab
+end
+
+-- Write a triggers-only prefab to <folder>/<name>.prefab. Same folder
+-- validation + Community guard as save_selection. Returns true, path |
+-- nil, err.
+function M.save_trigger_prefab(name, folder, payload)
+    folder = folder or ''
+    local valid, why = M._validate_folder_path(folder)
+    if not valid then return nil, 'invalid folder: ' .. why end
+    if cfg.is_community_path(folder) then return nil, cfg.MANAGED_MSG end
+
+    local prefab, berr = M.build_trigger_prefab(name, payload)
+    if not prefab then return nil, berr end
+
+    local serialized = serializer.serialize(prefab)
+    if type(serialized) ~= 'string' then
+        return nil, 'serialize returned non-string'
+    end
+    paths.ensure_prefab_folder(folder)
+    local path = paths.folder_to_abs(folder) .. name .. '.prefab'
+    local f, oerr = io.open(path, 'w')
+    if not f then return nil, 'open failed: ' .. tostring(oerr) end
+    f:write(serialized)
+    f:close()
     return true, path
 end
 
