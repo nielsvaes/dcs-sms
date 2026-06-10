@@ -25,6 +25,10 @@ local function normalize_entry(raw)
         zones       = as_number(raw.zones),
         drawings    = as_number(raw.drawings),
         airbases    = as_number(raw.airbases),
+        -- Trigger count (manifest schema addition for prefab format 0.4.0;
+        -- powers the community detail pane's script disclosure). Older
+        -- manifests simply yield 0 here.
+        triggers    = as_number(raw.triggers),
         place_at_origin = raw.place_at_origin == true,
         path        = as_string(raw.path),
     }
