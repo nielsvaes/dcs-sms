@@ -46,7 +46,9 @@ function M.refs_summary(t, schema)
     walk_badges(t, schema, function(b)
         if not seen[b] then seen[b] = true; badges[#badges + 1] = b end
     end)
-    if #badges == 0 then return '\xE2\x9C\x93' end  -- ✓
+    -- \226\156\147 = ✓ (U+2713). DECIMAL escapes only: Lua 5.1 has no \xNN
+    -- hex escapes (5.2+); DCS's lexer renders them as literal text.
+    if #badges == 0 then return '\226\156\147' end
     table.sort(badges)
     return table.concat(badges, ' ')
 end
@@ -122,7 +124,7 @@ function M.detail_text(t, schema, env)
     set_to_line('media: ', media)
     set_to_line('flags: ', flags)
     if not (next(refs) or next(media)) then
-        lines[#lines + 1] = '  \xE2\x9C\x93 no entity refs, no media'
+        lines[#lines + 1] = '  \226\156\147 no entity refs, no media'
     end
     return table.concat(lines, '\n')
 end
