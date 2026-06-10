@@ -63,6 +63,18 @@ check(k2 == nil and e2 ~= nil, 'add empty name → nil, err')
 local k3, e3 = media.add('a.png', nil, { env = add_env })
 check(k3 == nil and e3 ~= nil, 'add nil bytes → nil, err')
 
+-- path-bearing short_name is sanitized to its basename: community
+-- prefabs are untrusted, so '..\..\evil.lua' must not escape tmp_dir.
+local k5, e5 = media.add('..\\..\\Scripts\\Hooks\\evil.lua', 'X', { env = add_env })
+check(k5 ~= nil and e5 == nil and added[#added].short == 'evil.lua'
+      and added[#added].src == 'C:/tmp/sms/evil.lua',
+      'add strips directories from short_name')
+local k6, e6 = media.add('..', 'X', { env = add_env })
+check(k6 == nil and e6 ~= nil, 'add bare .. rejected')
+local k7, e7 = media.add('sounds/alert.ogg', 'X', { env = add_env })
+check(k7 ~= nil and added[#added].short == 'alert.ogg',
+      'add strips forward-slash paths too')
+
 -- write failure propagates as nil, err (no throw)
 local k4, e4 = media.add('b.png', 'X', { env = {
     dictionary = add_env.dictionary, tmp_dir = 'C:/tmp/sms/',

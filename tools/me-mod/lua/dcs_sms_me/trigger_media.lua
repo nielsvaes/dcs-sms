@@ -11,8 +11,8 @@
 --   * dictionary.setValueToResource(key, shortName, absSrcPath, 'DEFAULT')
 --     copies the file into the open mission and registers it. It dedupes
 --     by SHORT FILENAME: if the basename already exists in the dict the
---     existing file wins and the key simply maps to it (we accept that —
---     log at INFO, no byte-compare in v1).
+--     existing file wins and the key simply maps to it (accepted as-is;
+--     no byte-compare in v1 — callers may report it if they care).
 --   * Saving the mission persists mapResource + files into the .miz.
 --
 -- env is injectable for tests; production defaults resolve lazily so
@@ -79,6 +79,14 @@ function M.add(short_name, bytes, opts)
     if type(short_name) ~= 'string' or short_name == '' then
         return nil, 'short_name required'
     end
+    -- Sanitize to a bare basename. short_name can originate from a
+    -- downloaded community prefab (untrusted): a path-bearing name like
+    -- '..\..\Scripts\Hooks\evil.lua' would otherwise turn the staging
+    -- write below into an arbitrary-file-write primitive.
+    short_name = short_name:match('[^\\/]+$') or ''
+    if short_name == '' or short_name == '.' or short_name == '..' then
+        return nil, 'invalid short_name'
+    end
     if type(bytes) ~= 'string' then
         return nil, 'bytes required'
     end
@@ -106,7 +114,8 @@ function M.add(short_name, bytes, opts)
     end)
     env.remove_file(staging)
     if not ok or type(key) ~= 'string' then
-        return nil, 'setValueToResource failed: ' .. tostring(err)
+        return nil, 'setValueToResource failed: '
+            .. tostring(err or ('non-string key ' .. tostring(key)))
     end
     return key
 end
