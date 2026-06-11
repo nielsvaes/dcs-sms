@@ -5,6 +5,21 @@ local M = {}
 local function as_number(v) return tonumber(v) or 0 end
 local function as_string(v) return (type(v) == 'string') and v or '' end
 
+local function as_required_modules(raw)
+    local out = {}
+    if type(raw) == 'table' then
+        for _, m in ipairs(raw) do
+            if type(m) == 'table' then
+                local id = as_string(m.id)
+                if id ~= '' then
+                    out[#out + 1] = { id = id, display_name = as_string(m.display_name), count = as_number(m.count) }
+                end
+            end
+        end
+    end
+    return out
+end
+
 local function normalize_entry(raw)
     local tags = {}
     if type(raw.tags) == 'table' then
@@ -29,6 +44,9 @@ local function normalize_entry(raw)
         -- powers the community detail pane's script disclosure). Older
         -- manifests simply yield 0 here.
         triggers    = as_number(raw.triggers),
+        -- Required community mods (manifest field; the catalog generator emits
+        -- it from each prefab's meta.required_modules). Older manifests yield {}.
+        required_modules = as_required_modules(raw.required_modules),
         place_at_origin = raw.place_at_origin == true,
         path        = as_string(raw.path),
     }

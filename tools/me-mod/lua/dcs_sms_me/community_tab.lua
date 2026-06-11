@@ -254,6 +254,14 @@ function M.build(parent, deps)
             lines[#lines + 1] = '\226\154\145 includes ' .. e.triggers
                 .. ' trigger(s) — may contain Lua that runs when the mission runs'
         end
+        if type(e.required_modules) == 'table' and #e.required_modules > 0 then
+            local names = {}
+            for _, m in ipairs(e.required_modules) do
+                names[#names + 1] = (m.display_name ~= '' and m.display_name) or m.id
+            end
+            lines[#lines + 1] = '\226\154\145 requires mods: ' .. table.concat(names, ', ')
+                .. ' — objects from these will not load without the mod installed'
+        end
         if e.description and e.description ~= '' then
             lines[#lines + 1] = ''
             lines[#lines + 1] = e.description

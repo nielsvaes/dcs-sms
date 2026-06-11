@@ -9,6 +9,7 @@ local decoded = {
     prefabs = {
         { name='SA-10 ring', author='Niels', date='2026-06-01', theatre='Caucasus',
           description='S-300', tags={'sam','ewr'}, likes=42, groups=7, zones=1,
+          required_modules = { { id='UH-60L', display_name='UH-60L Black Hawk', count=3 } },
           sha256='aa', path='prefabs/sa10.prefab' },
         { name='CAP pair', author='Wedge', date='2026-06-05', theatre='Syria',
           tags={'cap'}, likes=18, groups=1, sha256='bb', path='prefabs/cap.prefab' },
@@ -30,6 +31,13 @@ end)())
 check('defaults theatre', m.entries[3].theatre == '' or m.entries[3].theatre == '?', m.entries[3].theatre)
 check('tags always table', type(m.entries[3].tags) == 'table' and m.entries[3].tags[1] == 'sam')
 check('numeric counts', m.entries[1].groups == 7 and m.entries[3].groups == 0)
+check('required_modules parsed', type(m.entries[1].required_modules) == 'table'
+      and #m.entries[1].required_modules == 1
+      and m.entries[1].required_modules[1].id == 'UH-60L'
+      and m.entries[1].required_modules[1].display_name == 'UH-60L Black Hawk'
+      and m.entries[1].required_modules[1].count == 3)
+check('required_modules defaults to empty table', type(m.entries[2].required_modules) == 'table'
+      and #m.entries[2].required_modules == 0)
 
 local bad, berr = cm.parse({ schema = 99, prefabs = {} })
 check('reject unknown schema', bad == nil and type(berr) == 'string')
