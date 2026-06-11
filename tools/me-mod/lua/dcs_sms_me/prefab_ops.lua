@@ -19,7 +19,7 @@ local cfg            = require('dcs_sms_me.community_config')
 -- never pass through distill). MUST match PREFAB_VERSION in
 -- prefab_distill.lua (both copies) — bumped together in the same
 -- change-set per AGENTS.md §4.
-local TRIGGERS_ONLY_PREFAB_VERSION = '0.4.0'
+local TRIGGERS_ONLY_PREFAB_VERSION = '0.5.0'
 
 local M = {}
 

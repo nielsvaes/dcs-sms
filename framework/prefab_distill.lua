@@ -32,7 +32,11 @@ local log = sms.log.module("sms.prefab.distill")
 -- meta.resources (base64 media) and meta.flags_used. Loaders that
 -- pre-date 0.4.0 ignore the extra keys; 0.4.0 loads older files
 -- unchanged. See docs/superpowers/specs/2026-06-10-prefab-triggers-design.md.
-local PREFAB_VERSION = "0.4.0"
+-- 0.5.0: prefabs may carry an optional `meta.required_modules` map (module id
+-- → { id, display_name, objects, count }), attached by the ME save path after
+-- distill. Loaders that pre-date 0.5.0 ignore it; 0.5.0 loads older files
+-- unchanged. See docs/superpowers/specs/2026-06-11-prefab-mod-dependencies-design.md.
+local PREFAB_VERSION = "0.5.0"
 
 -- ---------------------------------------------------------------------------
 -- Helpers
