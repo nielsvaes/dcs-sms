@@ -511,3 +511,13 @@ condition, one out-picture/out-sound action, one do-script.
 - [ ] Place a prefab whose required mod is NOT installed → "Missing mods" modal lists the mod + object count; "Cancel" aborts, "Place anyway" proceeds.
 - [ ] Prefab Manager list shows a non-zero `M` count for a mod-dependent prefab.
 - [ ] Community tab detail shows the "requires mods: …" line for an entry whose index.json carries required_modules.
+
+## Prefab Manager — save folder dialog (added 0.24.0)
+
+- [ ] Highlight a subfolder in the Folder Browser, type a name, click **Save** → a "Save Prefab" dialog opens with that subfolder pre-selected. Click **Save** → file lands in that subfolder; status confirms the path.
+- [ ] With nothing/root selected, click **Save** → dialog opens with **(root)** selected; **Save** writes to the prefabs root with no "pick a destination" warning.
+- [ ] In the dialog, click **New Folder**, enter a name → the folder appears in the picker, selected; **Save** lands the prefab inside it.
+- [ ] Click **New Folder**, create one, then click **Cancel** → no prefab is written, but the new folder persists (visible in the main browser after reload).
+- [ ] Save a name that already exists in the chosen folder → Overwrite / Rename / Cancel prompt fires; the message names the chosen folder.
+- [ ] Save the same name into a *different* folder than an existing one → no overwrite prompt (the check is folder-scoped); both files coexist.
+- [ ] The `Community/` folder is absent from the dialog's picker (import-only).

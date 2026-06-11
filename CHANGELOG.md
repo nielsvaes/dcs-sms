@@ -105,6 +105,21 @@ This is the first tag after a long quiet period — `sms.version` had been froze
 
 ## ME-mod
 
+### [0.24.0] — 2026-06-11
+
+**Added**
+- Save-to folder dialog: clicking **Save** in the Prefab Manager now opens a
+  folder picker (modeled on the Move-to dialog) pre-selecting the currently
+  highlighted folder, with an inline **New Folder** button — so the save
+  destination is always a deliberate choice rather than whatever folder
+  happened to be selected.
+
+**Fixed**
+- The pre-save overwrite check is now scoped to the chosen folder
+  (`prefab_ops.exists(name, folder)`); it previously only looked at the prefabs
+  root, so a same-name prefab inside a subfolder could be overwritten without
+  the Overwrite/Rename/Cancel prompt.
+
 ### [0.23.0] — 2026-06-11
 
 **Added**
