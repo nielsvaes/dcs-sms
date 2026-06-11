@@ -991,6 +991,37 @@ local function do_save(name, place_at_origin, airbases, folder, triggers_payload
     end
 end
 
+-- Forward declaration; the folder-picker dialog is defined alongside
+-- open_move_modal further down. on_save_click captures it as an upvalue.
+local open_save_modal
+
+-- Run the save once a destination folder is chosen by open_save_modal. This is
+-- the post-folder logic lifted out of on_save_click; the existence/overwrite
+-- check is now scoped to the chosen folder.
+local function proceed_save(name, target, fixed, airbases)
+    target = target or ''
+    if prefab_ops.exists(name, target) then
+        show_overlay(
+            'Prefab "' .. name .. '" already exists in "'
+                .. (target == '' and '(root)' or target) .. '".\n\nOverwrite, rename, or cancel?',
+            {
+                { label = 'Overwrite', on_click = function()
+                    with_bundled_triggers(function(tp)
+                        do_save(name, fixed, airbases, target, tp)
+                    end)
+                end },
+                { label = 'Rename',    on_click = function() focus_name_input(); set_status('Type a new name and click Save.') end },
+                { label = 'Cancel',    on_click = function() set_status('Save cancelled.') end },
+            },
+            'question',
+            'Prefab Already Exists')
+        return
+    end
+    with_bundled_triggers(function(tp)
+        do_save(name, fixed, airbases, target, tp)
+    end)
+end
+
 local function on_save_click()
     pcall(function()
         local name = ''
@@ -1004,32 +1035,16 @@ local function on_save_click()
             set_status('Empty name — using timestamped fallback. See dcs.log.', 'warning')
             name = 'prefab-' .. os.date('!%Y%m%dT%H%M%SZ')
             log.write('sms.me.prefab', log.WARNING, 'save with empty name → ' .. name)
-            with_bundled_triggers(function(tp)
-                do_save(name, fixed, airbases, W.selected_folder, tp)
-            end)
-            return
         end
-
-        if prefab_ops.exists(name) then
-            show_overlay(
-                'Prefab "' .. name .. '" already exists.\n\nOverwrite, rename, or cancel?',
-                {
-                    { label = 'Overwrite', on_click = function()
-                        with_bundled_triggers(function(tp)
-                            do_save(name, fixed, airbases, W.selected_folder, tp)
-                        end)
-                    end },
-                    { label = 'Rename',    on_click = function() focus_name_input(); set_status('Type a new name and click Save.') end },
-                    { label = 'Cancel',    on_click = function() set_status('Save cancelled.') end },
-                },
-                'question',
-                'Prefab Already Exists')
-            return
-        end
-
-        with_bundled_triggers(function(tp)
-            do_save(name, fixed, airbases, W.selected_folder, tp)
-        end)
+        -- Always pop the destination-folder dialog (pre-selecting the folder
+        -- currently highlighted in the browser); proceed_save runs on confirm.
+        open_save_modal({
+            name           = name,
+            default_folder = W.selected_folder,
+            on_confirm     = function(target)
+                proceed_save(name, target, fixed, airbases)
+            end,
+        })
     end)
 end
 
@@ -2599,10 +2614,236 @@ local function open_move_modal(row)
     modal:show()
 end
 
+-- Save-to folder dialog. Mirrors open_move_modal's chrome + folder picker, but
+-- selects a *destination for a new save* (opts.on_confirm(target_folder)) and
+-- adds a New Folder button. The tree build/render is duplicated from
+-- open_move_modal; a future refactor could unify the two pickers.
+-- opts = { name = <string>, default_folder = <string>, on_confirm = fn(target) }
+open_save_modal = function(opts)
+    opts = opts or {}
+    local sms_window = require('dcs_sms_me.sms_window')
+    local paths_mod  = require('dcs_sms_me.paths')
+    local name           = opts.name or ''
+    local default_folder = opts.default_folder or ''
+
+    local mw, mh = 360, 400
+    -- Centre over the Prefab Manager window (falls back to SMSWindow default).
+    local position
+    pcall(function()
+        if W.window and W.window.getBounds then
+            local px, py, pw, ph = W.window:getBounds()
+            if px and py and pw and ph then
+                position = {
+                    x = px + math.floor((pw - mw) / 2),
+                    y = py + math.floor((ph - mh) / 2),
+                }
+            end
+        end
+    end)
+
+    local modal = sms_window.new({
+        title         = 'Save Prefab',
+        size          = { w = mw, h = mh },
+        position      = position,
+        resizable     = false,
+        branded_title = false,
+        modal_parent  = W.window,
+    })
+    if not modal then return end
+
+    local raw = modal:raw()
+    local lbl = Static.new(); lbl:setText('Save "' .. name .. '" to folder:')
+    try_skin(lbl, 'staticSkin_ME')
+    raw:insertWidget(lbl)
+    lbl:setBounds(10, 10, 320, 22)
+
+    local TreeView; do local ok, m = pcall(require, 'TreeView'); if ok then TreeView = m end end
+    local picker
+    local picker_uses_listbox = false
+    if TreeView then
+        picker = TreeView.new()
+    else
+        local ListBox; do local ok, m = pcall(require, 'ListBox'); if ok then ListBox = m end end
+        if ListBox then picker = ListBox.new(); picker_uses_listbox = true
+        else            picker = Static.new(); picker:setText('(picker unavailable)')
+        end
+    end
+    if picker_uses_listbox then
+        try_skin(picker, 'listBoxSkin_ME')
+    else
+        apply_me_tree_skin(picker)
+    end
+    raw:insertWidget(picker)
+    picker:setBounds(10, 40, 340, 245)
+
+    -- Folder set + tree, dropping the import-only Community/ subtree. Rebuilt
+    -- in-place by the New Folder button.
+    local tree
+    local picker_paths = {}
+    local picker_root_node            -- TreeView (root) node handle, for select_path('')
+    local function rebuild_tree()
+        local folder_set = walk_folders()
+        tree = build_tree(folder_set, '')
+        local kept = {}
+        for _, child in ipairs(tree.children or {}) do
+            if not community_config.is_community_path(child.path) then
+                kept[#kept + 1] = child
+            end
+        end
+        tree.children = kept
+    end
+
+    local function render_picker()
+        pcall(function()
+            picker_paths = {}
+            picker_root_node = nil
+            if picker_uses_listbox then
+                if picker.removeAllItems then picker:removeAllItems()
+                elseif picker.removeAll   then picker:removeAll()
+                end
+                local ListBoxItem; do local ok, m = pcall(require, 'ListBoxItem'); if ok then ListBoxItem = m end end
+                local function walk(node, depth)
+                    for _, child in ipairs(node.children or {}) do
+                        if ListBoxItem and picker.insertItem then
+                            local it = ListBoxItem.new()
+                            it:setText(string.rep('  ', depth) .. child.name)
+                            picker:insertItem(it)
+                        end
+                        picker_paths[#picker_paths + 1] = child.path
+                        walk(child, depth + 1)
+                    end
+                end
+                if ListBoxItem and picker.insertItem then
+                    local it = ListBoxItem.new(); it:setText('(root)'); picker:insertItem(it)
+                end
+                picker_paths[1] = ''
+                walk(tree, 1)
+            else
+                if picker.clear then pcall(function() picker:clear() end) end
+                if picker.addNode then
+                    local root_node = picker:addNode('(root)', nil, nil)
+                    if type(root_node) == 'table' then root_node._sms_path = '' end
+                    picker_root_node = root_node
+                    local function add_node(data, parent_node)
+                        for _, child in ipairs(data.children or {}) do
+                            local n = picker:addNode(child.name, parent_node, nil)
+                            if type(n) == 'table' then n._sms_path = child.path end
+                            add_node(child, n)
+                        end
+                    end
+                    add_node(tree, root_node)
+                    if picker.expand then pcall(function() picker:expand() end) end
+                end
+            end
+        end)
+    end
+
+    -- Select the picker row for an in-memory folder path. Unlike open_move_modal
+    -- (which leaves root unselected), the (root) row IS selectable here so the
+    -- common root save needs no extra click.
+    local function select_path(path)
+        pcall(function()
+            if picker_uses_listbox then
+                local idx
+                for i = 1, #picker_paths do
+                    if picker_paths[i] == path then idx = i; break end
+                end
+                if idx and picker.setSelectedItem then picker:setSelectedItem(idx - 1) end
+            else
+                if path == '' then
+                    if picker_root_node and picker.selectNode then picker:selectNode(picker_root_node) end
+                elseif picker.findNode then
+                    local parts = {}
+                    for part in path:gmatch('[^/]+') do parts[#parts + 1] = part end
+                    local node = picker:findNode(parts)
+                    if node and picker.selectNode then picker:selectNode(node) end
+                end
+            end
+        end)
+    end
+
+    rebuild_tree()
+    render_picker()
+    select_path(default_folder)
+
+    local function selected_target()
+        if picker_uses_listbox then
+            local idx = (picker.getSelectedItem and picker:getSelectedItem()) or -1
+            if type(idx) == 'number' and idx >= 0 then
+                return picker_paths[idx + 1] or ''
+            end
+        else
+            local node = picker.getSelectedNode and picker:getSelectedNode()
+            if node and node._sms_path ~= nil then return node._sms_path end
+        end
+        return nil
+    end
+
+    local btn_new    = Button.new(); btn_new:setText('New Folder')
+    local btn_save   = Button.new(); btn_save:setText('Save')
+    local btn_cancel = Button.new(); btn_cancel:setText('Cancel')
+    try_skin(btn_new, 'sms_button'); try_skin(btn_save, 'sms_button'); try_skin(btn_cancel, 'sms_button')
+    raw:insertWidget(btn_new); raw:insertWidget(btn_save); raw:insertWidget(btn_cancel)
+    btn_new:setBounds(10, 295, 100, 22)
+    btn_save:setBounds(180, 295, 80, 22)
+    btn_cancel:setBounds(265, 295, 80, 22)
+
+    -- New Folder: create under the highlighted picker folder (defaults to the
+    -- pre-selected one; '' = root), then rebuild the picker and select it. The
+    -- folder is written to disk immediately and persists even if the user then
+    -- cancels the save — same as the main browser's New Folder. Mirrors
+    -- on_new_folder's validation.
+    btn_new:addChangeCallback(function()
+        local parent = selected_target() or ''
+        show_rename_overlay(
+            'Folder name (under "' .. (parent == '' and '(root)' or parent) .. '"):',
+            '',
+            function(new_name)
+                new_name = (new_name or ''):gsub('^%s+', ''):gsub('%s+$', '')
+                if new_name == '' then return end
+                local valid, why = prefab_ops._validate_folder_name(new_name)
+                if not valid then
+                    set_status('Folder name rejected: ' .. tostring(why), 'error')
+                    return
+                end
+                local rel = (parent == '' and new_name) or (parent .. '/' .. new_name)
+                if community_config.is_community_path(rel) then
+                    set_status(community_config.MANAGED_MSG, 'error')
+                    return
+                end
+                local abs = paths_mod.folder_to_abs(rel):sub(1, -2)
+                if require('lfs').attributes(abs) then
+                    set_status('Folder already exists: ' .. rel, 'error')
+                    return
+                end
+                paths_mod.ensure_prefab_folder(rel)
+                set_status('Created folder "' .. rel .. '".')
+                rebuild_tree()
+                render_picker()
+                select_path(rel)
+            end
+        )
+    end)
+
+    btn_save:addChangeCallback(function()
+        local target = selected_target()
+        if target == nil then set_status('Pick a destination folder.', 'warning'); return end
+        pcall(function() modal:hide() end)
+        pcall(function() (opts.on_confirm or function() end)(target) end)
+    end)
+    btn_cancel:addChangeCallback(function()
+        pcall(function() modal:hide() end)
+        set_status('Save cancelled.')
+    end)
+
+    modal:show()
+end
+
 M._on_new_folder    = on_new_folder
 M._on_rename_folder = on_rename_folder
 M._on_delete_folder = on_delete_folder
 M._open_move_modal  = open_move_modal
+M._open_save_modal  = open_save_modal
 
 function M.show()
     log.write('sms.me', log.INFO, 'window.show() called (W.window present=' .. tostring(W.window ~= nil) .. ')')
