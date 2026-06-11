@@ -201,6 +201,38 @@ do
           'expected false')
 end
 
+-- New: folder-aware exists() scopes the check to the given subfolder, while a
+-- nil/'' folder keeps the historical root + legacy behavior.
+do
+    local root_prefab   = fake_writedir .. 'dcs-sms\\prefabs\\already_here.prefab'
+    local folder_prefab = fake_writedir .. 'dcs-sms\\prefabs\\CAP\\in_folder.prefab'
+    local legacy_target = fake_writedir .. 'dcs-sms\\prefabs\\legacy_one.lua'
+    io.open = function(path, mode)
+        if mode == 'r' or mode == nil then
+            if path == root_prefab or path == folder_prefab or path == legacy_target then
+                return { close = function() end }
+            end
+            return nil, 'not found'
+        end
+        return real_open(path, mode)
+    end
+    package.loaded['prefab_ops'] = nil
+    local po = require('prefab_ops')
+    check('exists(name, folder) true when file is in that subfolder',
+          po.exists('in_folder', 'CAP') == true, 'expected true in CAP')
+    check('exists(name) false for a file that only exists in a subfolder',
+          po.exists('in_folder') == false, 'root check must not see CAP/in_folder')
+    check('exists(name, folder) false when file is only at root',
+          po.exists('already_here', 'CAP') == false, 'already_here is at root, not CAP')
+    check('exists(name, "") matches root (back-compat)',
+          po.exists('already_here', '') == true, 'expected true at root')
+    check('exists(name) still true at root (no folder arg)',
+          po.exists('already_here') == true, 'expected true at root')
+    check('legacy .lua only consulted at root',
+          po.exists('legacy_one', 'CAP') == false and po.exists('legacy_one') == true,
+          'legacy should be root-only')
+end
+
 -- New: save with a folder argument writes under the subfolder and
 -- mkdir-s segments top-down.
 do

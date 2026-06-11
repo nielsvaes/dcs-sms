@@ -24,10 +24,6 @@ local TRIGGERS_ONLY_PREFAB_VERSION = '0.5.0'
 
 local M = {}
 
-local function prefab_path(name)
-    return paths.PREFABS_DIR .. name .. '.prefab'
-end
-
 local function legacy_prefab_path(name)
     return paths.PREFABS_DIR .. name .. '.lua'
 end
@@ -77,12 +73,19 @@ function M._validate_folder_path(folder_rel)
     return true
 end
 
-function M.exists(name)
+-- True when a prefab named `name` already exists in folder `folder`
+-- (in-memory '/'-form; '' or nil = the prefabs root). The legacy `.lua`
+-- prefab path is a root-only migration artifact, so it is only consulted
+-- when checking the root folder.
+function M.exists(name, folder)
     if type(name) ~= 'string' or name == '' then return false end
-    local f = io.open(prefab_path(name), 'r')
+    folder = folder or ''
+    local f = io.open(paths.folder_to_abs(folder) .. name .. '.prefab', 'r')
     if f then f:close(); return true end
-    f = io.open(legacy_prefab_path(name), 'r')
-    if f then f:close(); return true end
+    if folder == '' then
+        f = io.open(legacy_prefab_path(name), 'r')
+        if f then f:close(); return true end
+    end
     return false
 end
 
