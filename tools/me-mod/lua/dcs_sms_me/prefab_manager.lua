@@ -54,6 +54,7 @@ local UpdateManager;   do local ok, mod = pcall(require, 'UpdateManager');   if 
 local MsgWindow;       do local ok, mod = pcall(require, 'MsgWindow');       if ok then MsgWindow       = mod end end
 
 local prefab_ops = require('dcs_sms_me.prefab_ops')
+local prefab_modules = require('dcs_sms_me.prefab_modules')
 local sms_window     = require('dcs_sms_me.sms_window')
 local undo       = require('dcs_sms_me.undo')
 local sms_skins  = require('dcs_sms_me.sms_skins')
@@ -248,6 +249,7 @@ local COLS = {
     { key = 'zone_count',      label = 'Z',         width = 35,  numeric = true  },
     { key = 'drawing_count',   label = 'D',         width = 35,  numeric = true  },
     { key = 'trigger_count',   label = 'T',         width = 35,  numeric = true  },
+    { key = 'module_count',    label = 'M',         width = 35,  numeric = true  },
 }
 
 local function find_col(key)
@@ -682,6 +684,7 @@ local function render_grid()
                 W.grid:setCell(7, row, make_cell(''))
                 W.grid:setCell(8, row, make_cell(''))
                 W.grid:setCell(9, row, make_cell(''))
+                W.grid:setCell(10, row, make_cell(''))
             else
                 local ab_text = ''
                 if (r.airbase_count or 0) == 1 then ab_text = 'Yes'
@@ -697,6 +700,7 @@ local function render_grid()
                 W.grid:setCell(7, row, make_cell(r.zone_count    or 0))
                 W.grid:setCell(8, row, make_cell(r.drawing_count or 0))
                 W.grid:setCell(9, row, make_cell(r.trigger_count or 0))
+                W.grid:setCell(10, row, make_cell(r.module_count or 0))
             end
         end
 
@@ -804,6 +808,29 @@ local function show_overlay(message, buttons, icon, title)
     end
 end
 M._show_overlay = show_overlay  -- exposed for later tasks
+
+-- Gate a placement on missing-mod confirmation. Calls proceed() immediately
+-- when every required mod is installed; otherwise shows a warning overlay and
+-- runs proceed() only if the user picks "Place anyway".
+local function confirm_required_mods(prefab, proceed)
+    local missing = prefab_modules.missing(prefab)
+    if not missing or #missing == 0 then
+        proceed()
+        return
+    end
+    local lines = {}
+    for _, m in ipairs(missing) do
+        lines[#lines + 1] = '\226\128\162 ' .. (m.display_name or m.id)
+            .. ' \226\128\148 ' .. tostring(m.count) .. ' object(s)'
+    end
+    local prompt = "This prefab needs mods you don't have installed:\n"
+        .. table.concat(lines, '\n')
+        .. "\n\nThose objects may fail to place or be replaced by something else."
+    show_overlay(prompt, {
+        { label = 'Place anyway', on_click = proceed },
+        { label = 'Cancel',       on_click = function() set_status('Placement cancelled.') end },
+    }, 'warning', 'Missing mods')
+end
 
 local function focus_name_input()
     pcall(function()
@@ -1586,7 +1613,9 @@ local function on_place_click()
         run_trigger_import(prefab, nil)
         return
     end
-    enter_place_pending(row.name, prefab, get_rotation_deg())
+    confirm_required_mods(prefab, function()
+        enter_place_pending(row.name, prefab, get_rotation_deg())
+    end)
 end
 
 -- Read current theatre via the same API save_selection uses.
@@ -1870,42 +1899,44 @@ local function on_place_origin_click()
         run_trigger_import(prefab, nil)
         return
     end
-    local rotation_deg = get_rotation_deg()
-    local country_name = get_country_name()
-    if not country_name then
-        log.write('sms.me.prefab', log.WARNING, 'place at original location: country dropdown empty — using prefab-stored countries')
-    end
-    local rec, err = prefab_ops.place(prefab, {
-        keep_position      = true,
-        rotation           = rotation_deg,
-        country_name       = country_name,
-        override_coalition = selected_country_coalition(),
-    })
-    if rec then
-        undo.record(rec)
-        local wa = prefab.meta and prefab.meta.world_anchor or { x = 0, y = 0 }
-        local naming_opts = read_naming_opts()
-        local naming = prefab_naming.apply(rec, naming_opts)
-        local placement_msg = string.format(
-            'Placed %s at original (%dg %dz %dd, %d errors) at (%.0f, %.0f)',
-            row.name,
-            #(rec.groups or {}),
-            #(rec.zones or {}),
-            #(rec.drawings or {}),
-            #(rec.errors or {}),
-            wa.x or 0, wa.y or 0)
-        if naming.toast then
-            placement_msg = placement_msg .. ' — ' .. naming.toast
+    confirm_required_mods(prefab, function()
+        local rotation_deg = get_rotation_deg()
+        local country_name = get_country_name()
+        if not country_name then
+            log.write('sms.me.prefab', log.WARNING, 'place at original location: country dropdown empty — using prefab-stored countries')
         end
-        local sev = (naming.failed > 0) and 'warning' or nil
-        set_status(placement_msg, sev)
-        log.write('sms.me.prefab', log.INFO, 'placed ' .. row.name .. ' at original')
-        run_airbase_apply(prefab)
-        run_trigger_import(prefab, rec)
-    else
-        set_status('Place failed: ' .. tostring(err), 'error')
-        log.write('sms.me.prefab', log.ERROR, 'place at original location failed: ' .. tostring(err))
-    end
+        local rec, err = prefab_ops.place(prefab, {
+            keep_position      = true,
+            rotation           = rotation_deg,
+            country_name       = country_name,
+            override_coalition = selected_country_coalition(),
+        })
+        if rec then
+            undo.record(rec)
+            local wa = prefab.meta and prefab.meta.world_anchor or { x = 0, y = 0 }
+            local naming_opts = read_naming_opts()
+            local naming = prefab_naming.apply(rec, naming_opts)
+            local placement_msg = string.format(
+                'Placed %s at original (%dg %dz %dd, %d errors) at (%.0f, %.0f)',
+                row.name,
+                #(rec.groups or {}),
+                #(rec.zones or {}),
+                #(rec.drawings or {}),
+                #(rec.errors or {}),
+                wa.x or 0, wa.y or 0)
+            if naming.toast then
+                placement_msg = placement_msg .. ' — ' .. naming.toast
+            end
+            local sev = (naming.failed > 0) and 'warning' or nil
+            set_status(placement_msg, sev)
+            log.write('sms.me.prefab', log.INFO, 'placed ' .. row.name .. ' at original')
+            run_airbase_apply(prefab)
+            run_trigger_import(prefab, rec)
+        else
+            set_status('Place failed: ' .. tostring(err), 'error')
+            log.write('sms.me.prefab', log.ERROR, 'place at original location failed: ' .. tostring(err))
+        end
+    end)
 end
 
 -- Show a rename overlay: prompt + text input + OK/Cancel.
