@@ -474,6 +474,35 @@ M._walk_folders = walk_folders  -- exposed for tests/inspection
 -- saved directly in the prefabs root.
 local ROOT_LABEL = 'Prefabs'
 
+-- Reserved 'Triggers/' library folder — the auto-managed home for the
+-- trigger-only prefabs saved from the Triggers tab. It gets the same
+-- special-folder treatment as Community/ in the folder browser (gold tint
+-- + a fallback marker) so users recognise it as managed. Unlike Community
+-- it stays writable — the Triggers tab legitimately saves into it — so it
+-- is deliberately NOT added to the import-only move/save guards. Matcher
+-- shape mirrors community_config.is_community_path.
+local TRIGGERS_FOLDER = 'Triggers'
+local function is_triggers_path(rel)
+    local s = tostring(rel or ''):gsub('\\', '/'):gsub('^/+', ''):gsub('/+$', '')
+    local lc, c = s:lower(), TRIGGERS_FOLDER:lower()
+    return lc == c or lc:sub(1, #c + 1) == c .. '/'
+end
+
+-- True for a library-relative folder path that should read as
+-- "special / managed" in the browser (Community or Triggers).
+local function is_special_folder(rel)
+    return community_config.is_community_path(rel) or is_triggers_path(rel)
+end
+
+-- Fallback-row marker for a special folder ('' = none). Only shown in the
+-- text-only ListBox fallback; the native TreeView distinguishes special
+-- folders by tint alone.
+local function special_folder_marker(rel)
+    if community_config.is_community_path(rel) then return '  (downloads)' end
+    if is_triggers_path(rel) then return '  (triggers)' end
+    return ''
+end
+
 -- Pure: flatten a build_tree result into ordered ListBox rows for the folder
 -- browser, with the synthetic root row (path '') first and the real folders
 -- indented one level beneath it. Returns { {text=, path=}, ... } in display
@@ -488,7 +517,7 @@ function M._listbox_tree_rows(tree_root, collapse, root_label)
             local glyph = (#(child.children or {}) > 0)
                 and ((collapse[child.path] and '> ') or 'v ')
                 or  '  '
-            local marker = community_config.is_community_path(child.path) and '  (downloads)' or ''
+            local marker = special_folder_marker(child.path)
             rows[#rows + 1] = { text = indent .. glyph .. child.name .. marker, path = child.path }
             if not collapse[child.path] then
                 walk(child, depth + 1)
@@ -503,14 +532,14 @@ end
 -- parentNode, index)` returns a node table; we stash `_sms_path` on it so the
 -- selection callback can map back to a folder. `clear()` wipes all nodes.
 -- (Earlier draft assumed an `insertItem` API that doesn't exist in DCS dxgui.)
--- Tint a folder-tree node's label to mark the import-managed Community folder.
--- Clones the tree's item sub-skin, repaints the unselected text colour to a
--- distinct accent, and applies it to the node's TreeViewItem (node.item) — the
--- same per-item skin mechanism TreeView.addNode itself uses. dxgui-bound and
--- pcall-guarded so a skin/binding gap degrades to "no tint" rather than
--- breaking the render.
-local COMMUNITY_TINT = '0xf0c674ff'  -- warm gold, legible on the dark tree bkg
-local function apply_community_node_tint(node)
+-- Tint a folder-tree node's label to mark a special / managed folder
+-- (Community or Triggers). Clones the tree's item sub-skin, repaints the
+-- unselected text colour to a distinct accent, and applies it to the node's
+-- TreeViewItem (node.item) — the same per-item skin mechanism
+-- TreeView.addNode itself uses. dxgui-bound and pcall-guarded so a
+-- skin/binding gap degrades to "no tint" rather than breaking the render.
+local SPECIAL_TINT = '0xf0c674ff'  -- warm gold, legible on the dark tree bkg
+local function apply_special_node_tint(node)
     if type(node) ~= 'table' or not node.item or not node.item.setSkin then return end
     pcall(function()
         local Skin_mod = require('Skin')
@@ -518,8 +547,8 @@ local function apply_community_node_tint(node)
         local item = s and s.skinData and s.skinData.skins and s.skinData.skins.item
         local rel = item and item.skinData and item.skinData.states and item.skinData.states.released
         if not rel then return end
-        if rel[1] and rel[1].text then rel[1].text.color = COMMUNITY_TINT end
-        if rel[2] and rel[2].text then rel[2].text.color = COMMUNITY_TINT end
+        if rel[1] and rel[1].text then rel[1].text.color = SPECIAL_TINT end
+        if rel[2] and rel[2].text then rel[2].text.color = SPECIAL_TINT end
         node.item:setSkin(item)
     end)
 end
@@ -534,8 +563,8 @@ local function render_tree_native()
                 local n = W.folder_tree:addNode(child.name, parent_node, nil)
                 if type(n) == 'table' then
                     n._sms_path = child.path
-                    if community_config.is_community_path(child.path) then
-                        apply_community_node_tint(n)
+                    if is_special_folder(child.path) then
+                        apply_special_node_tint(n)
                     end
                 end
                 add_node(child, n)

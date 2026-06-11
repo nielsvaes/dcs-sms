@@ -654,7 +654,8 @@ function M.build(host)
     end
 
     -- -------------------------------------------------------------------
-    -- Bottom form row: [Select all][Clear] [Name][Folder] [Save].
+    -- Form widgets: [Select all][Clear] under the list, [Name][Save] in the
+    -- top band (laid out by relayout below).
     -- -------------------------------------------------------------------
     local function make_button(label, cb)
         local ok, b = pcall(Button.new)
@@ -701,10 +702,12 @@ function M.build(host)
         return txt
     end
 
-    W.name_lbl     = make_label('Name')
+    W.name_lbl     = make_label('Name:')
     W.name_input   = make_input('')
-    W.folder_lbl   = make_label('Folder')
-    W.folder_input = make_input('Triggers')
+    -- Folder is fixed to the reserved 'Triggers/' library folder (no input):
+    -- trigger prefabs always live there, and the My Prefabs folder browser
+    -- marks it as a special folder (same treatment as Community/).
+    local TRIGGER_PREFAB_FOLDER = 'Triggers'
 
     -- Save handler (plan Task 10): checked entries in trigrules ORDER →
     -- export.to_portable → prefab_ops.save_trigger_prefab. No overwrite
@@ -737,13 +740,7 @@ function M.build(host)
                 return
             end
 
-            local folder = trim(input_text(W.folder_input))
-            if folder == '' then folder = 'Triggers' end
-            local fvalid, fwhy = prefab_ops._validate_folder_path(folder)
-            if not fvalid then
-                set_status('Invalid folder: ' .. tostring(fwhy), 'error')
-                return
-            end
+            local folder = TRIGGER_PREFAB_FOLDER
 
             local env = live_env()
             if not env.schema then
@@ -792,18 +789,31 @@ function M.build(host)
 
     W.save_btn = make_button('Save checked \226\134\146 prefab', on_save_click)
 
+    -- Thin separator under the top saving section (mirrors My Prefabs' sep1),
+    -- so the save controls read as their own band above the list.
+    do
+        local ok, s = pcall(Static.new, '')
+        if ok and s then W.sep = track(s); try_skin(W.sep, 'sms_separator') end
+    end
+
     -- -------------------------------------------------------------------
     -- Responsive layout. Receives the manager window's content size (same
-    -- contract as community_tab): TOP clears the manager's tab strip,
-    -- FOOTER reserves the sms_window status band, and the form row is
-    -- pinned to the bottom of the usable area. Grid takes ~58% of the
-    -- width on the left; the detail pane fills the rest.
+    -- contract as community_tab): FOOTER reserves the sms_window status
+    -- band. Mirrors My Prefabs: the save controls (Name + Save) sit in a
+    -- top band above a separator; below it the grid (~58% wide) + filter
+    -- sit left, the detail pane right, and the Select all / Clear buttons
+    -- pin to the bottom of the grid column. The detail pane's bottom lines
+    -- up with those buttons.
     -- -------------------------------------------------------------------
     local PAD    = 12
     local ROW_H  = 24
-    local TOP    = 44
     local GAP    = 6
     local FOOTER = 82
+    -- My Prefabs' top Name row (prefab_manager: y = 8 + TAB_H(32) = 40,
+    -- height 22; label x=10 w=50, input x=60). Matched pixel-for-pixel so
+    -- the Name label + box stay put when switching between the two tabs.
+    local NAME_Y, NAME_H = 40, 22
+    local NAME_LBL_X, NAME_LBL_W, NAME_INPUT_X = 10, 50, 60
 
     relayout = function(w, h)
         w = tonumber(w) or W.cw
@@ -814,45 +824,46 @@ function M.build(host)
         local detail_x = PAD + grid_w + GAP
         local detail_w = math.max(120, w - PAD - detail_x)
 
-        -- Bottom form row, pinned just above the sms_window footer band.
-        local form_y = math.max(TOP + 2 * ROW_H, h - FOOTER - ROW_H)
+        -- Top band: save controls (Name + Save). The Name label + input use
+        -- My Prefabs' exact coords (NAME_*) so they don't shift on tab
+        -- switch; the save button keeps the tab's own right-anchored width
+        -- (its label differs, so it isn't expected to line up).
+        local save_w = math.min(170, math.max(110, math.floor(w * 0.22)))
+        local save_x = w - PAD - save_w
+        bounds(W.name_lbl,   NAME_LBL_X, NAME_Y, NAME_LBL_W, NAME_H)
+        local name_w = math.max(60, save_x - GAP - NAME_INPUT_X)
+        bounds(W.name_input, NAME_INPUT_X, NAME_Y, name_w, NAME_H)
+        bounds(W.save_btn,   save_x, NAME_Y, save_w, NAME_H)
 
-        -- Filter row top (over the grid column only).
+        -- Separator below the save band (full width).
+        local sep_y = NAME_Y + NAME_H + GAP
+        bounds(W.sep, PAD, sep_y, w - 2 * PAD, 1)
+
+        -- Filter row (over the grid column) below the separator.
+        local filter_y = sep_y + 1 + GAP
         if W.filter and W.filter.set_bounds then
-            pcall(function() W.filter:set_bounds(PAD, TOP, grid_w, ROW_H) end)
+            pcall(function() W.filter:set_bounds(PAD, filter_y, grid_w, ROW_H) end)
         else
-            bounds(W.filter, PAD, TOP, grid_w, ROW_H)
+            bounds(W.filter, PAD, filter_y, grid_w, ROW_H)
         end
 
-        -- Grid left (~58%), detail right, both down to the form row.
-        local row2   = TOP + ROW_H + GAP
-        local body_h = math.max(80, form_y - GAP - row2)
-        bounds(W.grid, PAD, row2, grid_w, body_h)
-        bounds(W.detail, detail_x, TOP, detail_w, form_y - GAP - TOP)
+        -- Select all / Clear pinned just above the sms_window footer band,
+        -- under the list (same bottom position as the old form row).
+        local content_top = filter_y + ROW_H + GAP
+        local btn_y = math.max(content_top + 80, h - FOOTER - ROW_H)
+        local bx = PAD
+        bounds(W.sel_all_btn, bx, btn_y, 80, ROW_H); bx = bx + 80 + GAP
+        bounds(W.sel_clr_btn, bx, btn_y, 60, ROW_H)
 
-        -- Form row: bulk buttons left, save pinned right, folder label +
-        -- input right-anchored next to it, name input absorbs the slack.
-        -- Widths scale down with the window so the row still fits at the
-        -- manager's MIN_W (580): everything right of the name input is
-        -- anchored from the right edge, never from the running x.
-        local x = PAD
-        bounds(W.sel_all_btn, x, form_y, 80, ROW_H); x = x + 80 + GAP
-        bounds(W.sel_clr_btn, x, form_y, 60, ROW_H); x = x + 60 + 2 * GAP
+        -- Grid left (~58%), from the filter row down to just above the
+        -- bulk-button row.
+        local grid_h = math.max(80, btn_y - GAP - content_top)
+        bounds(W.grid, PAD, content_top, grid_w, grid_h)
 
-        local save_w  = math.min(170, math.max(110, math.floor(w * 0.22)))
-        local fold_w  = math.min(130, math.max(80, math.floor(w * 0.16)))
-        local fold_lw = 48
-        local name_lw = 44
-        local save_x  = w - PAD - save_w
-        local fold_x  = save_x - GAP - fold_w
-        local fold_lx = fold_x - GAP - fold_lw
-
-        bounds(W.name_lbl,   x, form_y, name_lw, ROW_H); x = x + name_lw + GAP
-        local name_w = math.max(60, fold_lx - GAP - x)
-        bounds(W.name_input,   x, form_y, name_w, ROW_H)
-        bounds(W.folder_lbl,   fold_lx, form_y, fold_lw, ROW_H)
-        bounds(W.folder_input, fold_x, form_y, fold_w, ROW_H)
-        bounds(W.save_btn,     save_x, form_y, save_w, ROW_H)
+        -- Detail pane right: top aligned with the filter row, bottom lined up
+        -- with the Select all / Clear buttons' bottom edge.
+        local detail_bottom = btn_y + ROW_H
+        bounds(W.detail, detail_x, filter_y, detail_w, math.max(80, detail_bottom - filter_y))
     end
 
     -- -------------------------------------------------------------------

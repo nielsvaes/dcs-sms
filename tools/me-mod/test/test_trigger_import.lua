@@ -162,6 +162,7 @@ local inject_env = {
 
 local inj_portable = {
     { name = 'activate HornetCap', type = 'once', eventlist = '',
+      color = '0xff8800ff',
       conditions = {
         { predicate = 'c_all_of_group_in_zone',
           fields = { group = { ref = 'group', id = 12, name = 'Enemy Convoy' },
@@ -189,6 +190,7 @@ local result = timport.inject(inj_plan, {}, inject_env)
 check(result.count == 1 and #trigrules == 1, 'one trigger injected')
 local e = trigrules[1]
 check(e.comment == 'activate HornetCap-2', 'name went through unique_name')
+check(e.colorItem == '0xff8800ff', 'valid trigger color applied on import')
 check(type(e.predicate) == 'table' and e.predicate.name == 'triggerOnce',
       'trigger predicate stays a descriptor table')
 check(e.rules[1].group == 200 and e.rules[1].zone == 31, 'condition refs rebound')
@@ -201,6 +203,18 @@ check(media_calls[1] and media_calls[1].short == 'brief.png'
       and e.actions[3].file == 'ResKey_Action_55', 'media re-added and re-keyed')
 check(e.actions[4].text == 'env.info("hi")', 'do-script text NOT dict-keyed')
 check(type(e.actions[1].predicate) == 'table', 'action predicate stays descriptor table')
+
+-- malformed color (untrusted prefab) is rejected, not propagated into trigrules
+local p_badcolor = {
+    { name = 'painted', type = 'once', eventlist = '', color = 'red; drop table',
+      conditions = {},
+      actions = { { predicate = 'a_do_script', fields = { text = 'x()' } } } },
+}
+local plan_bc = timport.resolve(p_badcolor, {}, { schema = s,
+    find_by_name = function() return nil end, target_flags = {}, prefab_flags = {} })
+trigrules = {}; inject_env.trigrules = trigrules
+timport.inject(plan_bc, {}, inject_env)
+check(trigrules[1] and trigrules[1].colorItem == nil, 'malformed color rejected on import')
 
 -- unchecked trigger skipped
 trigrules = {}; inject_env.trigrules = trigrules

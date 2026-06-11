@@ -113,7 +113,13 @@ This is the first tag after a long quiet period — `sms.version` had been froze
   triggers that reference the selection; placement imports bundled
   triggers with reference rebinding, embedded media (pictures/sounds/
   script files), a manual-map dialog for unresolved references, and a
-  flag-overlap warning. Prefab format 0.4.0 (older files load unchanged).
+  flag-overlap warning. The trigger-list color set in the vanilla Trigger
+  panel is preserved through save and re-applied on import. The import
+  dialog's trigger checklist now scrolls, so every trigger stays reachable
+  no matter how many the prefab carries. Trigger prefabs always save to the
+  reserved `Triggers/` folder, which the My Prefabs folder browser marks as
+  a special folder (gold tint, same as `Community/`). Prefab format 0.4.0
+  (older files load unchanged).
 
 ### [0.21.0] — 2026-06-10
 

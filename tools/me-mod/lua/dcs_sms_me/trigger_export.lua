@@ -110,13 +110,19 @@ function M.to_portable(entries, env)
                 actions[#actions + 1] =
                     convert_entry(a, 'action', env, resources, res_seen, flags, warnings)
             end
-            triggers[#triggers + 1] = {
+            local rec = {
                 name       = t.comment or '',
                 type       = schema.make_alias(t.predicate),
                 eventlist  = t.eventlist or '',
                 conditions = conditions,
                 actions    = actions,
             }
+            -- Trigger-list color. ED stores it on the trigger as the hex
+            -- string `colorItem` ('0xrrggbbaa'); absent = the default list
+            -- color. Carried so the prefab reproduces the author's
+            -- color-coding when the triggers are imported elsewhere.
+            if type(t.colorItem) == 'string' then rec.color = t.colorItem end
+            triggers[#triggers + 1] = rec
         end
     end
 

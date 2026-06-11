@@ -69,6 +69,8 @@ triggers = {
   { name = "activate HornetCap",           -- from t.comment
     type = "once",                         -- friendly trigger-type string
     eventlist = "",
+    color = "0xff8800ff",                  -- optional; ED's t.colorItem hex,
+                                           -- absent = default list color
     conditions = {
       { predicate = "c_all_of_group_in_zone",
         fields = { group = { ref = "group", id = 12, name = "Enemy Convoy" },
@@ -117,8 +119,12 @@ master–detail:
 - **Right:** detail pane — conditions/actions in resolved friendly form
   (like `trigger_get`) + portability report (entity refs, media files with
   sizes, flags used).
-- **Bottom:** prefab name + folder picker (defaults to `Triggers/`), *Save
-  checked → prefab*.
+- **Bottom:** prefab name + *Save checked → prefab*. The folder is fixed to
+  the reserved `Triggers/` library folder (no picker) — the My Prefabs
+  folder browser marks `Triggers/` as a special folder (gold tint, same
+  treatment as `Community/`) so it reads as auto-managed. Unlike
+  `Community/` it stays writable; it is not added to the import-only
+  move/save guards.
 
 The tab refreshes its grid when shown. The saved file is a normal prefab in
 the normal library; importing later happens from My Prefabs via Place.

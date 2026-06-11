@@ -20,6 +20,7 @@ local Button;      do local ok, m = pcall(require, 'Button');      if ok then Bu
 local CheckBox;    do local ok, m = pcall(require, 'CheckBox');    if ok then CheckBox    = m end end
 local ComboList;   do local ok, m = pcall(require, 'ComboList');   if ok then ComboList   = m end end
 local ListBoxItem; do local ok, m = pcall(require, 'ListBoxItem'); if ok then ListBoxItem = m end end
+local ScrollPane;  do local ok, m = pcall(require, 'ScrollPane');  if ok then ScrollPane  = m end end
 local Gui;         do local ok, m = pcall(require, 'dxgui');       if ok then Gui         = m end end
 local Skin;        do local ok, m = pcall(require, 'Skin');        if ok then Skin        = m end end
 
@@ -63,6 +64,16 @@ local function close_window(win)
     pcall(function() if win and win.setVisible then win:setVisible(false) end end)
 end
 
+-- Live ME viewport size (falls back to 1600x900 outside the editor).
+local function screen_size()
+    local sw, sh = 1600, 900
+    if Gui and Gui.GetWindowSize then
+        local okk, a, b = pcall(Gui.GetWindowSize)
+        if okk and type(a) == 'number' and type(b) == 'number' then sw, sh = a, b end
+    end
+    return sw, sh
+end
+
 -- Centered modal window: windowSkinME, zOrder 220, draggable, not
 -- resizable — same construction as prefab_manager.show_rename_overlay.
 -- Returns the Window or nil (caller falls back).
@@ -70,11 +81,7 @@ local function build_window(title, w, h)
     if not (Window and Window.new) then return nil end
     local win
     local ok = pcall(function()
-        local sw, sh = 1600, 900
-        if Gui and Gui.GetWindowSize then
-            local okk, a, b = pcall(Gui.GetWindowSize)
-            if okk and type(a) == 'number' and type(b) == 'number' then sw, sh = a, b end
-        end
+        local sw, sh = screen_size()
         win = Window.new((sw - w) / 2, (sh - h) / 2, w, h, tostring(title or 'DCS-SMS'))
         win:setSkin((Skin and Skin.windowSkinME and Skin.windowSkinME())
                     or (Skin and Skin.windowSkin and Skin.windowSkin()))
@@ -85,6 +92,25 @@ local function build_window(title, w, h)
     end)
     if not ok or not win then return nil end
     return win
+end
+
+-- Scroll viewport inside `win` (same construction Mass Edit's form pane
+-- uses: ScrollPane + the lighter 'sms_scroll_pane' skin). Child widgets
+-- are inserted into the returned pane with content-relative coords;
+-- call pane:updateWidgetsBounds() after inserting so the scroll extent
+-- is recomputed. Returns the pane or nil (caller falls back to the raw
+-- window, which simply grows to fit).
+local function build_scroll_pane(win, x, y, w, h)
+    if not (ScrollPane and ScrollPane.new) then return nil end
+    local sp
+    local ok = pcall(function()
+        sp = ScrollPane.new()
+        if skin_helper then skin_helper.apply(sp, 'sms_scroll_pane') end
+        win:insertWidget(sp)
+        sp:setBounds(x, y, w, h)
+    end)
+    if not ok or not sp then return nil end
+    return sp
 end
 
 local function make_label(win, text, x, y, w, skin)
@@ -334,20 +360,32 @@ function M.show_import_dialog(opts)
         end
     end
 
-    local s1_shown = math.min(#triggers, MAX_ROWS)
-    local s2_shown = math.min(#unresolved, MAX_ROWS)
-    local s1_extra = #triggers - s1_shown
-    local s2_extra = #unresolved - s2_shown
-
     local w = 660
-    local content_h = 14 + ROW_H + s1_shown * ROW_H            -- section 1 + header
-                      + (s1_extra > 0 and ROW_H or 0)
+    local PANE_Y = 14
+    -- Natural height of the scrollable region (section 1 checklist +
+    -- section 2 bindings), every row, no truncation.
+    local natural_h = ROW_H + #triggers * ROW_H            -- intro line + checklist
     if #unresolved > 0 then
-        content_h = content_h + 8 + ROW_H + s2_shown * ROW_H
-                    + (s2_extra > 0 and ROW_H or 0)
+        natural_h = natural_h + 8 + ROW_H + #unresolved * ROW_H
     end
-    if #overlaps > 0 then content_h = content_h + 8 + ROW_H end
-    local buttons_y = content_h + 12
+
+    -- Cap the viewport so the whole window (pane + flag strip + buttons +
+    -- chrome) stays on screen; the rest scrolls. Without a ScrollPane the
+    -- window just grows to fit (rare — real ME always has one).
+    local _, sh   = screen_size()
+    local flag_h  = (#overlaps > 0) and (8 + ROW_H) or 0
+    local reserve = PANE_Y + flag_h + 12 + 92              -- chrome below the pane
+    local max_pane = math.max(ROW_H * 4, math.floor(sh * 0.82) - reserve)
+    local pane_h   = (ScrollPane and ScrollPane.new) and math.min(natural_h, max_pane)
+                     or natural_h
+
+    local content_bottom = PANE_Y + pane_h
+    local flag_y
+    if #overlaps > 0 then
+        flag_y = content_bottom + 8
+        content_bottom = flag_y + ROW_H
+    end
+    local buttons_y = content_bottom + 12
     local h = buttons_y + 92
 
     local win
@@ -383,7 +421,6 @@ function M.show_import_dialog(opts)
     local function gather_decisions()
         local decisions = { checked = {}, bindings = {} }
         -- (h) explicit false only for UNchecked rows; absent = import.
-        -- Hidden (truncated) rows keep their default state.
         for t_idx, pt in ipairs(triggers) do
             local on = default_checked(pt)
             local cb = checks[t_idx]
@@ -407,61 +444,68 @@ function M.show_import_dialog(opts)
         if not win then error('window construction failed') end
         pcall(function() win.onClose = function() finish(on_skip) end end)
 
+        -- Scrollable region: the trigger checklist (section 1) and the
+        -- unresolved-ref bindings (section 2). Routed through a ScrollPane
+        -- so every row stays reachable no matter how many triggers the
+        -- prefab carries. Falls back to the raw window (which grew to fit)
+        -- when no ScrollPane is available.
+        local pane = build_scroll_pane(win, PAD, PANE_Y, w - 2 * PAD, pane_h)
+        local body = pane or win
+        local SCROLLBAR_W = 18
+        local cx = pane and 0 or PAD                          -- content origin x
+        local cw = pane and (w - 2 * PAD - SCROLLBAR_W) or (w - 2 * PAD)
+        local y  = pane and 0 or PANE_Y                       -- content origin y
+
         -- Section 1: trigger checklist.
-        local y = 14
-        make_label(win, 'This prefab includes ' .. #triggers .. ' trigger(s):',
-                   PAD, y, w - 2 * PAD)
+        make_label(body, 'This prefab includes ' .. #triggers .. ' trigger(s):',
+                   cx, y, cw)
         y = y + ROW_H
-        for t_idx = 1, s1_shown do
+        for t_idx = 1, #triggers do
             local pt = triggers[t_idx]
             local p = type(pt.portable) == 'table' and pt.portable or {}
-            checks[t_idx] = make_check(win, default_checked(pt), PAD, y)
+            checks[t_idx] = make_check(body, default_checked(pt), cx, y)
             local nm = (p.name ~= nil and p.name ~= '') and tostring(p.name) or 'Trigger'
             local label = string.format('%s  (%s, %d cond / %d act)  %s',
                 nm, tostring(p.type or '?'),
                 #(type(p.conditions) == 'table' and p.conditions or {}),
                 #(type(p.actions) == 'table' and p.actions or {}),
                 status_text(pt))
-            make_label(win, truncate(label, 110), PAD + 26, y, w - PAD * 2 - 26)
-            y = y + ROW_H
-        end
-        if s1_extra > 0 then
-            make_label(win, '(+' .. s1_extra .. ' more)', PAD + 26, y, w - PAD * 2 - 26)
+            make_label(body, truncate(label, 110), cx + 26, y, cw - 26)
             y = y + ROW_H
         end
 
         -- Section 2: unresolved-ref bindings.
         if #unresolved > 0 then
             y = y + 8
-            make_label(win, 'Unresolved references ' .. EMDASH .. ' bind each one or skip it:',
-                       PAD, y, w - 2 * PAD)
+            make_label(body, 'Unresolved references ' .. EMDASH .. ' bind each one or skip it:',
+                       cx, y, cw)
             y = y + ROW_H
-            local combo_x = PAD + 310
-            for i = 1, s2_shown do
+            local combo_x = cx + 310
+            for i = 1, #unresolved do
                 local ur = unresolved[i]
-                make_label(win, truncate(ur.label, 56), PAD, y, 300)
-                local combo, by_text = make_combo(win, combo_x, y, w - combo_x - PAD,
+                make_label(body, truncate(ur.label, 56), cx, y, 300)
+                local combo, by_text = make_combo(body, combo_x, y, cw - 310,
                                                   options_for(ur.kind))
                 combo_rows[#combo_rows + 1] = { key = ur.key, combo = combo,
                                                 by_text = by_text or {} }
                 y = y + ROW_H
             end
-            if s2_extra > 0 then
-                make_label(win, '(+' .. s2_extra .. ' more ' .. EMDASH
-                           .. ' unbound refs drop their condition/action)',
-                           PAD, y, w - 2 * PAD)
-                y = y + ROW_H
-            end
         end
 
-        -- Section 3: flag-overlap warning strip.
+        -- ScrollPane needs an explicit nudge to recompute its scroll extent
+        -- once the child bounds are set (same as mass_edit's form pane).
+        if pane and pane.updateWidgetsBounds then
+            pcall(pane.updateWidgetsBounds, pane)
+        end
+
+        -- Section 3: flag-overlap warning strip. Fixed below the pane so it
+        -- stays visible regardless of how far the checklist is scrolled.
         if #overlaps > 0 then
-            y = y + 8
             local parts = {}
             for _, fv in ipairs(overlaps) do parts[#parts + 1] = tostring(fv) end
             make_label(win, FLAG_GLYPH .. ' Flags ' .. truncate(table.concat(parts, ', '), 70)
                        .. " are already used by this mission's triggers.",
-                       PAD, y, w - 2 * PAD, 'sms_status_yellow')
+                       PAD, flag_y, w - 2 * PAD, 'sms_status_yellow')
         end
 
         make_button(win, 'Import triggers', w - PAD - 130 - 8 - 110, buttons_y, 130,

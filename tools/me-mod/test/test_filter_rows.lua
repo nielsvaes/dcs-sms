@@ -202,4 +202,17 @@ do
     eq('normal row has no marker',     cap.text:find('(downloads)', 1, true) == nil, true)
 end
 
+-- Triggers/ is the reserved trigger-prefab folder — marked as special in the
+-- ListBox-fallback rows just like Community/, so it reads as auto-managed.
+do
+    local fset = { ['']=true, ['CAP']=true, ['Triggers']=true }
+    local root = window._build_tree(fset, '')
+    local rows = window._listbox_tree_rows(root, {}, 'Prefabs')
+    local function row_for(path) for _, r in ipairs(rows) do if r.path == path then return r end end end
+    local trig = row_for('Triggers')
+    local cap  = row_for('CAP')
+    eq('Triggers row carries marker', trig.text:find('(triggers)', 1, true) ~= nil, true)
+    eq('normal row has no marker',    cap.text:find('(triggers)', 1, true) == nil, true)
+end
+
 io.write('All filter_rows tests passed.\n')

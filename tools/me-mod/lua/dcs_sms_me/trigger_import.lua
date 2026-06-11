@@ -19,6 +19,14 @@ local function ref_key(t_idx, list, entry_idx, field)
     return string.format('%d/%s/%d/%s', t_idx, list, entry_idx, field)
 end
 
+-- ED's trigger-list color is the hex string '0xrrggbbaa' (see
+-- me_trigrules.onSpinBoxColorChange). Validate before applying: prefab
+-- files are user-editable and Community ones untrusted, and a malformed
+-- value would propagate into rulesToList's skin call and the .miz on save.
+local function valid_color(c)
+    return type(c) == 'string' and c:match('^0x%x%x%x%x%x%x%x%x$') ~= nil
+end
+
 local function resolve_one(kind, id, name, maps, env, descr, field)
     -- 1. placement map
     if kind == 'group' and maps.gid_map and id ~= nil and maps.gid_map[id] then
@@ -276,6 +284,7 @@ function M.inject(plan, decisions, env)
             new_trigger.comment = env.unique_name and env.unique_name(trig.name or 'Trigger')
                                   or (trig.name or 'Trigger')
             new_trigger.eventlist = trig.eventlist or ''
+            if valid_color(trig.color) then new_trigger.colorItem = trig.color end
             new_trigger.rules = {}
             new_trigger.actions = {}
 
