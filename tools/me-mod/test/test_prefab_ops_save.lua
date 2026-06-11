@@ -228,9 +228,10 @@ do
           po.exists('already_here', '') == true, 'expected true at root')
     check('exists(name) still true at root (no folder arg)',
           po.exists('already_here') == true, 'expected true at root')
-    check('legacy .lua only consulted at root',
-          po.exists('legacy_one', 'CAP') == false and po.exists('legacy_one') == true,
-          'legacy should be root-only')
+    check('legacy .lua NOT consulted for a subfolder',
+          po.exists('legacy_one', 'CAP') == false, 'legacy is root-only')
+    check('legacy .lua still consulted at root',
+          po.exists('legacy_one') == true, 'legacy should resolve at root')
 end
 
 -- New: save with a folder argument writes under the subfolder and

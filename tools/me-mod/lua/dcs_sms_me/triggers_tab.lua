@@ -759,10 +759,9 @@ function M.build(host)
                          .. tostring(payload.warnings[1]))
             end
 
-            -- Collision check must look in the TARGET folder — exists()
-            -- concatenates onto PREFABS_DIR, so prefix the folder path.
-            local exists_key = (folder ~= '' and (folder .. '/' .. name)) or name
-            if prefab_ops.exists(exists_key) then
+            -- Collision check scoped to the TARGET folder (exists() takes the
+            -- folder as its second argument).
+            if prefab_ops.exists(name, folder) then
                 set_status('A prefab named "' .. name .. '" already exists in '
                            .. (folder == '' and 'the library root' or folder)
                            .. ' — pick another name.', 'error')
