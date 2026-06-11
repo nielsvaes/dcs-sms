@@ -62,6 +62,17 @@ local empty_selection_module = {
     end,
 }
 
+-- Stub prefab_modules so save_selection records a deterministic required
+-- module without needing DCS's setRequiredModules. Installed BEFORE the first
+-- require('prefab_ops') so every (re-)require of prefab_ops sees the stub.
+package.loaded['dcs_sms_me.prefab_modules'] = {
+    detect = function(_dump)
+        return { ['UH-60L'] = { id = 'UH-60L', display_name = 'UH-60L Black Hawk',
+                                objects = { ['UH-60L'] = 1 }, count = 1 } }
+    end,
+    missing = function() return {} end,
+}
+
 package.path = '../lua/dcs_sms_me/?.lua;../lua/?.lua;' .. package.path
 local prefab_ops = require('prefab_ops')
 
@@ -89,6 +100,22 @@ do
     check('content has meta.theatre captured from TheatreOfWarData',
           captured.content and captured.content:find('%["theatre"%]%s*=%s*"Caucasus"', 1) ~= nil,
           'meta.theatre not found in content')
+end
+
+-- Case: required_modules from prefab_modules.detect is recorded in the saved
+-- prefab. The stub above returns a UH-60L module for any dump, so a normal save
+-- (valid selection from the package.preload selection stub) must serialize it.
+do
+    captured.path, captured.content = nil, nil
+    local ok, _ = prefab_ops.save_selection('mod_jet')
+    check('save_selection with required module returns ok', ok == true,
+          'got ' .. tostring(ok))
+    check('saved content records required_modules id',
+          captured.content and captured.content:find('"UH%-60L"', 1) ~= nil,
+          'required_modules id missing from saved content')
+    check('saved content records module display name',
+          captured.content and captured.content:find('UH%-60L Black Hawk', 1) ~= nil,
+          'display name missing')
 end
 
 -- Case: place_at_origin propagates into meta on save.

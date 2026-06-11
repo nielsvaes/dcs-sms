@@ -13,6 +13,7 @@ local serializer     = require('dcs_sms_me.serializer')
 local selection      = require('dcs_sms_me.selection')
 local warehouse_ops  = require('dcs_sms_me.warehouse_ops')
 local ship_warehouse = require('dcs_sms_me.ship_warehouse')
+local prefab_modules = require('dcs_sms_me.prefab_modules')
 local cfg            = require('dcs_sms_me.community_config')
 
 -- Prefab data-format version stamped on triggers-only prefabs (which
@@ -186,6 +187,12 @@ function M.save_selection(name, place_at_origin, airbases, folder, triggers_payl
     -- filtering inside attach_to_prefab keeps untouched ships from
     -- bloating the file.
     pcall(ship_warehouse.attach_to_prefab, prefab)
+
+    -- Record community-mod dependencies (post-distill, like warehouse/triggers).
+    -- prefab_modules delegates to DCS's setRequiredModules; only non-empty when
+    -- the selection actually pulls in a mod, so mod-free prefabs stay byte-stable.
+    local req_mods = prefab_modules.detect(dump)
+    if req_mods then prefab.meta.required_modules = req_mods end
 
     -- Bundled triggers (spec §2 Flow B): payload prepared by the caller
     -- (prefab_manager save flow) from the user-confirmed checklist.
@@ -505,6 +512,9 @@ local function row_from_prefab(name, path, prefab)
         zone_count      = count(prefab.zones),
         drawing_count   = count(prefab.drawings),
         trigger_count   = count(prefab.triggers),
+        module_count    = (type(meta.required_modules) == 'table')
+                          and (function() local n = 0 for _ in pairs(meta.required_modules) do n = n + 1 end return n end)()
+                          or 0,
     }
 end
 
