@@ -34,6 +34,28 @@ local M = {}
 -- (the injected circle survived). One-shot reset+rebuild is fine for
 -- ME-time editing — drawings are at most a few dozen objects per mission.
 
+-- commit_to_mission — resync the cached mission.drawings table from the live
+-- draw panel after a saveToMission → modify → loadFromMission cycle.
+--
+-- The ME serializer (me_mission.unload) reads mission.drawings — a CACHE —
+-- rather than calling me_draw_panel.saveToMission() at save time. loadFromMission
+-- rebuilds the panel's live layers_ (so the change renders) but does NOT touch
+-- that cache; ED only resyncs it on its own draw-panel events (objectDelete at
+-- me_draw_panel.lua:1477, onClose at :2050). A verb-driven create/edit fires
+-- none of those, so without this the drawing renders but is silently dropped on
+-- the next `me file save` until the user touches the Draw panel. Mirror ED's own
+-- `mission.drawings = saveToMission()`. pcall-guarded so a missing me_mission /
+-- panel API degrades to a no-op rather than failing the verb. (drawing_remove
+-- needs no equivalent — it goes through panel.objectDelete, which ED resyncs.)
+local function commit_to_mission(panel)
+    pcall(function()
+        local Mission = require('me_mission')
+        if type(Mission.mission) == 'table' and type(panel.saveToMission) == 'function' then
+            Mission.mission.drawings = panel.saveToMission()
+        end
+    end)
+end
+
 -- mutate_drawing — modify an existing drawing in place. Routes through
 -- the same saveToMission → modify → loadFromMission cycle as
 -- inject_drawing because the panel doesn't expose any granular
@@ -60,6 +82,7 @@ local function mutate_drawing(name, fn)
     if not found then return nil, 'drawing not found' end
     local ok_call, err = pcall(panel.loadFromMission, data)
     if not ok_call then return nil, 'loadFromMission: ' .. tostring(err) end
+    commit_to_mission(panel)
     return found, nil
 end
 
@@ -89,6 +112,7 @@ local function inject_drawing(new_object, layer_name)
     if not ok_call then
         return nil, 'loadFromMission: ' .. tostring(err)
     end
+    commit_to_mission(panel)
     return new_object, nil
 end
 

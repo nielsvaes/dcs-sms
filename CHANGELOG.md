@@ -105,6 +105,22 @@ This is the first tag after a long quiet period — `sms.version` had been froze
 
 ## ME-mod
 
+### [0.24.1] — 2026-06-11
+
+**Fixed**
+- Drawings vanished on save. A drawing added by the Prefab Manager (placing a
+  prefab that contains a drawing) or by the `me drawing create-*` / `set-*`
+  verbs rendered on the map but was dropped when the mission was saved — unless
+  you first clicked the drawing in the Draw panel. Root cause: the ME serializer
+  reads a cached `mission.drawings` table, not the live draw panel, and these
+  paths updated the live panel (`copyObjToCoord` / `loadFromMission`) without
+  refreshing that cache. ED itself only resyncs the cache on draw-panel events
+  (objectDelete / onClose), so an automated edit fired none of them. Both the
+  placement path (`prefab_ops.place`) and the drawing verbs now commit the live
+  draw state back into `mission.drawings` after the edit, mirroring ED's own
+  `mission.drawings = saveToMission()`. (`drawing remove` was already correct —
+  it goes through `objectDelete`, which ED resyncs.)
+
 ### [0.24.0] — 2026-06-11
 
 **Added**

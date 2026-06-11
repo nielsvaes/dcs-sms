@@ -610,6 +610,80 @@ do
           unit_b.unitId == 10, 'got ' .. tostring(unit_b.unitId))
 end
 
+-- ---------------------------------------------------------------------------
+-- M.place drawing-cache resync (regression for "placed prefab drawing vanishes
+-- on save unless clicked in the Draw panel").
+--
+-- The ME serializer (me_mission.unload) reads mission.drawings — a CACHE — not
+-- me_draw_panel.saveToMission() live. Prefab placement injects drawings via
+-- panel.copyObjToCoord, which adds to the panel's live layers_ (so it renders)
+-- but does NOT refresh mission.drawings. Without a resync, a placed drawing is
+-- dropped on save. M.place must commit the live draw state back into
+-- mission.drawings (mirroring ED's own `mission.drawings = saveToMission()`).
+--
+-- Mocks me_mission (just the .mission cache table) and me_draw_panel
+-- (copyObjToCoord appends to a live list; saveToMission snapshots it) by
+-- seeding package.loaded so M.place's lazy requires pick them up.
+-- ---------------------------------------------------------------------------
+do
+    -- Live draw-panel state: copyObjToCoord pushes here, saveToMission reads it.
+    local drawn = {}
+    local panel = {
+        copyObjToCoord = function(obj, x, y)
+            local newObj = {}
+            for k, v in pairs(obj) do newObj[k] = v end
+            newObj._placed_x, newObj._placed_y = x, y
+            table.insert(drawn, newObj)
+            return newObj
+        end,
+        saveToMission = function()
+            -- Mirror ED: walk the live state into a fresh layered table.
+            local objects = {}
+            for i, o in ipairs(drawn) do objects[i] = { name = o.name } end
+            return { layers = { { name = 'Common', objects = objects } } }
+        end,
+    }
+    -- Stale cache: a pre-existing mission.drawings WITHOUT the placed drawing.
+    local me_mission_mock = { mission = { drawings = { layers = {}, _stale = true } } }
+
+    package.loaded['me_mission']    = me_mission_mock
+    package.loaded['me_draw_panel'] = panel
+
+    local function cache_has_drawing(cache, name)
+        if type(cache) ~= 'table' or type(cache.layers) ~= 'table' then return false end
+        for _, l in ipairs(cache.layers) do
+            for _, o in ipairs(l.objects or {}) do
+                if o.name == name then return true end
+            end
+        end
+        return false
+    end
+
+    local prefab = {
+        meta = { name = 'DrawOnly', sms_prefab_version = '0.5.0',
+                 world_anchor = { x = 1000, y = 2000 } },
+        groups = {}, statics = {}, zones = {},
+        drawings = {
+            { name = 'TestCircle', primitiveType = 'Polygon', polygonMode = 'circle',
+              mapData = { x = 0, y = 0, radius = 500 } },
+        },
+    }
+
+    local rec, err = prefab_ops.place(prefab, { anchor = { x = 5000, y = 6000 }, rotation = 0 })
+    check('place drawings-only: returns a record', type(rec) == 'table',
+          'got ' .. tostring(rec) .. ' / ' .. tostring(err))
+    check('place drawings-only: one drawing injected',
+          rec and #rec.drawings == 1, 'got ' .. tostring(rec and #rec.drawings))
+    -- The regression assertion: the placed drawing must be present in the
+    -- cached mission.drawings the serializer reads. Pre-fix this stays stale.
+    check('place drawings-only: mission.drawings cache holds the placed drawing',
+          cache_has_drawing(me_mission_mock.mission.drawings, 'TestCircle'),
+          'cache was not resynced from the live draw panel after placement')
+    check('place drawings-only: stale cache marker was replaced',
+          me_mission_mock.mission.drawings._stale == nil,
+          'mission.drawings still points at the stale pre-place table')
+end
+
 if failures > 0 then
     print(string.format('%d failure(s)', failures))
     os.exit(1)

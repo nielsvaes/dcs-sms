@@ -1729,6 +1729,33 @@ function M.place(prefab, opts)
         end
     end
 
+    -- Commit the live draw-panel state back into the cached mission.drawings
+    -- table. The ME serializer (me_mission.unload) reads mission.drawings — a
+    -- CACHE — rather than calling me_draw_panel.saveToMission() at save time.
+    -- copyObjToCoord adds the drawing to the panel's live layers_ (so it
+    -- renders) but never refreshes that cache; ED itself only resyncs it on
+    -- draw-panel events (objectDelete at me_draw_panel.lua:1477, onClose at
+    -- :2050). Without this resync a placed drawing renders but is silently
+    -- dropped on save until the user touches it in the Draw panel (which fires
+    -- one of those events). Mirror ED's own `mission.drawings = saveToMission()`
+    -- here. Guarded + only when we actually placed a drawing, so drawing-free
+    -- placements never touch the cache. Undo's removal path goes through
+    -- panel.objectDelete, which resyncs the cache on its own — so this is the
+    -- add direction only.
+    if #record.drawings > 0 then
+        local ok_sync, sync_err = pcall(function()
+            local Mission = require('me_mission')
+            local panel = require('me_draw_panel')
+            if type(Mission.mission) == 'table' and type(panel.saveToMission) == 'function' then
+                Mission.mission.drawings = panel.saveToMission()
+            end
+        end)
+        if not ok_sync and log and log.write then
+            log.write('sms.me.prefab', log.WARNING,
+                'place: drawing cache resync failed: ' .. tostring(sync_err))
+        end
+    end
+
     -- Log per-entity errors so the user can see WHY entities failed,
     -- not just a count. The 'see log' message above only helps if the
     -- log actually has the lines.

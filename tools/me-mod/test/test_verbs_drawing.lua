@@ -126,6 +126,17 @@ end
 
 local function reset() panel._reset(); mock.new_mission() end
 
+-- Walk the cached mission.drawings table (saveToMission shape) for a name.
+local function cache_has_drawing(cache, name)
+    if type(cache) ~= 'table' or type(cache.layers) ~= 'table' then return false end
+    for _, l in ipairs(cache.layers) do
+        for _, o in ipairs(l.objects or {}) do
+            if o.name == name then return true end
+        end
+    end
+    return false
+end
+
 -- ============================================================
 -- drawing_create_circle
 -- ============================================================
@@ -787,10 +798,40 @@ local function test_set_angle_arg_validation()
 end
 
 -- ============================================================
+-- mission.drawings cache resync (regression)
+-- ============================================================
+-- The ME serializer reads the cached mission.drawings, not the live draw
+-- panel. A create/set verb that didn't resync that cache left the drawing
+-- rendered but dropped on the next `me file save` until the Draw panel was
+-- touched. These lock in the resync done by commit_to_mission.
+
+local function test_create_refreshes_mission_cache()
+    reset()
+    -- Fresh mission: cache exists but is empty (mirrors a just-loaded .miz).
+    assert_false(cache_has_drawing(mock.mission.drawings, 'CacheCircle'),
+                 'cache: drawing absent before create')
+    verbs.drawing_create_circle({ name = 'CacheCircle', north = 0, east = 0, radius = 100 })
+    assert_true(cache_has_drawing(mock.mission.drawings, 'CacheCircle'),
+                'cache: created drawing committed to mission.drawings')
+end
+
+local function test_set_refreshes_mission_cache()
+    reset()
+    verbs.drawing_create_circle({ name = 'CacheC2', north = 0, east = 0, radius = 100 })
+    -- A mutate verb must also resync (it goes through loadFromMission too).
+    mock.mission.drawings = nil   -- prove the set verb re-populates it
+    verbs.drawing_set_color({ name = 'CacheC2', color = '0x11223344' })
+    assert_true(cache_has_drawing(mock.mission.drawings, 'CacheC2'),
+                'cache: set-color committed to mission.drawings')
+end
+
+-- ============================================================
 -- Test runner
 -- ============================================================
 
 local tests = {
+    test_create_refreshes_mission_cache,
+    test_set_refreshes_mission_cache,
     test_create_circle_happy,
     test_create_circle_auto_name_increments,
     test_create_circle_custom_layer,
