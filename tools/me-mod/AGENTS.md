@@ -181,6 +181,7 @@ You do **not** have:
 | `prefab_manager.lua` | The Prefab Manager window (uses `sms_window`). Library list, place-at-click / place-at-original, rotation, country override, undo. |
 | `context_menu.lua` | Right-click context menus for the Prefab Manager. Owns the dxgui `Menu` construction and the clipboard probe. Used by the file-row menu (Update Prefab with selection / Move to… / Copy file contents / Copy place snippet / Show in Explorer) and the tree-node menu (New subfolder / Rename / Delete). |
 | `prefab_distill.lua`, `prefab_ops.lua` | Prefab save/load/placement core. |
+| `prefab_modules.lua` | Detect community-mod dependencies of a save selection (delegates to DCS's `me_mission.setRequiredModules`) and check, at placement, which required mods are missing. Sole owner of the mod-detection ED globals. |
 | `base64.lua` | Pure-Lua base64 encode/decode for prefab-embedded media. |
 | `trigger_schema.lua` | ED trigger-descriptor cache + field-kind classification, shared by trigger export/import. Deliberately duplicates `verbs/trigger_verbs.lua` locals — see header comment. |
 | `trigger_export.lua` | trigrules → portable prefab `triggers` form; related-trigger detection for save bundling; structured-field flag scan. |

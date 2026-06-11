@@ -504,3 +504,10 @@ condition, one out-picture/out-sound action, one do-script.
       trigger panel refreshes if open.
 - [ ] Save the mission, reopen the .miz → imported triggers + media survived
       ED's save round-trip.
+
+## Prefab mod dependencies (me-mod ≥ 0.23.0)
+
+- [ ] Place a prefab whose required mod IS installed → no warning, places normally.
+- [ ] Place a prefab whose required mod is NOT installed → "Missing mods" modal lists the mod + object count; "Cancel" aborts, "Place anyway" proceeds.
+- [ ] Prefab Manager list shows a non-zero `M` count for a mod-dependent prefab.
+- [ ] Community tab detail shows the "requires mods: …" line for an entry whose index.json carries required_modules.

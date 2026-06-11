@@ -105,6 +105,14 @@ This is the first tag after a long quiet period — `sms.version` had been froze
 
 ## ME-mod
 
+### [0.23.0] — 2026-06-11
+
+**Added**
+- Prefab mod dependencies: saving a prefab now records the community mods its
+  units/statics require (`meta.required_modules`); placing a prefab warns when a
+  required mod isn't installed; the Prefab Manager shows an `M` column and the
+  Community browser a "requires mods" line. Prefab format bumped to 0.5.0.
+
 ### [0.22.0] — 2026-06-10
 
 **Added**
