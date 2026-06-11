@@ -114,6 +114,12 @@ This is the first tag after a long quiet period — `sms.version` had been froze
   destination is always a deliberate choice rather than whatever folder
   happened to be selected.
 
+**Changed**
+- Prefab **Rename** and **Delete** moved off the row-3 buttons and onto the
+  file-row right-click menu (they now act on the right-clicked prefab, like
+  Move/Update). Delete is also available on broken (load-error) rows so you can
+  clean them up; Rename is not.
+
 **Fixed**
 - The pre-save overwrite check is now scoped to the chosen folder
   (`prefab_ops.exists(name, folder)`); it previously only looked at the prefabs

@@ -103,11 +103,13 @@ Verify the refactor preserved Prefab Manager behaviour exactly:
 - [ ] Type "horn" in Search files while a folder is selected → narrows within folder.
 - [ ] Type "horn" in Search files with no selection → matches across all folders.
 - [ ] Type "tom" in Search folders → only tree nodes named or containing "Tom" are shown.
-- [ ] Right-click a prefab row → menu shows Move to..., Copy file contents, Copy place snippet, Show in Explorer.
+- [ ] Right-click a prefab row → menu shows Update Prefab with selection, Move to..., Rename, Delete, Copy file contents, Copy place snippet, Show in Explorer (separators after Update, after Delete, and before Show in Explorer). There are no longer Rename/Delete buttons in the row-3 action band — only Reload + Undo last placement remain there.
+- [ ] Right-click → Rename → overlay prompts for a new name; renames the right-clicked prefab and the list refreshes.
+- [ ] Right-click → Delete → confirm overlay names the right-clicked prefab; deleting removes it and the list refreshes.
 - [ ] Click "Show in Explorer" → Windows Explorer opens with the file selected.
 - [ ] Click "Copy file contents" → paste somewhere, content matches the `.prefab` file body. Status line: "Copied X.prefab contents (N bytes)."
 - [ ] Click "Copy place snippet" → paste, snippet matches `sms.prefab.place("<name>", {x = 0, y = 0})  -- rotation = 0, country = nil`. Status notes sms.prefab.place not shipped yet.
-- [ ] Right-click a row with an error → only "Show in Explorer" enabled.
+- [ ] Right-click a row with an error → menu shows only Delete and Show in Explorer (Delete lets you clean up the broken file).
 - [ ] Move to... opens modal; pick "SAM", click Move. Prefab now in SAM. File list and tree both refresh.
 - [ ] Rename "CAP" → "Combat Air Patrol". Sub-folder "Tomcats" still inside it. Selection follows the rename.
 - [ ] Delete a non-empty folder → confirmation overlay shows count. Cancel keeps it. Delete removes everything recursively.

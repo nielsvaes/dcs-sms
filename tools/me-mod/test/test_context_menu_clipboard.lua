@@ -121,9 +121,10 @@ do
     _G.Gui = nil
 end
 
--- File-row menu must offer "Update Prefab with selection" on normal rows,
--- wired to hooks.on_update with the row, and must hide it on error rows
--- (matching the convention where error rows expose only Show in Explorer).
+-- File-row menu must offer Update / Move / Rename / Delete on normal rows,
+-- each wired to its hook with the row. On error rows everything hides except
+-- Delete (cleaning up a broken file) and Show in Explorer, and the menu must
+-- collapse to a single separator (the divider above Show in Explorer).
 do
     package.loaded['dcs_sms_me.context_menu'] = nil
     local cm = require('dcs_sms_me.context_menu')
@@ -133,18 +134,39 @@ do
         return nil
     end
 
-    local updated
+    local updated, renamed, deleted
     local row = { name = 'Tomcats', path = '/x/Tomcats.prefab', folder = 'CAP' }
-    local entries = cm._file_row_entries(row, { on_update = function(r) updated = r end })
+    local entries = cm._file_row_entries(row, {
+        on_update = function(r) updated = r end,
+        on_rename = function(r) renamed = r end,
+        on_delete = function(r) deleted = r end,
+    })
 
     local upd = find(entries, 'Update Prefab with selection')
     check('update entry present on normal row', upd ~= nil and upd.visible ~= false)
     if upd then upd.on_click() end
     check('update entry fires on_update with row', updated == row)
 
+    local ren = find(entries, 'Rename')
+    check('rename entry present + visible on normal row', ren ~= nil and ren.visible ~= false)
+    if ren then ren.on_click() end
+    check('rename entry fires on_rename with row', renamed == row)
+
+    local del = find(entries, 'Delete')
+    check('delete entry present + visible on normal row', del ~= nil and del.visible ~= false)
+    if del then del.on_click() end
+    check('delete entry fires on_delete with row', deleted == row)
+
     local erow = { name = 'Broken', path = '/x/Broken.prefab', error = 'boom' }
-    local eupd = find(cm._file_row_entries(erow, {}), 'Update Prefab with selection')
-    check('update entry hidden on error row', eupd ~= nil and eupd.visible == false)
+    local ee = cm._file_row_entries(erow, {})
+    check('update hidden on error row',   find(ee, 'Update Prefab with selection').visible == false)
+    check('move hidden on error row',     find(ee, 'Move to...').visible == false)
+    check('rename hidden on error row',   find(ee, 'Rename').visible == false)
+    check('delete visible on error row',  find(ee, 'Delete').visible == true)
+    check('show-in-explorer visible on error row', find(ee, 'Show in Explorer').visible ~= false)
+    local nsep = 0
+    for _, e in ipairs(ee) do if e.separator and e.visible ~= false then nsep = nsep + 1 end end
+    check('error row collapses to a single separator', nsep == 1)
 end
 
 -- Tree-node menu: the import-managed Community node hides New subfolder +

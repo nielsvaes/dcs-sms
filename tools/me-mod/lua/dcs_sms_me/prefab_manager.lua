@@ -194,8 +194,6 @@ local W = {
     country_filter_btn = nil,
     place_click_btn   = nil,
     place_origin_btn  = nil,
-    rename_btn = nil,
-    delete_btn = nil,
     undo_btn   = nil,
 
     -- runtime state
@@ -2021,9 +2019,12 @@ local function show_rename_overlay(prompt, current_name, on_ok, on_cancel)
     end
 end
 
-local function on_rename_click()
-    local row = require_selection('rename')
-    if not row then return end
+-- Rename / delete a prefab. Invoked from the file-row right-click menu
+-- (context_menu.lua) with the right-clicked row — same row-passing convention
+-- as on_update_prefab / open_move_modal. (The old Rename/Delete buttons that
+-- acted on the selected row were removed in favour of the menu.)
+local function on_rename_prefab(row)
+    if not row or row.error then return end
     show_rename_overlay('Rename "' .. row.name .. '" to:', row.name,
         function(new_name)
             new_name = (new_name or ''):gsub('^%s+', ''):gsub('%s+$', '')
@@ -2042,11 +2043,10 @@ local function on_rename_click()
         function() set_status('Rename cancelled.') end)
 end
 
-local function on_delete_click()
-    local row = require_selection('delete')
+local function on_delete_prefab(row)
     if not row then return end
     show_overlay(
-        'Delete "' .. row.name .. '"?\n\nThis cannot be undone.',
+        'Delete "' .. (row.name or '(prefab)') .. '"?\n\nThis cannot be undone.',
         {
             { label = 'Delete', on_click = function()
                 local ok, oerr = os.remove(row.path)
@@ -2229,15 +2229,14 @@ local function relayout(w, h)
     -- Right-pane action buttons on row3_y. Reload + Undo last placement
     -- used to sit on the left side; they've moved here so the left side
     -- can host the folder-tree controls (New folder / Show all) without
-    -- splitting the action band visually.
-    local reload_w, undo_w, name_w_btn, del_w = 70, 140, 80, 80
+    -- splitting the action band visually. (Rename/Delete moved to the
+    -- file-row right-click menu, so this row now holds just these two.)
+    local reload_w, undo_w = 70, 140
     local btn_pad = 4
-    set(W.delete_btn, w - del_w - 10,                                                 row3_y, del_w,      22)
-    set(W.rename_btn, w - del_w - 10 - name_w_btn - btn_pad,                          row3_y, name_w_btn, 22)
-    set(W.undo_btn,   w - del_w - 10 - name_w_btn - btn_pad - undo_w - btn_pad,       row3_y, undo_w,     22)
-    set(W.reload_btn, w - del_w - 10 - name_w_btn - btn_pad - undo_w - btn_pad - reload_w - btn_pad, row3_y, reload_w, 22)
+    set(W.undo_btn,   w - undo_w - 10,                          row3_y, undo_w,   22)
+    set(W.reload_btn, w - undo_w - 10 - reload_w - btn_pad,     row3_y, reload_w, 22)
 
-    -- Right-column control stack (below the grid + Reload/Undo/Rename/Delete row).
+    -- Right-column control stack (below the grid + Reload/Undo row).
     -- Aligns with the grid's left edge (right_x) so all right-column
     -- content sits in the same column. Vertical stack, ~30 px per row.
     local stack_x = right_x
@@ -2250,7 +2249,7 @@ local function relayout(w, h)
     -- Layout from top: sep2 -> country -> rotation -> name -> prefix -> suffix -> place buttons.
     local stack_top  = row3_y + row_h + 10
 
-    -- sep2 is right-column-only — sits between Reload/Undo/Rename/Delete
+    -- sep2 is right-column-only — sits between the Reload/Undo row
     -- and the country/rotation/naming/place stack.
     set(W.sep2, stack_x, stack_top, stack_w, 1)
     local cur_y = stack_top + 8  -- pad below separator
@@ -3302,6 +3301,8 @@ function M.show()
                         context_menu.show_for_file_row(x, y, r, {
                             on_update = function(rr)     on_update_prefab(rr) end,
                             on_move   = function(rr)     open_move_modal(rr) end,
+                            on_rename = function(rr)     on_rename_prefab(rr) end,
+                            on_delete = function(rr)     on_delete_prefab(rr) end,
                             on_status = function(t, sev) set_status(t, sev) end,
                         })
                     end)
@@ -3335,8 +3336,9 @@ function M.show()
         end
         W.window:insertWidget(W.grid)
 
-        -- Row 3: library/selection actions. Reload + Undo on the left
-        -- (library-wide), Rename + Delete on the right (per-selection).
+        -- Row 3: library actions — Reload + Undo last placement (right-aligned).
+        -- Per-prefab Rename/Delete live on the file-row right-click menu, not
+        -- here (context_menu.lua → on_rename_prefab / on_delete_prefab).
         W.reload_btn = Button.new()
         W.reload_btn:setText('Reload')
         try_skin(W.reload_btn, 'sms_button')
@@ -3348,18 +3350,6 @@ function M.show()
         try_skin(W.undo_btn, 'sms_button')
         W.undo_btn:addChangeCallback(on_undo_click)
         W.window:insertWidget(W.undo_btn)
-
-        W.rename_btn = Button.new()
-        W.rename_btn:setText('Rename')
-        try_skin(W.rename_btn, 'sms_button')
-        W.rename_btn:addChangeCallback(on_rename_click)
-        W.window:insertWidget(W.rename_btn)
-
-        W.delete_btn = Button.new()
-        W.delete_btn:setText('Delete')
-        try_skin(W.delete_btn, 'sms_button')
-        W.delete_btn:addChangeCallback(on_delete_click)
-        W.window:insertWidget(W.delete_btn)
 
         W.sep2 = Static.new()
         try_skin(W.sep2, 'sms_separator')
@@ -3580,7 +3570,7 @@ function M.show()
                 W.folder_tree, W.splitter,
                 W.new_folder_btn, W.show_all_btn,
                 W.grid,
-                W.reload_btn, W.undo_btn, W.rename_btn, W.delete_btn,
+                W.reload_btn, W.undo_btn,
                 W.sep2,
                 W.country_label, W.country_combo, W.country_filter_btn,
                 W.rotation_label, W.rotation_spin, W.rotation_dial,

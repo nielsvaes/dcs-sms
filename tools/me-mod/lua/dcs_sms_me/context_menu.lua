@@ -153,15 +153,25 @@ end
 --   row          the W.visible_rows[i] table; carries .name, .path, .error
 --   hooks        { on_move = function(row), on_status = function(text, sev) }
 --
--- Entries (error rows hide all but Show in Explorer):
+-- Entries (error rows hide all but Delete + Show in Explorer):
 --   Update Prefab with selection
+--   (separator)
 --   Move to...
+--   Rename
+--   Delete
 --   (separator)
 --   Copy file contents
 --   Copy place snippet
+--   (separator)
 --   Show in Explorer
 --
--- hooks: { on_update(row), on_move(row), on_status(text, sev) }
+-- Delete stays visible on error rows (cleaning up a broken file is exactly
+-- when you want it); Rename hides with the rest. On an error row the menu
+-- collapses to "Delete / --- / Show in Explorer" — the first two separators
+-- hide with their groups, the last one stays as the divider.
+--
+-- hooks: { on_update(row), on_move(row), on_rename(row), on_delete(row),
+--          on_status(text, sev) }
 -- ---------------------------------------------------------------------------
 
 -- Build the file-row entry list. Extracted from show_for_file_row so the
@@ -179,9 +189,23 @@ function M._file_row_entries(row, hooks)
             on_click = function() if hooks.on_update then hooks.on_update(row) end end,
         },
         {
+            separator = true,
+            visible = not is_error,
+        },
+        {
             label = 'Move to...',
             visible = not is_error,
             on_click = function() if hooks.on_move then hooks.on_move(row) end end,
+        },
+        {
+            label = 'Rename',
+            visible = not is_error,
+            on_click = function() if hooks.on_rename then hooks.on_rename(row) end end,
+        },
+        {
+            label = 'Delete',
+            visible = true,
+            on_click = function() if hooks.on_delete then hooks.on_delete(row) end end,
         },
         {
             separator = true,
@@ -217,6 +241,10 @@ function M._file_row_entries(row, hooks)
                     status('Clipboard unavailable on this build — see dcs.log.', 'error')
                 end
             end,
+        },
+        {
+            separator = true,
+            visible = true,
         },
         {
             label = 'Show in Explorer',
