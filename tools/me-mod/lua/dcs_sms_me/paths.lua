@@ -14,6 +14,7 @@ M.PREFABS_DIR    = M.ROOT .. 'prefabs\\'
 M.WAREHOUSES_DIR       = M.ROOT .. 'airbase-warehouses\\'
 M.LIB_DIR              = M.ROOT .. 'lib\\'                       -- bundled LuaSec payload (user-supplied)
 M.COMMUNITY_CACHE_FILE = M.ROOT .. 'community-cache.json'        -- last-fetched manifest (offline)
+M.COMMUNITY_IMAGES_DIR = M.ROOT .. 'community-images\\'          -- downloaded community screenshots
 M.LOG_TAG              = 'sms.me'
 
 -- Translate an in-memory folder string ('', 'CAP', 'CAP/Tomcats') into
@@ -55,6 +56,24 @@ function M.ensure_prefab_folder(folder_rel)
         acc = acc .. segment .. '\\'
         lfs.mkdir(acc)
     end
+end
+
+-- Map a repo-relative community image path ('<thread>/<n>.png', '/'-separated)
+-- to an absolute local cache path, creating the base + per-thread dirs. Mirrors
+-- the catalog's images/<thread>/<n>.png layout under COMMUNITY_IMAGES_DIR.
+function M.community_image_path(rel)
+    local fs = tostring(rel or ''):gsub('/', '\\')
+    lfs.mkdir(M.ROOT)
+    lfs.mkdir(M.COMMUNITY_IMAGES_DIR)
+    local dir = fs:match('^(.*)\\[^\\]+$')   -- everything up to the last segment
+    if dir and dir ~= '' then
+        local acc = M.COMMUNITY_IMAGES_DIR
+        for seg in dir:gmatch('[^\\]+') do
+            acc = acc .. seg .. '\\'
+            lfs.mkdir(acc)
+        end
+    end
+    return M.COMMUNITY_IMAGES_DIR .. fs
 end
 
 return M
