@@ -5,58 +5,97 @@
 -- category, rate } so list/filter logic stays unit-testable.
 --
 -- Category convention: the mission table stores the *display label* of the
--- static panel's category combo, NOT the DB's singular category name.
--- (Verified against real ME-placed statics: a Fortification carries
--- category = "Structures".) CATEGORY_LABEL maps DB → mission label.
+-- static panel's category combo, NOT a DB field. (Verified against real
+-- ME-placed statics: a Fortification carries category = "Structures".)
+-- The label is derived from WHICH plural table of country.Units an entry
+-- sits in (mirrors me_static.lua addCategory) — unit defs themselves often
+-- have category = nil (every aircraft) or vehicle-combat categories
+-- ("Armor", "Unarmed") that never appear in the static panel. The one
+-- vanilla quirk we mirror: defs with def.category == 'Fortification'
+-- always file under 'Structures' even when found in the Cars table.
 --
 -- Public:
---   M.CATEGORY_LABEL                 — DB singular category → mission label
+--   M.PLURAL_LABEL                   — country.Units table name → label
 --   M.resolve_type(type_name) → row | nil, err
---   M.list(country_name) → rows[], grouped sort (category, then display)
+--   M.list(country_name) → rows[], err? (sorted by category, then display)
 --   M.categories(rows) → sorted unique category labels in rows
 --   M.filter(rows, opts) → rows[]   — pure; opts.category / opts.search
 
 local M = {}
 
--- DB.unit_by_type[*].category → the label the mission table (and the ME
--- static panel) uses. Categories not listed here are not placeable as
--- statics ('Air Defence', 'Armor', … belong to vehicle groups).
-M.CATEGORY_LABEL = {
-    Fortification  = 'Structures',
-    Cargo          = 'Cargos',
-    Warehouse      = 'Warehouses',
-    Heliport       = 'Heliports',
-    Plane          = 'Planes',
-    Helicopter     = 'Helicopters',
-    Ship           = 'Ships',
-    Car            = 'Ground vehicles',
+-- country.Units.<plural> → static-panel category label. Tables not listed
+-- here are not offered as statics.
+M.PLURAL_LABEL = {
+    Planes         = 'Planes',
+    Helicopters    = 'Helicopters',
+    Ships          = 'Ships',
+    Cars           = 'Ground vehicles',
+    Fortifications = 'Structures',
+    Heliports      = 'Heliports',
+    Warehouses     = 'Warehouses',
+    Cargos         = 'Cargos',
+    Effects        = 'Effects',
     Personnel      = 'Personnel',
-    ADEquipment    = 'Airfield and deck equipment',
-    Effect         = 'Effects',
-    Animal         = 'Animals',
-    GrassAirfield  = 'Grass Airfields',
-    WWIIstructure  = 'WWIIstructures',
-    LTAvehicle     = 'LTAvehicles',
-    MissilesSS     = 'MissilesSS',
+    ADEquipments   = 'Airfield and deck equipment',
+    Animals        = 'Animals',
+    GrassAirfields = 'Grass Airfields',
+    WWIIstructures = 'WWIIstructures',
+    LTAvehicles    = 'LTAvehicles',
 }
 
--- Build a row from a DB unit def. Returns nil when the def isn't a
--- static-placeable category.
-local function row_from_def(type_name, def)
-    if type(def) ~= 'table' then return nil end
-    local label = M.CATEGORY_LABEL[def.category]
+local function label_for(plural, def)
+    local label = M.PLURAL_LABEL[plural]
     if not label then return nil end
+    -- Vanilla quirk (me_static.lua isValidType): Fortification defs file
+    -- under Structures regardless of which table they came from.
+    if def and def.category == 'Fortification' then return 'Structures' end
+    return label
+end
+
+local function make_row(type_name, def, label)
     return {
         type       = type_name,
-        display    = def.DisplayName or def.Name or type_name,
-        shape_name = def.ShapeName or '',
+        display    = (def and (def.DisplayName or def.Name)) or type_name,
+        shape_name = (def and def.ShapeName) or '',
         category   = label,
-        rate       = tonumber(def.Rate) or 100,
+        rate       = (def and tonumber(def.Rate)) or 100,
     }
 end
 
--- Resolve one type name against DB.unit_by_type. Log-free; the caller
--- surfaces the error string in its status bar.
+-- Lazy type → category-label index, built once by walking every country's
+-- Units tree (a type's label is the same in every country).
+local type_label_cache = nil
+
+local function type_label_index()
+    if type_label_cache then return type_label_cache end
+    local idx = {}
+    pcall(function()
+        local DB = require('me_db_api')
+        if type(DB.db) ~= 'table' or type(DB.db.Countries) ~= 'table' then return end
+        for _, c in pairs(DB.db.Countries) do
+            if type(c) == 'table' and type(c.Units) == 'table' then
+                for plural, tbl in pairs(c.Units) do
+                    if M.PLURAL_LABEL[plural] and type(tbl) == 'table' then
+                        for _, subcat in pairs(tbl) do
+                            if type(subcat) == 'table' then
+                                for _, entry in pairs(subcat) do
+                                    if type(entry) == 'table' and type(entry.Name) == 'string'
+                                       and not idx[entry.Name] then
+                                        idx[entry.Name] = plural
+                                    end
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end)
+    type_label_cache = idx
+    return idx
+end
+
+-- Resolve one type name against the DB. Returns a row or nil + error.
 function M.resolve_type(type_name)
     if type(type_name) ~= 'string' or type_name == '' then
         return nil, 'type name is empty'
@@ -69,18 +108,17 @@ function M.resolve_type(type_name)
     if not ok or not def then
         return nil, 'unknown unit type: ' .. type_name
     end
-    local row = row_from_def(type_name, def)
-    if not row then
-        return nil, 'type "' .. type_name .. '" is not a placeable static (category '
-            .. tostring(def.category) .. ')'
+    local plural = type_label_index()[type_name]
+    local label = plural and label_for(plural, def)
+    if not label then
+        return nil, 'type "' .. type_name .. '" is not a placeable static'
     end
-    return row
+    return make_row(type_name, def, label)
 end
 
 -- Enumerate every static-placeable type `country_name` can deploy.
--- Walks DB.db.Countries[*].Units[<plural>][<subcat>][] — the same data the
--- ME's unit-creation panels use. Returns {} (never nil) plus an optional
--- error string when the DB isn't reachable.
+-- Returns {} (never nil) plus an optional error string when the DB isn't
+-- reachable.
 function M.list(country_name)
     local rows = {}
     local err
@@ -99,17 +137,19 @@ function M.list(country_name)
             return
         end
         local seen = {}
-        for _, plural in pairs(country.Units) do
-            if type(plural) == 'table' then
-                for _, subcat in pairs(plural) do
+        for plural, tbl in pairs(country.Units) do
+            if M.PLURAL_LABEL[plural] and type(tbl) == 'table' then
+                for _, subcat in pairs(tbl) do
                     if type(subcat) == 'table' then
                         for _, entry in pairs(subcat) do
                             if type(entry) == 'table' and type(entry.Name) == 'string'
                                and not seen[entry.Name] then
                                 seen[entry.Name] = true
                                 local def = DB.unit_by_type and DB.unit_by_type[entry.Name]
-                                local row = row_from_def(entry.Name, def)
-                                if row then rows[#rows + 1] = row end
+                                local label = label_for(plural, def)
+                                if label then
+                                    rows[#rows + 1] = make_row(entry.Name, def, label)
+                                end
                             end
                         end
                     end

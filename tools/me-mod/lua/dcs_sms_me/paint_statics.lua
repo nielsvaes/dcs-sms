@@ -47,6 +47,7 @@ local sms_skins;     do local ok, m = pcall(require, 'dcs_sms_me.sms_skins'); if
 local skin_helper;   do local ok, m = pcall(require, 'dcs_sms_me.skin_helper'); if ok then skin_helper = m end end
 local clearable_edit; do local ok, m = pcall(require, 'dcs_sms_me.clearable_edit'); if ok then clearable_edit = m end end
 local selection;     do local ok, m = pcall(require, 'dcs_sms_me.selection'); if ok then selection = m end end
+local preview_panel; do local ok, m = pcall(require, 'dcs_sms_me.static_preview_panel'); if ok then preview_panel = m end end
 local version        = require('dcs_sms_me.version')
 local undo           = require('dcs_sms_me.undo')
 local scatter        = require('dcs_sms_me.paint_scatter')
@@ -80,6 +81,8 @@ local W = {
     -- widgets — catalog browser region
     catalog_label = nil, category_combo = nil, search_edit = nil,
     catalog_grid = nil, add_btn = nil,
+    preview = nil,           -- static_preview_panel handle (nil = unavailable)
+    preview_fallback = nil,  -- metadata Static shown when no 3D preview
     -- widgets — palette region
     sep1 = nil, palette_label = nil, palette_grid = nil,
     weight_label = nil, weight_spin = nil, weight_set_btn = nil,
@@ -648,6 +651,34 @@ local function render_palette()
     end)
 end
 
+-- Show the highlighted catalog type in the 3D preview viewport; degrade
+-- to a text-metadata fallback when the viewport (or this model) fails.
+local function update_preview()
+    local r = W.catalog_sel and W.catalog_visible[W.catalog_sel]
+    if not r then
+        if W.preview then W.preview:set_visible(false) end
+        pcall(function()
+            if W.preview_fallback and W.preview_fallback.setText then W.preview_fallback:setText('') end
+        end)
+        return
+    end
+    local shown = false
+    if W.preview then
+        shown = W.preview:set_type(r.type) == true
+        W.preview:set_visible(shown)
+    end
+    pcall(function()
+        if not (W.preview_fallback and W.preview_fallback.setText) then return end
+        if shown then
+            W.preview_fallback:setText('')
+        else
+            W.preview_fallback:setText(('%s   [%s]   type: %s   shape: %s   rate: %s')
+                :format(r.display, r.category, r.type,
+                        (r.shape_name ~= '' and r.shape_name) or '?', tostring(r.rate)))
+        end
+    end)
+end
+
 -- Re-apply category + search filters to the catalog rows and re-render.
 local function refresh_catalog_view()
     W.catalog_visible = static_catalog.filter(W.catalog_rows, {
@@ -656,6 +687,7 @@ local function refresh_catalog_view()
     })
     W.catalog_sel = (#W.catalog_visible > 0) and 1 or nil
     render_catalog()
+    update_preview()
 end
 
 local ALL_CATEGORIES = '<all categories>'
@@ -1152,7 +1184,16 @@ local function relayout(x, y, w, h)
     -- whatever height remains after the fixed-height rows below.
     local fixed_below = 32 + 8 + 24 + 126 + 30 + 8 + 30 + 30 + 30 + 30 + 30 + 30 + 30 + 36
     local catalog_h = math.max(100, h - (cur_y - y) - fixed_below)
-    set(W.catalog_grid, x, cur_y, w, catalog_h)
+    -- Catalog list left, 3D preview viewport right (metadata caption strip
+    -- under the viewport doubles as the no-preview fallback).
+    local grid_w = math.min(424, w)
+    local prev_x = x + grid_w + 6
+    local prev_w = math.max(0, w - grid_w - 6)
+    set(W.catalog_grid, x, cur_y, grid_w, catalog_h)
+    if W.preview then
+        W.preview:set_bounds(prev_x, cur_y, prev_w, math.max(catalog_h - 26, 10))
+    end
+    set(W.preview_fallback, prev_x, cur_y + catalog_h - 22, prev_w, ROW_H)
     cur_y = cur_y + catalog_h + 6
 
     set(W.add_btn, x, cur_y, w, 24)
@@ -1225,8 +1266,8 @@ end
 local function build_window()
     W.sms_window = sms_window.new({
         title    = 'Paint Statics',
-        size     = { w = 500, h = 840 },
-        min_size = { w = 470, h = 760 },
+        size     = { w = 740, h = 840 },
+        min_size = { w = 640, h = 760 },
         on_resize = function(swin, x, y, w, h)
             relayout(x, y, w, h)
         end,
@@ -1391,8 +1432,20 @@ local function build_window()
 
     W.catalog_grid = mk_grid(
         { { label = 'Type', width = 270 }, { label = 'Category', width = 150 } },
-        function(i) W.catalog_sel = i end,
+        function(i)
+            W.catalog_sel = i
+            update_preview()
+        end,
         function(_) on_add_from_catalog() end)
+
+    -- 3D model preview viewport to the right of the catalog list (D10),
+    -- with a one-line metadata Static as the no-preview fallback.
+    if preview_panel then
+        W.preview = preview_panel.create(W.window)
+    end
+    W.preview_fallback = Static.new()
+    try_skin(W.preview_fallback, 'staticSkin_ME')
+    insert(W.preview_fallback)
 
     if Button then
         W.add_btn = Button.new()
@@ -1617,6 +1670,9 @@ end
 function M.dispose()
     disarm_paint()
     pcall(function()
+        if W.preview then W.preview:dispose(); W.preview = nil end
+    end)
+    pcall(function()
         if W.window and W.window.setVisible then W.window:setVisible(false) end
     end)
 end
@@ -1748,6 +1804,22 @@ function M._debug_set_cfg(tbl)
         end
     end)
     return { ok = true, cfg = W.cfg }
+end
+
+-- Select a catalog row by type name (drives the 3D preview), headlessly.
+function M._debug_select_catalog(type_name)
+    for i, r in ipairs(W.catalog_visible) do
+        if r.type == type_name then
+            W.catalog_sel = i
+            pcall(function()
+                if W.catalog_grid and W.catalog_grid.selectRow then W.catalog_grid:selectRow(i - 1) end
+            end)
+            update_preview()
+            return { ok = true, index = i, display = r.display,
+                     preview = W.preview ~= nil }
+        end
+    end
+    return { ok = false, error = 'type not in visible catalog: ' .. tostring(type_name) }
 end
 
 function M._debug_eyedrop()
