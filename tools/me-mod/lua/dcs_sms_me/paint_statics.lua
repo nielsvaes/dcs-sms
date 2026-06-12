@@ -111,7 +111,9 @@ local W = {
         density     = 1.0,   -- objects per 100 m²
         min_spacing = 4,     -- meters
         name        = '',
+        mode        = 'paint',
     },
+    erase_toggle = nil,
 
     -- paint state
     armed     = false,
@@ -165,6 +167,17 @@ local function edit_text(widget, fallback)
     end)
     if type(t) ~= 'string' then return fallback end
     return t
+end
+
+-- Current tool mode: 'paint' or 'erase'. The Erase toggle is authoritative
+-- when built; cfg.mode is the headless mirror.
+local function get_mode()
+    local on
+    pcall(function()
+        if W.erase_toggle and W.erase_toggle.getState then on = W.erase_toggle:getState() == true end
+    end)
+    if on == nil then return W.cfg.mode or 'paint' end
+    return on and 'erase' or 'paint'
 end
 
 local function get_radius()      return math.max(1, spin_value(W.radius_spin, W.cfg.radius)) end
@@ -296,9 +309,11 @@ end
 -- Mirrors verbs/group_verbs.lua group_create_static, inlined so we control
 -- rate (from the DB, not hardcoded) and skip per-call country lookups.
 -- ---------------------------------------------------------------------------
-local function commit_placement(p, country, name_pattern)
+
+-- Build + inject one static group with an exact name. Shared by the paint
+-- commit (name from expand_name) and the erase-undo restore (original name).
+local function inject_static(group_name, p, country)
     local heading = math.rad(p.heading_deg or 0)
-    local group_name = expand_name(name_pattern, p.type)
     local g = {
         name = group_name,
         x = p.x, y = p.y,
@@ -313,7 +328,7 @@ local function commit_placement(p, country, name_pattern)
                 heading = heading,
                 category = p.category,
                 shape_name = p.shape_name,
-                rate = (p.row and p.row.rate) or 100,
+                rate = p.rate or (p.row and p.row.rate) or 100,
                 canCargo = false,
                 mass = 0,
                 dead = false,
@@ -339,6 +354,10 @@ local function commit_placement(p, country, name_pattern)
         return nil, err or 'inject_group failed'
     end
     return injected
+end
+
+local function commit_placement(p, country, name_pattern)
+    return inject_static(expand_name(name_pattern, p.type), p, country)
 end
 
 -- ---------------------------------------------------------------------------
@@ -433,6 +452,27 @@ undo.register_handler('paint_statics', function(payload)
         purge_registry(removed)
         return true, errors > 0 and (errors .. ' partial failures') or nil
     end
+    if payload.kind == 'erase' then
+        -- Restore every static the erase stroke deleted, with its original
+        -- name (inject's check_group_name dedupes on collision).
+        local errors = 0
+        for _, s in ipairs(payload.snapshots or {}) do
+            local country = H.find_country_by_name(s.country or '')
+            local g
+            if country then g = inject_static(s.name, s, country) end
+            if g then
+                W.registry[#W.registry + 1] = {
+                    group = g, x = s.x, y = s.y,
+                    type = s.type, shape_name = s.shape_name, category = s.category,
+                    rate = s.rate, heading_deg = s.heading_deg,
+                    name = g.name, country = s.country,
+                }
+            else
+                errors = errors + 1
+            end
+        end
+        return true, errors > 0 and (errors .. ' restore failures') or nil
+    end
     return nil, 'unknown paint undo kind: ' .. tostring(payload.kind)
 end)
 
@@ -461,16 +501,25 @@ local function remove_brush_overlay()
     W.brush_id, W.brush_data = nil, nil
 end
 
+-- Brush tint: green = paint, red = erase.
+local function brush_colors()
+    if get_mode() == 'erase' then
+        return { 1, 0.35, 0.2, 1 }, { 1, 0.35, 0.2, 0.10 }
+    end
+    return { 0.2, 1, 0.4, 1 }, { 0.2, 1, 0.4, 0.08 }
+end
+
 local function create_brush_overlay()
     pcall(function()
         local MapWindow = require('me_map_window')
         if not (MapWindow and MapWindow.createDrawObject) then return end
+        local line, fill = brush_colors()
         local data = {
             objectType = 'Polygon',
             points     = circle_points(get_radius()),
             thickness  = 2,
-            color      = { 0.2, 1, 0.4, 1 },
-            fillColor  = { 0.2, 1, 0.4, 0.08 },
+            color      = line,
+            fillColor  = fill,
             file       = './MissionEditor/data/NewMap/images/draw/polyline_solid.png',
             x          = 0,
             y          = 0,
@@ -499,6 +548,8 @@ local function resize_brush_overlay()
     pcall(function()
         if not (W.brush_id and W.brush_data) then return end
         W.brush_data.points = circle_points(get_radius())
+        local line, fill = brush_colors()
+        W.brush_data.color, W.brush_data.fillColor = line, fill
         local MapWindow = require('me_map_window')
         if MapWindow and MapWindow.updateDrawObject then
             MapWindow.updateDrawObject(W.brush_id, W.brush_data)
@@ -771,7 +822,16 @@ local function stroke_step(wx, wy)
         local g, err = commit_placement(p, W.stroke_country, W.stroke_name_pattern)
         if g then
             W.stroke_groups[#W.stroke_groups + 1] = g
-            W.registry[#W.registry + 1] = { group = g, x = p.x, y = p.y }
+            -- Registry entries carry everything needed to re-create the
+            -- static, so an erase stroke's undo can restore it verbatim.
+            W.registry[#W.registry + 1] = {
+                group = g, x = p.x, y = p.y,
+                type = p.type, shape_name = p.shape_name, category = p.category,
+                rate = p.rate or (p.row and p.row.rate) or 100,
+                heading_deg = p.heading_deg,
+                name = g.name,
+                country = W.stroke_country and W.stroke_country.name,
+            }
         else
             W.stroke_failed = W.stroke_failed + 1
             log_write(log.WARNING, 'placement failed: ' .. tostring(err))
@@ -792,23 +852,87 @@ local function end_stroke()
 end
 
 -- ---------------------------------------------------------------------------
+-- Erase stroke: delete tool-placed statics under the brush. Only registry
+-- entries are candidates — hand-placed objects are never touched.
+-- ---------------------------------------------------------------------------
+local function begin_erase_stroke()
+    W.erase_snapshots = {}
+end
+
+local function erase_step(wx, wy)
+    if not W.erase_snapshots then return 0 end
+    local r = get_radius()
+    local r2 = r * r
+    local hits = {}
+    for _, e in ipairs(W.registry) do
+        local dx, dy = e.x - wx, e.y - wy
+        if dx * dx + dy * dy <= r2 then hits[#hits + 1] = e end
+    end
+    if #hits == 0 then return 0 end
+    local groups = {}
+    for _, e in ipairs(hits) do groups[#groups + 1] = e.group end
+    local removed = batch_remove_groups(groups)
+    for _, e in ipairs(hits) do
+        if removed[e.group] then
+            W.erase_snapshots[#W.erase_snapshots + 1] = {
+                x = e.x, y = e.y, type = e.type, shape_name = e.shape_name,
+                category = e.category, rate = e.rate,
+                heading_deg = e.heading_deg, name = e.name, country = e.country,
+            }
+        end
+    end
+    purge_registry(removed)
+    return #hits
+end
+
+local function end_erase_stroke()
+    local snaps = W.erase_snapshots or {}
+    if #snaps > 0 then
+        undo.record_generic('paint_statics', { kind = 'erase', snapshots = snaps })
+    end
+    W.erase_snapshots = nil
+    return #snaps
+end
+
+-- ---------------------------------------------------------------------------
 -- Arm / disarm the map brush state
 -- ---------------------------------------------------------------------------
 local disarm_paint  -- forward declaration
 
+-- Title bar + sticky status + brush tint for the current mode. Called on
+-- arm and whenever the Erase toggle flips while armed.
+local function refresh_paint_affordance()
+    if not W.armed then return end
+    local erasing = get_mode() == 'erase'
+    local verb = erasing and 'ERASING' or 'PAINTING'
+    pcall(function()
+        if W.window and W.window.setText then
+            W.window:setText(verb .. ' — HOLD LEFT MOUSE + DRAG ON MAP (Esc stops)')
+        end
+    end)
+    set_status_sticky(erasing
+        and 'ERASING — drag over painted statics to delete them (Esc stops)'
+        or  'PAINTING — hold left mouse and drag on the map (Esc stops)',
+        erasing and 'warning' or 'success')
+    resize_brush_overlay()
+end
+
 local function arm_paint()
     if W.armed then return end
 
-    -- Validate inputs before grabbing the map.
-    local palette, perr = current_palette()
-    if not palette then
-        set_status('Cannot paint: ' .. tostring(perr), 'error')
-        return
-    end
-    local country_name = get_country_name() or pick_default_country()
-    if not country_name then
-        set_status('Cannot paint: no country available in mission', 'error')
-        return
+    -- Validate inputs before grabbing the map (paint mode only — erasing
+    -- needs neither palette nor country).
+    if get_mode() == 'paint' then
+        local palette, perr = current_palette()
+        if not palette then
+            set_status('Cannot paint: ' .. tostring(perr), 'error')
+            return
+        end
+        local country_name = get_country_name() or pick_default_country()
+        if not country_name then
+            set_status('Cannot paint: no country available in mission', 'error')
+            return
+        end
     end
 
     local ok, err = pcall(function()
@@ -835,14 +959,21 @@ local function arm_paint()
                 if not W.armed then return end
                 local wx, wy = MapWindow.getMapPoint(x, y)
                 if not (wx and wy) then return end
-                local ok_b, berr = begin_stroke(wx, wy)
-                if not ok_b then
-                    set_status('Paint failed: ' .. tostring(berr), 'error')
-                    disarm_paint()
-                    return
+                W.stroke_kind = get_mode()
+                if W.stroke_kind == 'erase' then
+                    begin_erase_stroke()
+                    W.painting = true
+                    erase_step(wx, wy)
+                else
+                    local ok_b, berr = begin_stroke(wx, wy)
+                    if not ok_b then
+                        set_status('Paint failed: ' .. tostring(berr), 'error')
+                        disarm_paint()
+                        return
+                    end
+                    W.painting = true
+                    stroke_step(wx, wy)
                 end
-                W.painting = true
-                stroke_step(wx, wy)
                 move_brush_overlay(wx, wy)
             end)
         end
@@ -855,11 +986,20 @@ local function arm_paint()
             pcall(function()
                 if not W.painting then return end
                 W.painting = false
-                local n, failed = end_stroke()
-                local msg = 'Stroke: ' .. n .. ' statics placed'
-                if failed > 0 then msg = msg .. ' (' .. failed .. ' failed)' end
-                msg = msg .. ' — Ctrl+Z undoes this stroke'
-                set_status(msg, failed > 0 and 'warning' or 'success')
+                if W.stroke_kind == 'erase' then
+                    local n = end_erase_stroke()
+                    if n > 0 then
+                        set_status('Erased ' .. n .. ' painted statics — Ctrl+Z restores them', 'success')
+                    else
+                        set_status('Erase stroke hit no painted statics.', 'info')
+                    end
+                else
+                    local n, failed = end_stroke()
+                    local msg = 'Stroke: ' .. n .. ' statics placed'
+                    if failed > 0 then msg = msg .. ' (' .. failed .. ' failed)' end
+                    msg = msg .. ' — Ctrl+Z undoes this stroke'
+                    set_status(msg, failed > 0 and 'warning' or 'success')
+                end
             end)
         end
 
@@ -872,7 +1012,11 @@ local function arm_paint()
                 if not W.painting then return end
                 local wx, wy = MapWindow.getMapPoint(x, y)
                 if not (wx and wy) then return end
-                stroke_step(wx, wy)
+                if W.stroke_kind == 'erase' then
+                    erase_step(wx, wy)
+                else
+                    stroke_step(wx, wy)
+                end
                 move_brush_overlay(wx, wy)
             end)
         end
@@ -903,15 +1047,10 @@ local function arm_paint()
 
     W.armed = true
     pcall(function()
-        if W.window and W.window.setText then
-            W.window:setText('PAINTING — HOLD LEFT MOUSE + DRAG ON MAP (Esc stops)')
-        end
+        if W.paint_btn and W.paint_btn.setText then W.paint_btn:setText('Stop (Esc)') end
     end)
-    pcall(function()
-        if W.paint_btn and W.paint_btn.setText then W.paint_btn:setText('Stop painting (Esc)') end
-    end)
-    set_status_sticky('PAINTING — hold left mouse and drag on the map (Esc stops)', 'success')
-    log_write(log.INFO, 'paint armed')
+    refresh_paint_affordance()
+    log_write(log.INFO, 'paint armed (' .. get_mode() .. ')')
 end
 
 disarm_paint = function()
@@ -919,7 +1058,7 @@ disarm_paint = function()
     if W.painting then
         -- Mouse-up never arrived (e.g. Esc mid-drag): close the stroke.
         W.painting = false
-        pcall(end_stroke)
+        if W.stroke_kind == 'erase' then pcall(end_erase_stroke) else pcall(end_stroke) end
     end
     W.armed = false
     remove_brush_overlay()
@@ -1033,7 +1172,12 @@ local function relayout(x, y, w, h)
     set(W.spacing_spin, input_x, cur_y, 90, ROW_H)
     cur_y = cur_y + ROW_PITCH + 8
 
-    set(W.paint_btn, x, cur_y, w, 28)
+    if W.erase_toggle then
+        set(W.erase_toggle, x, cur_y, 120, 28)
+        set(W.paint_btn, x + 126, cur_y, w - 126, 28)
+    else
+        set(W.paint_btn, x, cur_y, w, 28)
+    end
 end
 
 -- ---------------------------------------------------------------------------
@@ -1321,6 +1465,27 @@ local function build_window()
         pcall(function() W.cfg.min_spacing = tonumber(self:getValue()) or W.cfg.min_spacing end)
     end)
 
+    if ToggleButton then
+        W.erase_toggle = ToggleButton.new()
+        pcall(function() W.erase_toggle:setText('Erase mode') end)
+        try_skin(W.erase_toggle, 'sms_button')
+        pcall(function() W.erase_toggle:setTooltipText('OFF = paint statics. ON = erase tool-painted statics under the brush. Never touches hand-placed objects.') end)
+        pcall(function()
+            if W.erase_toggle.addChangeCallback then
+                W.erase_toggle:addChangeCallback(function(self)
+                    local on = self.getState and self:getState() or false
+                    W.cfg.mode = on and 'erase' or 'paint'
+                    refresh_paint_affordance()
+                    if not W.armed then
+                        set_status(on and 'Erase mode: strokes will delete tool-painted statics.'
+                                       or 'Paint mode.', on and 'warning' or 'info')
+                    end
+                end)
+            end
+        end)
+        insert(W.erase_toggle)
+    end
+
     if Button then
         W.paint_btn = Button.new()
         pcall(function() W.paint_btn:setText('Paint on map') end)
@@ -1418,6 +1583,21 @@ function M._debug_stroke(points, opts)
         if e.group and e.group.name then names[#names + 1] = e.group.name end
     end
     return { ok = true, placed = n, failed = failed, registry = #W.registry, names = names }
+end
+
+-- Run a synthetic erase stroke through the real pipeline (hit-test →
+-- batch remove → snapshots → undo record). Set the brush radius first via
+-- _debug_set_brush.
+function M._debug_erase(points)
+    if type(points) ~= 'table' or #points == 0 then
+        return { ok = false, error = 'points must be a non-empty list' }
+    end
+    begin_erase_stroke()
+    for _, p in ipairs(points) do
+        erase_step(p.x, p.y)
+    end
+    local n = end_erase_stroke()
+    return { ok = true, erased = n, registry = #W.registry }
 end
 
 function M._registry_size()
