@@ -307,20 +307,23 @@ local function show_forms_for_active_scope()
 end
 
 local function update_map_buttons_visibility()
-    -- Group + unit scopes share the bulk-row map/scope buttons. From map
-    -- pulls the F10 map's marquee selection into checks (per-scope: group
-    -- → checks groups; unit → expands marqueed groups into their units).
-    -- The cross-select button switches scope AND pre-checks across: on
-    -- group it labels "Select units" (and switches → unit with all units
-    -- of checked groups pre-checked); on unit it labels "Select group"
-    -- (switches → group with the unique parent groups of checked units).
-    local visible = (W.scope == 'group' or W.scope == 'unit')
+    -- "From map" pulls the F10 marquee selection into checks. It works on any
+    -- scope whose pool is map-selectable groups: group (checks groups), unit
+    -- (expands marqueed groups into their units), and static (statics are
+    -- single-unit groups the marquee returns as groups).
+    -- The cross-select button switches scope AND pre-checks across — only
+    -- meaningful between group and unit, so it stays group/unit only: on group
+    -- it labels "Select units" (switches → unit with all units of checked
+    -- groups pre-checked); on unit "Select group" (switches → group with the
+    -- unique parent groups of checked units).
+    local from_map_visible = (W.scope == 'group' or W.scope == 'unit' or W.scope == 'static')
+    local cross_visible    = (W.scope == 'group' or W.scope == 'unit')
     local function show(btn, v)
         if btn and btn.setVisible then pcall(btn.setVisible, btn, v) end
     end
-    show(W.widgets.from_map_btn, visible)
-    show(W.widgets.cross_select_btn, visible)
-    if visible and W.widgets.cross_select_btn and W.widgets.cross_select_btn.setText then
+    show(W.widgets.from_map_btn, from_map_visible)
+    show(W.widgets.cross_select_btn, cross_visible)
+    if cross_visible and W.widgets.cross_select_btn and W.widgets.cross_select_btn.setText then
         local label = (W.scope == 'group') and 'Select units' or 'Select group'
         pcall(W.widgets.cross_select_btn.setText, W.widgets.cross_select_btn, label)
     end
@@ -985,14 +988,16 @@ local function relayout(w, h)
 
     -- Bottom-of-left-pane button strip: Refresh on the left, bulk-
     -- selection buttons right-aligned to the tree's right edge.
-    -- Bulk order left→right: Select all · Invert · Clear · [From map
-    -- · Highlight] -- the last two only on group scope (other scopes
-    -- hide them; see below).
+    -- Bulk order left→right: Select all · Invert · Clear · [From map] ·
+    -- [cross-select]. From map shows on group/unit/static; cross-select only
+    -- on group/unit (see update_map_buttons_visibility). The strip width and
+    -- slots grow to fit whichever trailing buttons are shown.
     local sel_btn_w   = 90
     local sel_strip_y = body_bottom - L.BTN_H
     set(W.widgets.refresh_btn, L.EDGE, sel_strip_y, L.REFRESH_W, L.BTN_H)
-    local show_map_btns = (W.scope == 'group' or W.scope == 'unit')
-    local strip_n     = show_map_btns and 5 or 3
+    local show_from_map = (W.scope == 'group' or W.scope == 'unit' or W.scope == 'static')
+    local show_cross    = (W.scope == 'group' or W.scope == 'unit')
+    local strip_n     = 3 + (show_from_map and 1 or 0) + (show_cross and 1 or 0)
     local sel_total_w = sel_btn_w * strip_n + L.GAP * (strip_n - 1)
     local sel_x       = L.EDGE + left_w - sel_total_w
     -- Don't overlap the left-anchored Refresh button if the tree is narrow.
@@ -1001,9 +1006,14 @@ local function relayout(w, h)
     set(W.widgets.sel_all_btn, sel_x, sel_strip_y, sel_btn_w, L.BTN_H)
     set(W.widgets.sel_inv_btn, sel_x + sel_btn_w + L.GAP, sel_strip_y, sel_btn_w, L.BTN_H)
     set(W.widgets.sel_clr_btn, sel_x + (sel_btn_w + L.GAP) * 2, sel_strip_y, sel_btn_w, L.BTN_H)
-    if show_map_btns then
-        set(W.widgets.from_map_btn, sel_x + (sel_btn_w + L.GAP) * 3, sel_strip_y, sel_btn_w, L.BTN_H)
-        set(W.widgets.cross_select_btn,   sel_x + (sel_btn_w + L.GAP) * 4, sel_strip_y, sel_btn_w, L.BTN_H)
+    local slot = 3
+    if show_from_map then
+        set(W.widgets.from_map_btn, sel_x + (sel_btn_w + L.GAP) * slot, sel_strip_y, sel_btn_w, L.BTN_H)
+        slot = slot + 1
+    end
+    if show_cross then
+        set(W.widgets.cross_select_btn, sel_x + (sel_btn_w + L.GAP) * slot, sel_strip_y, sel_btn_w, L.BTN_H)
+        slot = slot + 1
     end
 
     -- Left pane: tree fills from row1_y to just above the bulk-button strip.
@@ -1252,7 +1262,9 @@ local function build_window()
             if W.scope == 'unit' then
                 r = map_sync.compute_fetch_units(W, snap)
             else
-                r = map_sync.compute_fetch(W, snap)
+                -- group + static: statics are single-unit groups, so the same
+                -- fetch applies — pass the scope to write the right bucket.
+                r = map_sync.compute_fetch(W, snap, W.scope)
             end
             -- compute_fetch* already mutated W on success; rebuild
             -- reflects the new check state, and gating recomputes so

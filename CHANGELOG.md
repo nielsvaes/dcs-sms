@@ -108,6 +108,7 @@ This is the first tag after a long quiet period — `sms.version` had been froze
 ### [0.25.1] — 2026-06-12
 
 **Added**
+- Mass Edit: the **Static** scope now has a **From map** button, matching Group and Unit — whatever static objects you've selected on the F10 map get checked in the Static list (the cross-select button stays Group/Unit-only).
 - `prefab_modules.absent(list)` — list-shaped sibling of `missing()` that filters a Community manifest entry's `required_modules` array to the not-installed subset.
 
 **Changed**

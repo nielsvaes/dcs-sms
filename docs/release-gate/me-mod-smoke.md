@@ -271,13 +271,20 @@ directions; group scope only.
 - [ ] Open Mass Edit on Group tab. Select 3 groups on the map (marquee).
       Click `From map`. The same 3 groups are now checked in Mass Edit;
       toast reads `Fetched 3 groups from map`.
+- [ ] **Static scope From map (0.25.1):** Switch to the Static tab. Marquee
+      several static objects on the F10 map. Click `From map` — the same
+      statics are now checked in the list; toast reads `Fetched N statics from
+      map`. The cross-select (`Select units`/`Select group`) button is NOT
+      shown on the Static scope (statics have no unit↔group split). Empty map
+      selection → `Map selection empty`, existing checks unchanged.
 - [ ] Uncheck one and check two different ones (now 4 checked). Click
       `Highlight`. The 4 checked groups are now marqueed on the map and the
       right-side group panel reflects the new selection; toast reads
       `Pushed 4 groups to map`.
-- [ ] Switch to Unit tab. Both `From map` and `Highlight` disappear; only
-      `Select all` / `Invert` / `Clear` remain. Switch back to Group —
-      both reappear.
+- [ ] `From map` is shown on the **Group, Unit, and Static** scopes; on
+      Waypoint / Zone / Drawing / Airbase it's hidden (only `Select all` /
+      `Invert` / `Clear` remain). Switching back to Group/Unit/Static brings
+      it back.
 - [ ] With an empty map selection, click `From map`. Toast reads
       `Map selection empty`; the existing Mass Edit checkboxes are
       **unchanged** (no wipe).

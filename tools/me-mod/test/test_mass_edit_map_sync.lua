@@ -111,6 +111,76 @@ do
     check('fetch partial: sev=warn',              r.sev == 'warn')
 end
 
+-- ---------------------------------------------------------------------------
+-- compute_fetch with scope='static' — identical mechanism, but the static
+-- check-bucket (statics are single-unit groups; the marquee returns them as
+-- groups, exactly like the group scope).
+-- ---------------------------------------------------------------------------
+
+local function make_W_static(pool)
+    return {
+        scope = 'static',
+        pool = pool,
+        checked = { static = {} },
+        anchor  = { static = nil },
+    }
+end
+
+-- Default scope is still 'group' (backward compat: existing callers pass no scope).
+do
+    local g1 = { groupId = 1 }
+    local W = make_W({ g1 })
+    local r = sync.compute_fetch(W, { ok = true, groups = { g1 } })  -- no scope arg
+    check('default scope: writes group bucket',   W.checked.group[g1] == true)
+    check('default scope: groups toast',          r.toast == 'Fetched 1 groups from map')
+end
+
+-- Static all-hit: writes W.checked.static, statics toast, group bucket untouched.
+do
+    local s1 = { groupId = 1 }
+    local s2 = { groupId = 2 }
+    local W = make_W_static({ s1, s2 })
+    W.checked.static[s2] = true  -- some stale prior check; replaced wholesale
+    W.anchor.static = s2
+    local snap = { ok = true, groups = { s1, s2 } }
+    local r = sync.compute_fetch(W, snap, 'static')
+
+    check('static fetch: ok=true',                r.ok == true)
+    check('static fetch: count=2',                r.count == 2)
+    check('static fetch: s1 checked in static bucket', W.checked.static[s1] == true)
+    check('static fetch: s2 checked in static bucket', W.checked.static[s2] == true)
+    check('static fetch: anchor.static cleared',  W.anchor.static == nil)
+    check('static fetch: toast = "Fetched 2 statics from map"',
+          r.toast == 'Fetched 2 statics from map', 'got: ' .. tostring(r.toast))
+    check('static fetch: sev=info',               r.sev == 'info')
+    check('static fetch: group bucket untouched',  W.checked.group == nil)
+end
+
+-- Static empty: must not wipe existing static checks (mirror of group empty).
+do
+    local s1 = { groupId = 1 }
+    local W = make_W_static({ s1 })
+    W.checked.static[s1] = true
+    W.anchor.static = s1
+    local r = sync.compute_fetch(W, { ok = true, groups = {} }, 'static')
+    check('static empty: empty=true',             r.empty == true)
+    check('static empty: check preserved (no wipe)', W.checked.static[s1] == true)
+    check('static empty: anchor preserved',       W.anchor.static == s1)
+end
+
+-- Static partial: a non-static (out-of-pool) selection counts as missed.
+do
+    local s1 = { groupId = 1 }
+    local orphan = { groupId = 99 }
+    local W = make_W_static({ s1 })
+    local r = sync.compute_fetch(W, { ok = true, groups = { s1, orphan } }, 'static')
+    check('static partial: count=1',              r.count == 1)
+    check('static partial: missed=1',             r.missed == 1)
+    check('static partial: s1 checked',           W.checked.static[s1] == true)
+    check('static partial: orphan not checked',   W.checked.static[orphan] == nil)
+    check('static partial: sev=warn',             r.sev == 'warn')
+end
+
 if failures > 0 then
     print(string.format('%d failure(s)', failures))
     os.exit(1)

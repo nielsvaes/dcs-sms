@@ -10,20 +10,26 @@
 
 local M = {}
 
--- compute_fetch(W, snap)
---   W   : { scope, pool, checked = { group = { [g] = true } }, anchor = { group = g | nil } }
---   snap: result of selection.snapshot() — { ok, error?, groups = [g...], ... }
+-- compute_fetch(W, snap[, scope])
+--   W    : { scope, pool, checked = { [scope] = { [g] = true } },
+--            anchor = { [scope] = g | nil } }
+--   snap : result of selection.snapshot() — { ok, error?, groups = [g...], ... }
+--   scope: 'group' (default) | 'static'. Statics are single-unit groups and
+--          the marquee returns them as groups exactly like real groups, so the
+--          fetch logic is identical — only the check-bucket and the success
+--          noun differ. Omitting scope preserves the original group behavior.
 --
 -- Side effects on success:
---   W.checked.group is replaced with { [g] = true } for each snap group
+--   W.checked[scope] is replaced with { [g] = true } for each snap group
 --     also found in W.pool (identity match).
---   W.anchor.group is cleared (the prior anchor pointed into old state).
+--   W.anchor[scope] is cleared (the prior anchor pointed into old state).
 --
 -- Returns:
 --   { ok = bool,
 --     empty? = bool, count? = N, missed? = N,
 --     toast = string, sev = 'info' | 'warn' | 'err' }
-function M.compute_fetch(W, snap)
+function M.compute_fetch(W, snap, scope)
+    scope = scope or 'group'
     if not snap or not snap.ok then
         return {
             ok    = false,
@@ -58,9 +64,12 @@ function M.compute_fetch(W, snap)
         end
     end
 
-    W.checked.group = new_checked
-    W.anchor.group  = nil
+    W.checked[scope] = new_checked
+    W.anchor[scope]  = nil
 
+    -- Missed items are groups selected on the map that aren't in THIS scope's
+    -- pool (e.g. a vehicle selected while on the static scope) — so the missed
+    -- wording stays the generic "groups" regardless of scope.
     if missed > 0 then
         return {
             ok = true, count = count, missed = missed,
@@ -69,9 +78,10 @@ function M.compute_fetch(W, snap)
         }
     end
 
+    local noun = (scope == 'static') and 'statics' or 'groups'
     return {
         ok = true, count = count, missed = 0,
-        toast = string.format('Fetched %d groups from map', count),
+        toast = string.format('Fetched %d %s from map', count, noun),
         sev   = 'info',
     }
 end
