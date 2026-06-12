@@ -105,6 +105,14 @@ This is the first tag after a long quiet period — `sms.version` had been froze
 
 ## ME-mod
 
+### [0.25.1] — 2026-06-12
+
+**Added**
+- `prefab_modules.absent(list)` — list-shaped sibling of `missing()` that filters a Community manifest entry's `required_modules` array to the not-installed subset.
+
+**Changed**
+- Community tab: a prefab's third-party mod dependency now surfaces as a **yellow warning line above the "Add to my library" button**, shown **only** when you don't have that mod installed. The existing plain "requires mods" info line (which lists all required mods) is unchanged.
+
 ### [0.25.0] — 2026-06-12
 
 **Added**

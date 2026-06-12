@@ -58,4 +58,30 @@ check('missing carries display_name + count', miss[1].display_name == 'UH-60L Bl
 check('missing empty when no req', #pm.missing({ meta = {} }, { plugin_present = plugin_present }) == 0)
 check('missing empty on bad prefab', #pm.missing(nil) == 0)
 
+-- absent(): list-shaped sibling of missing() for the Community manifest entry,
+-- whose required_modules is an ARRAY of { id, display_name, count } (not a map).
+local function present_only_a4(id) return id == 'A-4E-C' end
+local list = {
+    { id = 'UH-60L', display_name = 'UH-60L Black Hawk', count = 3 },
+    { id = 'A-4E-C', display_name = 'A-4E-C', count = 1 },
+}
+local ab = pm.absent(list, { plugin_present = present_only_a4 })
+check('absent returns 1 entry (UH-60L absent)', #ab == 1 and ab[1].id == 'UH-60L', #ab)
+check('absent carries display_name + count', ab[1].display_name == 'UH-60L Black Hawk' and ab[1].count == 3)
+
+-- absent(): all present -> empty.
+local function present_all(_) return true end
+check('absent empty when all present', #pm.absent(list, { plugin_present = present_all }) == 0)
+
+-- absent(): multiple missing sort by id; display_name falls back to id.
+local function present_none(_) return false end
+local many = { { id = 'Zulu' }, { id = 'Alpha', display_name = 'Alpha Mod' } }
+local ab2 = pm.absent(many, { plugin_present = present_none })
+check('absent sorts by id', #ab2 == 2 and ab2[1].id == 'Alpha' and ab2[2].id == 'Zulu')
+check('absent display_name falls back to id', ab2[2].display_name == 'Zulu')
+
+-- absent(): bad input -> empty, never throws.
+check('absent empty on non-table', #pm.absent('nope') == 0)
+check('absent empty on nil', #pm.absent(nil) == 0)
+
 os.exit(failures == 0 and 0 or 1)

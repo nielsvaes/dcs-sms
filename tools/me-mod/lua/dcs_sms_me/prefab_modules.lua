@@ -171,4 +171,34 @@ function M.missing(prefab, deps)
     return out
 end
 
+-- M.absent(list [, deps]) -> { {id, display_name, count}, ... }
+-- List-shaped sibling of M.missing for the Community manifest entry, whose
+-- `required_modules` is an ARRAY of { id, display_name, count } (not a map).
+-- Returns the subset whose providing plugin is NOT installed, sorted by id.
+-- Same plugin-present check + same fail-safe as M.missing (can't tell ->
+-- present -> not reported). Bad input -> {}; never throws.
+function M.absent(list, deps)
+    if type(list) ~= 'table' then return {} end
+    deps = deps or {}
+    local plugin_present = deps.plugin_present or default_plugin_present
+
+    local out = {}
+    for _, rec in ipairs(list) do
+        if type(rec) == 'table' and type(rec.id) == 'string' and rec.id ~= '' then
+            local got, present = pcall(plugin_present, rec.id)
+            -- Report missing ONLY when the check succeeded and says absent.
+            if got and present == false then
+                out[#out + 1] = {
+                    id = rec.id,
+                    display_name = (type(rec.display_name) == 'string' and rec.display_name ~= ''
+                                    and rec.display_name) or rec.id,
+                    count = tonumber(rec.count) or 0,
+                }
+            end
+        end
+    end
+    table.sort(out, function(a, b) return a.id < b.id end)
+    return out
+end
+
 return M

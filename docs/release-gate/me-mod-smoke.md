@@ -515,6 +515,7 @@ condition, one out-picture/out-sound action, one do-script.
 - [ ] Place a prefab whose required mod is NOT installed → "Missing mods" modal lists the mod + object count; "Cancel" aborts, "Place anyway" proceeds.
 - [ ] Prefab Manager list shows a non-zero `M` count for a mod-dependent prefab.
 - [ ] Community tab detail shows the "requires mods: …" line for an entry whose index.json carries required_modules.
+- [ ] Community tab: select an entry needing a mod you DON'T have → a yellow "You don't have: …" line appears above the Add button naming it; an entry needing only mods you DO have → no yellow line (plain "requires mods" info line still shown); a mod-free entry → neither.
 
 ## Prefab Manager — save folder dialog (added 0.24.0)
 

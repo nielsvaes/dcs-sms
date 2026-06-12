@@ -84,6 +84,10 @@ local SkinUtils;     do local ok, m = pcall(require, 'SkinUtils');              
 local image_fit;     do local ok, m = pcall(require, 'dcs_sms_me.community_image_fit');    if ok then image_fit    = m end end
 local image_window;  do local ok, m = pcall(require, 'dcs_sms_me.community_image_window'); if ok then image_window = m end end
 
+-- Missing-mod detection: filters a manifest entry's required_modules to the
+-- mods that aren't installed (M.absent). Guarded like every other require.
+local prefab_modules; do local ok, m = pcall(require, 'dcs_sms_me.prefab_modules'); if ok then prefab_modules = m end end
+
 -- Apply a skin by name, fully guarded. Copied from prefab_manager.lua's
 -- try_skin shape (the codebase keeps a local copy per module). Only the skin
 -- names this tab actually uses are wired; anything else falls through to the
@@ -97,6 +101,7 @@ local function try_skin(widget, skin_name)
             elseif skin_name == 'sms_grid'        then s = sms_skins.grid()
             elseif skin_name == 'sms_grid_header' then s = sms_skins.grid_header()
             elseif skin_name == 'sms_separator'   then s = sms_skins.separator()
+            elseif skin_name == 'static_yellow'   then s = sms_skins.static_yellow()
             end
         end
         if not s and Skin then
@@ -327,14 +332,34 @@ function M.build(parent, deps)
     end
 
     update_detail = function()
+        local e = selected_entry()
         pcall(function()
             if W.detail and W.detail.setText then
-                W.detail:setText(entry_detail_text(selected_entry()))
+                W.detail:setText(entry_detail_text(e))
+            end
+        end)
+        -- Missing-mod warning: only mods this entry requires AND that aren't
+        -- installed. Empty -> the yellow line stays hidden. (Authoritative
+        -- visibility/placement happens in relayout off the W.mod_warn_on flag.)
+        pcall(function()
+            local miss = (e and prefab_modules and prefab_modules.absent
+                          and prefab_modules.absent(e.required_modules)) or {}
+            if #miss > 0 then
+                local names = {}
+                for _, m in ipairs(miss) do names[#names + 1] = m.display_name or m.id end
+                if W.mod_warn and W.mod_warn.setText then
+                    W.mod_warn:setText('\226\154\160 You don\'t have: ' .. table.concat(names, ', '))
+                end
+                W.mod_warn_on = true
+            else
+                W.mod_warn_on = false
             end
         end)
         update_import_btn()
-        -- Re-sync the image panel to the (possibly new) selection. Guarded in
-        -- case this runs before sync_media is assigned (build-time ordering).
+        -- Re-flow so the warning row appears/disappears for this selection,
+        -- then re-sync the image panel. Both guarded (relayout/sync_media are
+        -- forward-declared; may be unassigned during build-time ordering).
+        pcall(function() if relayout then relayout(W.cw, W.ch) end end)
         pcall(function() if sync_media then sync_media() end end)
     end
 
@@ -644,6 +669,17 @@ function M.build(parent, deps)
         pcall(function() if W.detail.setText then W.detail:setText(entry_detail_text(nil)) end end)
     end
 
+    -- Yellow "you're missing a required mod" warning line. Hidden until a
+    -- selected entry needs a mod that isn't installed (update_detail decides);
+    -- relayout reserves a row for it just above the import button when shown.
+    W.mod_warn = track(Static and Static.new())
+    if W.mod_warn then
+        try_skin(W.mod_warn, 'static_yellow')
+        pcall(function() if W.mod_warn.setText then W.mod_warn:setText('') end end)
+        pcall(function() if W.mod_warn.setVisible then W.mod_warn:setVisible(false) end end)
+    end
+    W.mod_warn_on = false
+
     -- ＋ Add to my library button. Set the label up front so it's never blank
     -- before the first selection (update_import_btn refines it per-selection).
     W.import_btn = track(Button and Button.new())
@@ -799,7 +835,12 @@ function M.build(parent, deps)
         local import_h        = ROW_H
         local import_y        = bottom - import_h
         local top             = chips_bottom + GAP
-        local content_bottom  = import_y - GAP   -- description + image panel live above this
+        -- Reserve a one-row band for the missing-mod warning just above the
+        -- import button when it's active (flag set by update_detail). Hidden ->
+        -- warn_h = 0, so the legacy geometry is byte-for-byte unchanged.
+        local warn_h          = (W.mod_warn_on and W.mod_warn) and ROW_H or 0
+        local warn_y          = import_y - GAP - warn_h
+        local content_bottom  = import_y - GAP - ((warn_h > 0) and (warn_h + GAP) or 0)
 
         -- Set visibility on a media widget (set_visible / setVisible).
         local function vis(w, on)
@@ -807,6 +848,11 @@ function M.build(parent, deps)
             if w.set_visible then pcall(function() w:set_visible(on) end)
             elseif w.setVisible then pcall(function() w:setVisible(on) end) end
         end
+
+        -- Position + show/hide the warning band (applies to BOTH layout paths
+        -- below, which each stop their content at content_bottom).
+        if warn_h > 0 then bounds(W.mod_warn, right_x, warn_y, detail_w, warn_h) end
+        vis(W.mod_warn, (W.mod_warn_on and true) or false)
 
         local n = #(W.cur_images or {})
         if n <= 0 then
