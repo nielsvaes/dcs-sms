@@ -198,11 +198,12 @@ You do **not** have:
 | `prefab_safe_load.lua` | Data-only Lua parser/validator. Parses (never executes) a prefab's `return {…}` against a strict literal-data grammar; rejects anything with calls, globals, operators, or function defs. Used by the community loader so untrusted files never reach `dofile`. |
 | `community_config.lua` | Community-library endpoints + schema constants (`RAW_BASE`, manifest path, `Community` folder, schema version). |
 | `community_manifest.lua` | Parse/validate the `index.json` manifest + pure search/sort/tag-filter helpers. |
+| `community_meta.lua` | Parse a prefab's `<stem>.meta.json` sidecar — currently just the `images` screenshot list the Community tab previews. Pure + unit-tested. |
 | `community_cache.lua` | Persist/restore the last-fetched manifest JSON for offline browsing. |
 | `community_import.lua` | Adopt a community prefab: data-only validate (safe-load), then write into the user's `Community/` folder. No SHA-256 check — authenticity comes from the cert-verified HTTPS fetch. |
 | `community_fetch.lua` | Non-blocking fetch orchestration — a coroutine pumped by the UpdateManager tick over an injectable transport. |
 | `community_transport.lua` | Real LuaSec/LuaSocket HTTPS transport (DCS-only); degrades gracefully when LuaSec is absent. Reads the response in bounded chunks per poll so a fast/large download never stalls the editor. |
-| `community_tab.lua` | The Community tab UI in the Prefab Manager (browse/search/sort/tags/detail/import). |
+| `community_tab.lua` | The Community tab UI in the Prefab Manager (browse/search/sort/tags/detail/import + the right-column image-preview panel: lazy screenshot fetch via a dedicated `W.media_job` slot, disk cache, `◀ i / N ▶` navigation, aspect-correct fit-to-column). |
 | `lib_path.lua` | Builds the `package.cpath`/`path` entries for the bundled LuaSec payload under `dcs-sms/lib/`. |
 | `vendor/json.lua` | Vendored decode-only JSON. |
 

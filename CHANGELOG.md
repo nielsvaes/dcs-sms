@@ -105,6 +105,19 @@ This is the first tag after a long quiet period — `sms.version` had been froze
 
 ## ME-mod
 
+### [0.25.0] — 2026-06-12
+
+**Added**
+- Community tab image previews: selecting a community prefab now shows its
+  screenshots on the right, below the description. Images come from the
+  prefab's `<stem>.meta.json` sidecar (`images` array), are downloaded lazily
+  over the existing HTTPS transport, and cached under
+  `Saved Games/DCS/dcs-sms/community-images/`. One image shows at a time with
+  `◀ i / N ▶` navigation; it scales to the column width with aspect ratio
+  preserved and re-fits live as the splitter or window is resized. Degrades
+  silently (panel collapses, description fills the column) when a prefab has no
+  images or networking is unavailable.
+
 ### [0.24.1] — 2026-06-11
 
 **Fixed**

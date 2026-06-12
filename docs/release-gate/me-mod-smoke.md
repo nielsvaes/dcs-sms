@@ -471,6 +471,7 @@ For each form above: run the apply, hit Ctrl+Z (or whatever the ME's undo key is
 - [ ] Click **＋ Add to my library** → status confirms "Imported … → Community/"; switch to My Prefabs → a `Community` folder now holds the prefab; place it normally.
 - [ ] Re-select the same community prefab → button shows **Imported ✓** (disabled).
 - [ ] Click **⟳ Refresh** → re-fetches; "last synced" time updates.
+- [ ] **Image previews (me-mod ≥ 0.25.0):** select a prefab that has screenshots (e.g. `snow-city`) → an image appears on the right, below the description, scaled to the column. With >1 image, `◀ i / N ▶` shows and the arrows cycle (wrapping). Drag the splitter / resize the window → the image rescales and keeps its aspect ratio (no stretching). Select a prefab with no images → the panel collapses and the description fills the column. With `lib/` removed (no networking), selecting a prefab shows no image and does not error.
 - [ ] **Degrades gracefully:** with the `lib/` payload removed, open Community → it shows the cached catalog (or empty) and Refresh reports "secure networking unavailable"; the rest of the Prefab Manager is unaffected.
 - [ ] **Tamper check (optional):** point `community_config.RAW_BASE` at a file whose bytes don't match its manifest sha256 → import is refused with a sha256-mismatch message; no file is written.
 - [ ] Tab buttons don't visually collide with the SMSWindow title bar; the My-Prefabs panel looks identical to before (grid same size) and still works (place a prefab, rename, undo).
