@@ -306,6 +306,29 @@ local r9 = timport.inject(plan_skip, { bindings = {
 check(r9.count == 1 and trigrules[1].actions[1].group == 42,
       'numeric-string binding coerced to number')
 
+-- LUA PREDICATE condition text must be dict-keyed on import. ED's
+-- saveTriggers routes EVERY condition rule's `text` through textToMis,
+-- which DESTROYS an un-keyed literal (sets rule.text = rule.KeyDict_text
+-- = nil). Without the KeyDict_text companion the Lua code vanishes on the
+-- first save — the "Lua predicate empties when the mission is saved" bug.
+local p_pred = {
+    { name = 'lua cond', type = 'once', eventlist = '',
+      conditions = {
+        { predicate = 'c_predicate', fields = { text = 'return MIZ.whatever' } } },
+      actions = {
+        { predicate = 'a_do_script', fields = { text = 'noop()' } } } },
+}
+local plan_pred = timport.resolve(p_pred, {}, { schema = s,
+    find_by_name = function() return nil end, target_flags = {}, prefab_flags = {} })
+trigrules = {}; inject_env.trigrules = trigrules
+local rp = timport.inject(plan_pred, {}, inject_env)
+check(rp.count == 1, 'predicate trigger injected')
+local pcond = trigrules[1] and trigrules[1].rules[1]
+check(pcond ~= nil and pcond.KeyDict_text ~= nil,
+      'c_predicate text dict-keyed (KeyDict_text companion present)')
+check(pcond ~= nil and pcond.text ~= 'return MIZ.whatever',
+      'c_predicate text routed through fix_dict, not stored as a raw literal')
+
 -- failed media reports ONCE even when referenced by multiple actions
 local p_nores2 = {
     { name = 'nores2', type = 'once', eventlist = '', conditions = {},

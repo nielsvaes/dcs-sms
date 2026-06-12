@@ -397,6 +397,15 @@ local function _trigger_apply_fields(entry, descr, fields, kind, predicate_canon
         radiotext  = 'ActionRadioText',
         comment    = 'ActionComment',
     }
+    -- Condition fields ED's saveTriggers also routes through the dictionary.
+    -- It runs EVERY condition rule's `text` through textToMis(rule, 'text',
+    -- rule.text, rule.KeyDict_text) (me_trigrules.lua:3897); with a nil
+    -- KeyDict_text that DESTROYS the value on save (rule.text becomes nil).
+    -- The only standard condition with a text field is c_predicate (LUA
+    -- PREDICATE). Mirror ED's on-disk label (DictKey_ActionText_<n>).
+    local CONDITION_DICT_FIELDS = {
+        text = 'ActionText',
+    }
 
     for k, v in pairs(fields) do
         local fd = _trigger_field_descr(descr, k)
@@ -420,6 +429,10 @@ local function _trigger_apply_fields(entry, descr, fields, kind, predicate_canon
             if not (k == 'text' and predicate_canonical == 'a_do_script') then
                 dict_comment = ACTION_DICT_FIELDS[k]
             end
+        elseif kind == 'condition' then
+            -- c_predicate.text must be dict-keyed too, or saveTriggers wipes
+            -- the Lua predicate on save (same mechanism as the action text).
+            dict_comment = CONDITION_DICT_FIELDS[k]
         end
 
         if dict_comment and type(resolved) == 'string'

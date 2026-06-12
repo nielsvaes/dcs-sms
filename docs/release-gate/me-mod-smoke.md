@@ -508,6 +508,12 @@ condition, one out-picture/out-sound action, one do-script.
       trigger panel refreshes if open.
 - [ ] Save the mission, reopen the .miz → imported triggers + media survived
       ED's save round-trip.
+- [ ] **Lua Predicate condition (regression, 0.25.1):** import a trigger whose
+      condition is a **Lua Predicate** (`X: LUA PREDICATE`, e.g. text
+      `return true`). Save the mission, reopen → the predicate text is still
+      there (NOT an empty box). Same check via the CLI:
+      `dcs-sms me trigger add-condition --trigger <name> --predicate predicate
+      text="return true"`, then save+reopen.
 
 ## Prefab mod dependencies (me-mod ≥ 0.23.0)
 

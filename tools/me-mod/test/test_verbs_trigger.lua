@@ -70,6 +70,12 @@ Predicates.rulesDescr = {
           Predicates.UNIT_SELECTOR,
           { id = 'zone', type = 'combo', comboFunc = Predicates.zonesLister },
       } },
+    -- LUA PREDICATE: its `text` field must be dict-keyed on save, exactly
+    -- like an action's text (ED's saveTriggers routes every condition
+    -- rule's `text` through textToMis).
+    { name = 'c_predicate',
+      display = 'LUA PREDICATE',
+      fields = { { id = 'text', type = 'edit' } } },
     -- Pseudo-predicate keyed by string in rulesDescr (mirrors ED's `["or"]`).
     ['or'] = { name = 'or', display = 'OR', fields = {} },
 }
@@ -523,6 +529,29 @@ local function test_add_action_simple()
     assert_eq(r.predicate, 'a_set_flag', 'add_action: canonical predicate')
 end
 
+local function test_add_condition_predicate_text_routes_through_dict()
+    -- c_predicate's text field must go through fixDict (allocating a
+    -- DictKey_* + KeyDict_text companion). Without it, ED's saveTriggers
+    -- wipes the Lua predicate on save (rule.text becomes nil). Regression
+    -- guard for the "Lua predicate empties when the mission is saved" bug.
+    reset()
+    verbs.trigger_create({ type = 'once', name = 'PC1' })
+    local r = verbs.trigger_add_condition({
+        trigger = 'PC1', predicate = 'predicate',
+        fields = { text = 'return MIZ.whatever' } })
+    assert_true(r.ok, 'add_condition predicate: ok')
+    local raw = verbs.trigger_get({ name = 'PC1', raw = true })
+    local rule = raw.trigger.rules[1]
+    assert_eq(rule.KeyDict_text ~= nil, true,
+              'add_condition predicate: KeyDict_text companion set')
+    assert_contains(rule.text, 'DictKey_',
+                    'add_condition predicate: text replaced with DictKey_*')
+    -- Reading via get (resolved) should give back the literal Lua code.
+    local got = verbs.trigger_get({ name = 'PC1' })
+    assert_eq(got.conditions[1].fields.text, 'return MIZ.whatever',
+              'add_condition predicate read: literal text resolved')
+end
+
 local function test_add_action_text_routes_through_dict()
     -- a_message_to_all's text field should go through fixDict (allocating
     -- a DictKey_*). On read-back, the verb resolves it back to the literal.
@@ -779,6 +808,7 @@ local tests = {
     test_add_condition_unit_ref_unknown_name,
     test_add_condition_unknown_field,
     test_add_condition_arg_validation,
+    test_add_condition_predicate_text_routes_through_dict,
     test_remove_condition_happy,
     test_remove_condition_oob,
     test_add_action_simple,

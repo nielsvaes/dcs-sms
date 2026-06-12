@@ -143,6 +143,21 @@ local ACTION_DICT_FIELDS = {
     comment   = 'ActionComment',
 }
 
+-- Condition fields that round-trip through the dictionary. ED's
+-- saveTriggers routes EVERY condition rule's `text` through
+-- mod_dictionary.textToMis(rule, 'text', rule.text, rule.KeyDict_text)
+-- (me_trigrules.lua:3897) — and textToMis with a nil key destroys the
+-- value (sets rule.text = nil). The only standard condition with a text
+-- field is c_predicate (LUA PREDICATE), so without allocating the
+-- KeyDict_text companion here the imported Lua code is wiped on the first
+-- save. ED labels the c_predicate text key 'ActionText' on disk (verified:
+-- DictKey_ActionText_<n> in a native mission), so we mirror that — the
+-- label only names the generated DictKey anyway (ED reads KeyDict_text by
+-- reference, not by name).
+local CONDITION_DICT_FIELDS = {
+    text = 'ActionText',
+}
+
 -- Build one trigrules sub-entry (rule or action) from a portable entry.
 -- Returns entry | nil (dropped), err_or_nil.
 local function build_entry(portable_entry, kind, t_idx, list_name, e_idx,
@@ -230,10 +245,17 @@ local function build_entry(portable_entry, kind, t_idx, list_name, e_idx,
             end
             entry[field] = res_key
         else
-            if kind == 'action' and ACTION_DICT_FIELDS[field]
-                    and type(v) == 'string' and canonical ~= 'a_do_script'
+            -- Decide whether this field must be dict-keyed so ED's
+            -- saveTriggers round-trips it (else it's wiped on save).
+            local dict_label
+            if kind == 'action' and canonical ~= 'a_do_script' then
+                dict_label = ACTION_DICT_FIELDS[field]
+            elseif kind == 'condition' then
+                dict_label = CONDITION_DICT_FIELDS[field]
+            end
+            if dict_label and type(v) == 'string'
                     and type(env.fix_dict) == 'function' then
-                pcall(env.fix_dict, entry, field, v, ACTION_DICT_FIELDS[field])
+                pcall(env.fix_dict, entry, field, v, dict_label)
             else
                 entry[field] = v
             end
