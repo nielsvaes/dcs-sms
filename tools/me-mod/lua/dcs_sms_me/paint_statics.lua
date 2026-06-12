@@ -354,16 +354,83 @@ local function purge_registry(group_set)
     W.registry = kept
 end
 
+-- Fast batch removal for tool-placed statics. ED's Mission.remove_group
+-- costs ~100 ms per group — it rescans every other group's tasks and
+-- refreshes the Unit List on each call (measured: 147 statics in 16.3 s).
+-- A painted static is exactly the inverse of our inject_group — single
+-- unit, no tasks, no waypoint/zone links, nothing targeting it — so we
+-- reverse those registrations directly and refresh the Unit List once
+-- per batch. Measured: 144 groups in 3 ms. Only ever use this on groups
+-- this tool created.
+--
+-- Returns (removed_set, errors): set keyed by group table for the ones
+-- actually removed.
+local function batch_remove_groups(groups)
+    local removed, errors = {}, 0
+    local ok_m, Mission = pcall(require, 'me_mission')
+    if not ok_m then return removed, #(groups or {}) end
+    local MapWindow; pcall(function() MapWindow = require('me_map_window') end)
+    for _, g in ipairs(groups or {}) do
+        local ok = pcall(function()
+            -- Selection hygiene (mirrors Mission.remove_group): if the
+            -- group is part of the live selection / mounted panel, detach
+            -- it before pulling the tables out from under the ME.
+            pcall(function()
+                if MapWindow and MapWindow.removeSelectedGroups then MapWindow.removeSelectedGroups(g) end
+                if MapWindow and MapWindow.selectedGroup == g then
+                    MapWindow.selectedGroup = nil
+                    if MapWindow.setSelectedUnit then MapWindow.setSelectedUnit(nil) end
+                end
+            end)
+            pcall(Mission.remove_group_map_objects, g)
+            -- Warehouse-category statics own a warehouse record.
+            pcall(function()
+                if type(Mission.delWarehouse) == 'function' then
+                    for _, u in ipairs(g.units or {}) do Mission.delWarehouse(u.unitId) end
+                end
+            end)
+            local arr = g.boss and g.boss.static and g.boss.static.group
+            local found = false
+            if arr then
+                for i = #arr, 1, -1 do
+                    if arr[i] == g then table.remove(arr, i); found = true; break end
+                end
+            end
+            -- Not in the array ⇒ already deleted outside the tool (user
+            -- Del-key, File>New, …). Finish the lookup-table cleanup and
+            -- count it as removed — the goal state ("group gone") holds.
+            if not found then
+                log_write(log.INFO, 'batch remove: "' .. tostring(g.name) .. '" was already gone')
+            end
+            -- Identity-guarded: only clear a lookup entry that still points
+            -- at OUR table, so a name/id reused after an external delete is
+            -- never clobbered.
+            for _, u in ipairs(g.units or {}) do
+                if type(Mission.unit_by_name) == 'table' and Mission.unit_by_name[u.name] == u then
+                    Mission.unit_by_name[u.name] = nil
+                end
+                if type(Mission.unit_by_id) == 'table' and Mission.unit_by_id[u.unitId] == u then
+                    Mission.unit_by_id[u.unitId] = nil
+                end
+            end
+            if type(Mission.group_by_name) == 'table' and Mission.group_by_name[g.name] == g then
+                Mission.group_by_name[g.name] = nil
+            end
+            if type(Mission.group_by_id) == 'table' and Mission.group_by_id[g.groupId] == g then
+                Mission.group_by_id[g.groupId] = nil
+            end
+        end)
+        if ok then removed[g] = true else errors = errors + 1 end
+    end
+    pcall(function() _G.panel_units_list.update() end)
+    return removed, errors
+end
+
 undo.register_handler('paint_statics', function(payload)
     if type(payload) ~= 'table' then return nil, 'bad paint undo payload' end
     if payload.kind == 'paint' then
-        local errors = 0
-        local set = {}
-        for _, g in ipairs(payload.groups or {}) do
-            local ok = prefab_ops._remove.group(g)
-            if ok then set[g] = true else errors = errors + 1 end
-        end
-        purge_registry(set)
+        local removed, errors = batch_remove_groups(payload.groups)
+        purge_registry(removed)
         return true, errors > 0 and (errors .. ' partial failures') or nil
     end
     return nil, 'unknown paint undo kind: ' .. tostring(payload.kind)
@@ -678,13 +745,28 @@ local function begin_stroke(wx, wy, opts)
     W.stroke_name_pattern = opts.name or get_name_pattern()
     W.stroke_groups = {}
     W.stroke_failed = 0
+    W.stroke_capped = false
     return true
 end
+
+-- Hard ceiling on statics committed per brush step. Commit costs ~0.5 ms
+-- per static; an extreme radius × density combination can imply thousands
+-- of placements in ONE drag event, which would freeze the editor mid-drag.
+-- When the cap trips we drop the excess and warn once per stroke.
+local MAX_COMMITS_PER_STEP = 250
 
 -- Extend the stroke with a brush position. Generates + commits.
 local function stroke_step(wx, wy)
     if not W.session then return 0 end
     local placements = W.session:step(wx, wy)
+    if #placements > MAX_COMMITS_PER_STEP then
+        for i = #placements, MAX_COMMITS_PER_STEP + 1, -1 do placements[i] = nil end
+        if not W.stroke_capped then
+            W.stroke_capped = true
+            set_status(('Brush capped at %d statics per step — lower density or radius for full coverage.')
+                :format(MAX_COMMITS_PER_STEP), 'warning')
+        end
+    end
     for _, p in ipairs(placements) do
         local g, err = commit_placement(p, W.stroke_country, W.stroke_name_pattern)
         if g then
@@ -1365,6 +1447,22 @@ function M._debug_palette_clear()
     W.palette, W.palette_sel = {}, nil
     render_palette()
     return { ok = true }
+end
+
+function M._debug_set_brush(radius, density, spacing)
+    if radius then
+        W.cfg.radius = radius
+        pcall(function() if W.radius_spin and W.radius_spin.setValue then W.radius_spin:setValue(radius) end end)
+    end
+    if density then
+        W.cfg.density = density
+        pcall(function() if W.density_spin and W.density_spin.setValue then W.density_spin:setValue(density) end end)
+    end
+    if spacing then
+        W.cfg.min_spacing = spacing
+        pcall(function() if W.spacing_spin and W.spacing_spin.setValue then W.spacing_spin:setValue(spacing) end end)
+    end
+    return { ok = true, radius = get_radius(), density = get_density(), spacing = get_min_spacing() }
 end
 
 function M._debug_eyedrop()
