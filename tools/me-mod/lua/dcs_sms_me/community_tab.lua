@@ -918,6 +918,12 @@ function M.build(parent, deps)
     -- Make sure the image at cur_img_idx is on screen: show it from cache if
     -- present, else kick a lazy download. No-op-safe when there are no images.
     ensure_current_image = function()
+        -- A previous image fetch may still be in flight (rapid ◀/▶). Drop it —
+        -- the token guard already neutralises its UI effect; clearing the slot
+        -- frees the socket promptly and mirrors start_media's own reset.
+        if W.media_kind == 'image' then
+            W.media_job = nil; W.media_kind = nil; W.media_pending = nil
+        end
         local rel = W.cur_images and W.cur_images[W.cur_img_idx]
         if not rel then W.img_state = 'none'; relayout(W.cw, W.ch); return end
         if not (paths and paths.community_image_path) then
@@ -1008,6 +1014,8 @@ function M.build(parent, deps)
     -- Completion: downloaded an image → cache to disk; show it if still wanted.
     local function on_image_done(job, pend)
         if not pend then return end
+        -- Cache the bytes regardless of staleness; the token/idx checks below
+        -- only gate whether this download updates the visible panel.
         local okw = write_file(pend.path, job.file_body)
         if pend.token ~= W.media_token then return end    -- selection moved on
         if pend.idx ~= W.cur_img_idx then return end       -- navigated away
