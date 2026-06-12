@@ -38,9 +38,14 @@ local ListBoxItem;  do local ok, m = pcall(require, 'ListBoxItem');  if ok then 
 local ToggleButton; do local ok, m = pcall(require, 'ToggleButton'); if ok then ToggleButton = m end end
 local Skin;         do local ok, m = pcall(require, 'Skin');         if ok then Skin         = m end end
 
+local Grid;           do local ok, m = pcall(require, 'Grid');           if ok then Grid           = m end end
+local GridHeaderCell; do local ok, m = pcall(require, 'GridHeaderCell'); if ok then GridHeaderCell = m end end
+
 local sms_window     = require('dcs_sms_me.sms_window')
 local sms_skins;     do local ok, m = pcall(require, 'dcs_sms_me.sms_skins'); if ok then sms_skins = m end end
 local skin_helper;   do local ok, m = pcall(require, 'dcs_sms_me.skin_helper'); if ok then skin_helper = m end end
+local clearable_edit; do local ok, m = pcall(require, 'dcs_sms_me.clearable_edit'); if ok then clearable_edit = m end end
+local selection;     do local ok, m = pcall(require, 'dcs_sms_me.selection'); if ok then selection = m end end
 local version        = require('dcs_sms_me.version')
 local undo           = require('dcs_sms_me.undo')
 local scatter        = require('dcs_sms_me.paint_scatter')
@@ -71,8 +76,15 @@ local W = {
     sms_window = nil,
     window     = nil,
 
-    -- widgets
-    type_label = nil, type_input = nil,
+    -- widgets — catalog browser region
+    catalog_label = nil, category_combo = nil, search_edit = nil,
+    catalog_grid = nil, add_btn = nil,
+    -- widgets — palette region
+    sep1 = nil, palette_label = nil, palette_grid = nil,
+    weight_label = nil, weight_spin = nil, weight_set_btn = nil,
+    remove_btn = nil, eyedrop_btn = nil,
+    -- widgets — paint settings region
+    sep2 = nil,
     country_label = nil, country_combo = nil, country_filter_btn = nil,
     name_label = nil, name_input = nil,
     radius_label = nil, radius_spin = nil,
@@ -80,12 +92,24 @@ local W = {
     spacing_label = nil, spacing_spin = nil,
     paint_btn = nil,
 
+    -- catalog state
+    catalog_rows    = {},   -- full row list for the selected country
+    catalog_visible = {},   -- after category + search filter
+    catalog_sel     = nil,  -- 1-based index into catalog_visible
+    catalog_country = nil,  -- country the catalog was built for
+    cat_filter      = nil,  -- category label, nil = all
+    search_text     = '',
+
+    -- the palette ("bucket"): rows { kind='static', type, display,
+    -- shape_name, category, rate, weight }
+    palette     = {},
+    palette_sel = nil,
+
     -- settings mirror (authoritative when widgets are absent, e.g. headless)
     cfg = {
         radius      = 25,    -- meters
         density     = 1.0,   -- objects per 100 m²
         min_spacing = 4,     -- meters
-        type_name   = 'Oil Barrel',
         name        = '',
     },
 
@@ -146,11 +170,6 @@ end
 local function get_radius()      return math.max(1, spin_value(W.radius_spin, W.cfg.radius)) end
 local function get_density()     return math.max(0.01, spin_value(W.density_spin, W.cfg.density)) end
 local function get_min_spacing() return math.max(0, spin_value(W.spacing_spin, W.cfg.min_spacing)) end
-local function get_type_name()
-    local t = edit_text(W.type_input, W.cfg.type_name)
-    t = t:gsub('^%s+', ''):gsub('%s+$', '')
-    return t ~= '' and t or W.cfg.type_name
-end
 local function get_name_pattern()
     return edit_text(W.name_input, W.cfg.name)
 end
@@ -424,14 +443,203 @@ end
 -- Stroke machinery (shared by the live map state and _debug_stroke)
 -- ---------------------------------------------------------------------------
 
--- Resolve the current palette. M1: one row from the type input. (M2 swaps
--- this to the weighted palette list.)
+-- The live palette. Painting needs at least one row with positive weight.
 local function current_palette()
-    local row, err = static_catalog.resolve_type(get_type_name())
-    if not row then return nil, err end
-    row.kind = 'static'
-    row.weight = 1
-    return { row }
+    if #W.palette == 0 then
+        return nil, 'palette is empty — add static types from the catalog or "Add selected"'
+    end
+    local total = 0
+    for _, row in ipairs(W.palette) do total = total + (tonumber(row.weight) or 0) end
+    if total <= 0 then
+        return nil, 'all palette weights are 0 — raise at least one weight'
+    end
+    return W.palette
+end
+
+-- ---------------------------------------------------------------------------
+-- Catalog browser + palette list
+-- ---------------------------------------------------------------------------
+local function make_cell(text, tooltip)
+    local s = Static.new(tostring(text or ''))
+    try_skin(s, 'staticSkin_ME')
+    if tooltip and s.setTooltipText then
+        pcall(function() s:setTooltipText(tostring(tooltip)) end)
+    end
+    return s
+end
+
+local function render_catalog()
+    pcall(function()
+        if not (W.catalog_grid and W.catalog_grid.removeAllRows) then return end
+        W.catalog_grid:removeAllRows()
+        for i, r in ipairs(W.catalog_visible) do
+            W.catalog_grid:insertRow(20)
+            local row = i - 1
+            W.catalog_grid:setCell(0, row, make_cell(r.display, r.type))
+            W.catalog_grid:setCell(1, row, make_cell(r.category))
+        end
+        if W.catalog_sel and W.catalog_grid.selectRow then
+            pcall(function() W.catalog_grid:selectRow(W.catalog_sel - 1) end)
+        end
+    end)
+end
+
+local function render_palette()
+    pcall(function()
+        if not (W.palette_grid and W.palette_grid.removeAllRows) then return end
+        W.palette_grid:removeAllRows()
+        for i, r in ipairs(W.palette) do
+            W.palette_grid:insertRow(20)
+            local row = i - 1
+            W.palette_grid:setCell(0, row, make_cell(r.display, r.type))
+            W.palette_grid:setCell(1, row, make_cell(r.weight))
+        end
+        if W.palette_sel and W.palette_grid.selectRow then
+            pcall(function() W.palette_grid:selectRow(W.palette_sel - 1) end)
+        end
+    end)
+end
+
+-- Re-apply category + search filters to the catalog rows and re-render.
+local function refresh_catalog_view()
+    W.catalog_visible = static_catalog.filter(W.catalog_rows, {
+        category = W.cat_filter,
+        search   = W.search_text,
+    })
+    W.catalog_sel = (#W.catalog_visible > 0) and 1 or nil
+    render_catalog()
+end
+
+local ALL_CATEGORIES = '<all categories>'
+
+local function populate_category_combo()
+    pcall(function()
+        if not (W.category_combo and W.category_combo.removeAllItems and ListBoxItem) then return end
+        local prev = W.cat_filter
+        W.category_combo:removeAllItems()
+        local all_item = ListBoxItem.new(ALL_CATEGORIES)
+        W.category_combo:insertItem(all_item)
+        local pick = all_item
+        for _, label in ipairs(static_catalog.categories(W.catalog_rows)) do
+            local item = ListBoxItem.new(label)
+            W.category_combo:insertItem(item)
+            if label == prev then pick = item end
+        end
+        if pick == all_item then W.cat_filter = nil end
+        if W.category_combo.selectItem then
+            pcall(function() W.category_combo:selectItem(pick) end)
+        end
+    end)
+end
+
+-- Rebuild the catalog rows for the currently selected country. No-op when
+-- the country didn't change (unless force).
+local function populate_catalog(force)
+    local country = get_country_name() or pick_default_country()
+    if not country then return end
+    if country == W.catalog_country and not force then return end
+    W.catalog_country = country
+    local rows, err = static_catalog.list(country)
+    W.catalog_rows = rows
+    if err then
+        log_write(log.WARNING, 'catalog: ' .. tostring(err))
+        set_status('Catalog: ' .. tostring(err), 'warning')
+    end
+    populate_category_combo()
+    refresh_catalog_view()
+end
+
+local function add_palette_row(row)
+    if not row then return end
+    for _, existing in ipairs(W.palette) do
+        if existing.type == row.type then
+            set_status('"' .. row.display .. '" is already in the palette.', 'warning')
+            return
+        end
+    end
+    W.palette[#W.palette + 1] = {
+        kind       = 'static',
+        type       = row.type,
+        display    = row.display,
+        shape_name = row.shape_name,
+        category   = row.category,
+        rate       = row.rate,
+        weight     = 1,
+    }
+    W.palette_sel = #W.palette
+    render_palette()
+    set_status('Added "' .. row.display .. '" to the palette.')
+end
+
+local function on_add_from_catalog()
+    local r = W.catalog_sel and W.catalog_visible[W.catalog_sel]
+    if not r then
+        set_status('Select a type in the catalog first.', 'warning')
+        return
+    end
+    add_palette_row(r)
+end
+
+-- Eyedropper: pull static types out of the current map selection.
+local function on_add_from_selection()
+    if not (selection and selection.snapshot) then
+        set_status('Selection module unavailable.', 'error')
+        return
+    end
+    local snap
+    local ok = pcall(function() snap = selection.snapshot() end)
+    if not ok or type(snap) ~= 'table' or #(snap.groups or {}) == 0 then
+        set_status('Nothing selected on the map — select a static first.', 'warning')
+        return
+    end
+    local added, skipped = 0, 0
+    for _, g in ipairs(snap.groups) do
+        for _, u in ipairs((type(g) == 'table' and g.units) or {}) do
+            if type(u) == 'table' and type(u.type) == 'string' then
+                local row = static_catalog.resolve_type(u.type)
+                if row then
+                    local before = #W.palette
+                    add_palette_row(row)
+                    if #W.palette > before then added = added + 1 end
+                else
+                    skipped = skipped + 1
+                end
+            end
+        end
+    end
+    if added > 0 then
+        set_status('Eyedropper: added ' .. added .. ' type(s)'
+            .. (skipped > 0 and (', skipped ' .. skipped .. ' non-static') or '') .. '.',
+            'success')
+    elseif skipped > 0 then
+        set_status('Eyedropper: selection has no static-placeable types.', 'warning')
+    end
+end
+
+local function on_remove_palette_row()
+    local i = W.palette_sel
+    if not (i and W.palette[i]) then
+        set_status('Select a palette row first.', 'warning')
+        return
+    end
+    local removed = table.remove(W.palette, i)
+    if W.palette_sel > #W.palette then
+        W.palette_sel = (#W.palette > 0) and #W.palette or nil
+    end
+    render_palette()
+    set_status('Removed "' .. tostring(removed.display) .. '" from the palette.')
+end
+
+local function on_set_weight()
+    local i = W.palette_sel
+    if not (i and W.palette[i]) then
+        set_status('Select a palette row first.', 'warning')
+        return
+    end
+    local w = math.max(0, spin_value(W.weight_spin, 1))
+    W.palette[i].weight = w
+    render_palette()
+    set_status(('Weight of "%s" set to %g.'):format(W.palette[i].display, w))
 end
 
 local function registry_points()
@@ -676,10 +884,50 @@ local function relayout(x, y, w, h)
     local input_w = w - label_w - gap
     local cur_y = y
 
-    set(W.type_label, x, cur_y, label_w, ROW_H)
-    set(W.type_input, input_x, cur_y, input_w, ROW_H)
-    cur_y = cur_y + ROW_PITCH
+    -- Catalog browser region.
+    set(W.catalog_label, x, cur_y, w, ROW_H)
+    cur_y = cur_y + 24
 
+    local combo_w = math.floor(w * 0.45)
+    set(W.category_combo, x, cur_y, combo_w, ROW_H)
+    pcall(function()
+        if W.search_edit and W.search_edit.set_bounds then
+            W.search_edit:set_bounds(x + combo_w + gap, cur_y, w - combo_w - gap, ROW_H)
+        end
+    end)
+    cur_y = cur_y + 28
+
+    -- The catalog grid soaks up the slack when the window grows: it gets
+    -- whatever height remains after the fixed-height rows below.
+    local fixed_below = 32 + 8 + 24 + 126 + 30 + 8 + 30 + 30 + 30 + 30 + 30 + 36
+    local catalog_h = math.max(100, h - (cur_y - y) - fixed_below)
+    set(W.catalog_grid, x, cur_y, w, catalog_h)
+    cur_y = cur_y + catalog_h + 6
+
+    set(W.add_btn, x, cur_y, w, 24)
+    cur_y = cur_y + 32
+
+    set(W.sep1, x, cur_y, w, 1)
+    cur_y = cur_y + 8
+
+    -- Palette region.
+    set(W.palette_label, x, cur_y, w, ROW_H)
+    cur_y = cur_y + 24
+
+    set(W.palette_grid, x, cur_y, w, 120)
+    cur_y = cur_y + 126
+
+    set(W.weight_label, x, cur_y, 55, ROW_H)
+    set(W.weight_spin, x + 55, cur_y, 70, ROW_H)
+    set(W.weight_set_btn, x + 131, cur_y, 50, ROW_H)
+    set(W.remove_btn, x + 187, cur_y, 70, ROW_H)
+    set(W.eyedrop_btn, x + 263, cur_y, w - 263, ROW_H)
+    cur_y = cur_y + 30
+
+    set(W.sep2, x, cur_y, w, 1)
+    cur_y = cur_y + 8
+
+    -- Paint settings region.
     local filter_w = 80
     set(W.country_label, x, cur_y, label_w, ROW_H)
     set(W.country_combo, input_x, cur_y,
@@ -712,8 +960,8 @@ end
 local function build_window()
     W.sms_window = sms_window.new({
         title    = 'Paint Statics',
-        size     = { w = 420, h = 420 },
-        min_size = { w = 380, h = 380 },
+        size     = { w = 500, h = 780 },
+        min_size = { w = 470, h = 700 },
         on_resize = function(swin, x, y, w, h)
             relayout(x, y, w, h)
         end,
@@ -781,8 +1029,162 @@ local function build_window()
         return s
     end
 
-    W.type_label = mk_label('Static type:')
-    W.type_input = mk_edit(W.cfg.type_name, 'DCS unit type id of the static to paint (e.g. "Oil Barrel")')
+    -- A selectable 2-column grid (mirrors prefab_manager's pattern: Grid's
+    -- default onMouseDown doesn't select; override it, and double-click
+    -- triggers on_activate).
+    local function mk_grid(col_defs, on_select, on_activate)
+        local g
+        if Grid and GridHeaderCell then
+            g = Grid.new()
+            try_skin(g, 'sms_grid')
+            for _, c in ipairs(col_defs) do
+                local hc = GridHeaderCell.new()
+                try_skin(hc, 'sms_grid_header')
+                pcall(function() hc:setText(c.label) end)
+                g:insertColumn(c.width, hc)
+            end
+            g.onMouseDown = function(self, x, y, button)
+                if button ~= 1 then return end
+                pcall(function()
+                    local _, row = self:getMouseCursorColumnRow(x, y)
+                    if row and row >= 0 then
+                        self:selectRow(row)
+                        on_select(row + 1)
+                    end
+                end)
+            end
+            g.onMouseDoubleClick = function(self, x, y, button)
+                if button ~= 1 then return end
+                pcall(function()
+                    local _, row = self:getMouseCursorColumnRow(x, y)
+                    if row and row >= 0 then
+                        self:selectRow(row)
+                        on_select(row + 1)
+                        if on_activate then on_activate(row + 1) end
+                    end
+                end)
+            end
+            if g.addSelectRowCallback then
+                pcall(function()
+                    g:addSelectRowCallback(function(_grid, _curr, _prev)
+                        pcall(function()
+                            local idx = g:getSelectedRow()
+                            if type(idx) == 'number' and idx >= 0 then on_select(idx + 1) end
+                        end)
+                    end)
+                end)
+            end
+        else
+            g = Static.new()
+            pcall(function() g:setText('(Grid unavailable)') end)
+            try_skin(g, 'staticSkin_ME')
+        end
+        insert(g)
+        return g
+    end
+
+    -- --- Catalog browser region ---
+    W.catalog_label = mk_label('Catalog — browse static types:')
+
+    if ComboList then
+        W.category_combo = ComboList.new()
+        try_skin(W.category_combo, 'comboListSkinNew_')
+        pcall(function()
+            if W.category_combo.addChangeCallback then
+                W.category_combo:addChangeCallback(function()
+                    pcall(function()
+                        local item = W.category_combo:getSelectedItem()
+                        local txt = item and item.getText and item:getText()
+                        W.cat_filter = (txt ~= ALL_CATEGORIES) and txt or nil
+                        refresh_catalog_view()
+                    end)
+                end)
+            end
+        end)
+        insert(W.category_combo)
+    else
+        W.category_combo = Static.new()
+        try_skin(W.category_combo, 'staticSkin_ME')
+        insert(W.category_combo)
+    end
+
+    if clearable_edit then
+        W.search_edit = clearable_edit.new(W.window, {
+            on_change = function(text)
+                W.search_text = text or ''
+                refresh_catalog_view()
+            end,
+        })
+    end
+    if not W.search_edit then
+        local fb = mk_edit('', 'Search the catalog')
+        W.search_edit = {
+            set_bounds = function(_, x, y, w, h) set(fb, x, y, w, h) end,
+            widget = fb,
+        }
+    end
+
+    W.catalog_grid = mk_grid(
+        { { label = 'Type', width = 270 }, { label = 'Category', width = 150 } },
+        function(i) W.catalog_sel = i end,
+        function(_) on_add_from_catalog() end)
+
+    if Button then
+        W.add_btn = Button.new()
+        pcall(function() W.add_btn:setText('Add to palette') end)
+        try_skin(W.add_btn, 'sms_button')
+        pcall(function() W.add_btn.onChange = on_add_from_catalog end)
+        insert(W.add_btn)
+    end
+
+    -- --- Palette region ---
+    W.sep1 = Static.new()
+    try_skin(W.sep1, 'sms_separator')
+    insert(W.sep1)
+
+    W.palette_label = mk_label('Palette — weighted mix to paint:')
+
+    W.palette_grid = mk_grid(
+        { { label = 'Type', width = 320 }, { label = 'Weight', width = 100 } },
+        function(i)
+            W.palette_sel = i
+            pcall(function()
+                local row = W.palette[i]
+                if row and W.weight_spin and W.weight_spin.setValue then
+                    W.weight_spin:setValue(row.weight)
+                end
+            end)
+        end,
+        nil)
+
+    W.weight_label = mk_label('Weight:')
+    W.weight_spin  = mk_spin(1, 0, 100, 1, false,
+        'Relative chance of this type per placement (0 = never)', nil)
+    if Button then
+        W.weight_set_btn = Button.new()
+        pcall(function() W.weight_set_btn:setText('Set') end)
+        try_skin(W.weight_set_btn, 'sms_button')
+        pcall(function() W.weight_set_btn.onChange = on_set_weight end)
+        insert(W.weight_set_btn)
+
+        W.remove_btn = Button.new()
+        pcall(function() W.remove_btn:setText('Remove') end)
+        try_skin(W.remove_btn, 'sms_button')
+        pcall(function() W.remove_btn.onChange = on_remove_palette_row end)
+        insert(W.remove_btn)
+
+        W.eyedrop_btn = Button.new()
+        pcall(function() W.eyedrop_btn:setText('Add selected from map') end)
+        try_skin(W.eyedrop_btn, 'sms_button')
+        pcall(function() W.eyedrop_btn:setTooltipText('Eyedropper: add the type(s) of the statics currently selected on the map') end)
+        pcall(function() W.eyedrop_btn.onChange = on_add_from_selection end)
+        insert(W.eyedrop_btn)
+    end
+
+    -- --- Paint settings region ---
+    W.sep2 = Static.new()
+    try_skin(W.sep2, 'sms_separator')
+    insert(W.sep2)
 
     W.country_label = mk_label('Country:')
     if ToggleButton then
@@ -803,6 +1205,13 @@ local function build_window()
     if ComboList then
         W.country_combo = ComboList.new()
         try_skin(W.country_combo, 'comboListSkinNew_')
+        pcall(function()
+            if W.country_combo.addChangeCallback then
+                W.country_combo:addChangeCallback(function()
+                    populate_catalog()
+                end)
+            end
+        end)
         insert(W.country_combo)
     else
         W.country_combo = Static.new()
@@ -843,6 +1252,8 @@ local function build_window()
     end
 
     populate_country_combo()
+    populate_catalog(true)
+    render_palette()
 
     local x, y, w, h = W.sms_window:get_content_bounds()
     relayout(x, y, w, h)
@@ -855,6 +1266,7 @@ end
 function M.show()
     if W.sms_window then
         populate_country_combo()
+        populate_catalog()
         W.sms_window:show()
         return
     end
@@ -869,6 +1281,16 @@ end
 function M.hide()
     disarm_paint()
     pcall(function() if W.sms_window then W.sms_window:hide() end end)
+end
+
+-- Hide the window + disarm. Dev-loop helper: call before a hot-reload so
+-- no stale window widget lingers (reload-me-mod clears package.loaded but
+-- can't reach this module's dxgui widgets).
+function M.dispose()
+    disarm_paint()
+    pcall(function()
+        if W.window and W.window.setVisible then W.window:setVisible(false) end
+    end)
 end
 
 function M.toggle()
@@ -921,7 +1343,41 @@ function M._registry_size()
 end
 
 function M._state()
-    return { ok = true, armed = W.armed, painting = W.painting, registry = #W.registry }
+    return { ok = true, armed = W.armed, painting = W.painting, registry = #W.registry,
+             palette = #W.palette, catalog = #W.catalog_rows, visible = #W.catalog_visible }
+end
+
+-- Headless palette mutation for the verification loop.
+function M._debug_palette_add(type_name, weight)
+    local row, err = static_catalog.resolve_type(type_name)
+    if not row then return { ok = false, error = err } end
+    add_palette_row(row)
+    if weight then
+        for _, r in ipairs(W.palette) do
+            if r.type == type_name then r.weight = weight end
+        end
+        render_palette()
+    end
+    return { ok = true, palette = #W.palette }
+end
+
+function M._debug_palette_clear()
+    W.palette, W.palette_sel = {}, nil
+    render_palette()
+    return { ok = true }
+end
+
+function M._debug_eyedrop()
+    on_add_from_selection()
+    return M._debug_palette()
+end
+
+function M._debug_palette()
+    local out = {}
+    for _, r in ipairs(W.palette) do
+        out[#out + 1] = { type = r.type, weight = r.weight, category = r.category }
+    end
+    return { ok = true, rows = out }
 end
 
 return M
