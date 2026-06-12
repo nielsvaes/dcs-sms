@@ -66,5 +66,53 @@ check('My-Prefabs library was refreshed after import', refreshed.n == 1,
       'refresh count=' .. refreshed.n)
 check('job state cleared after completion', W.job == nil and W.job_kind == nil)
 
+-- -------------------------------------------------------------------------
+-- Regression: relayout must NOT reveal media widgets while the panel is
+-- hidden. Bug: after viewing a Community image then switching to My Prefabs,
+-- a window resize (which relayouts every tab, hidden or not) re-showed the
+-- image + missing-mod warning "through" the My-Prefabs page.
+-- -------------------------------------------------------------------------
+local function vis_stub()
+    return { visible = nil,
+             setVisible = function(self, on) self.visible = (on and true) or false end }
+end
+
+check('panel starts hidden (W.shown is false)', W.shown == false,
+      'W.shown=' .. tostring(W.shown))
+
+-- A selection state that wants the missing-mod warning band shown.
+W.mod_warn    = vis_stub()
+W.mod_warn_on = true
+W.cur_images  = {}
+
+-- Hidden + window resize: the warning band must stay hidden.
+handle:hide()
+handle:relayout(900, 600)
+check('relayout while hidden keeps mod-warn hidden', W.mod_warn.visible == false,
+      'mod_warn.visible=' .. tostring(W.mod_warn.visible))
+
+-- Active tab: relayout reveals it for the current selection.
+handle:show()
+check('relayout while shown reveals mod-warn', W.mod_warn.visible == true,
+      'mod_warn.visible=' .. tostring(W.mod_warn.visible))
+
+-- Switch away again, then resize: must hide once more (the reported bug).
+handle:hide()
+handle:relayout(820, 560)
+check('resize after switching away re-hides mod-warn', W.mod_warn.visible == false,
+      'mod_warn.visible=' .. tostring(W.mod_warn.visible))
+
+-- Leaving the Community tab must also close the pop-out enlarge window (it's a
+-- separate top-level window that would otherwise linger with a stale image).
+-- community_tab captured this module table at load, so replacing .hide here is
+-- seen by handle:hide()'s call-time lookup.
+local image_window = require('dcs_sms_me.community_image_window')
+local enlarge_hidden = 0
+image_window.hide = function() enlarge_hidden = enlarge_hidden + 1 end
+handle:show()
+handle:hide()
+check('handle:hide() closes the enlarge image window', enlarge_hidden >= 1,
+      'enlarge_hidden=' .. enlarge_hidden)
+
 if failures > 0 then os.exit(1) end
 print('All community_tab import tests passed.')

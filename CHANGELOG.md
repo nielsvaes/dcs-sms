@@ -114,6 +114,7 @@ This is the first tag after a long quiet period — `sms.version` had been froze
 - Community tab: a prefab's third-party mod dependency now surfaces as a **yellow warning line above the "Add to my library" button**, shown **only** when you don't have that mod installed. The existing plain "requires mods" info line (which lists all required mods) is unchanged.
 
 **Fixed**
+- Community tab: the image preview and missing-mod warning no longer "show through" onto the My Prefabs page. The Community panel's `relayout` (run on every window resize for *all* tabs, so each stays sized) re-asserted those widgets' visibility from the current selection regardless of which tab was active; it now respects the panel's hidden state and never reveals widgets while another tab is showing. Leaving the Community tab also closes the pop-out image viewer if it was open (previously it lingered over the other tab with a stale screenshot).
 - Importing a trigger whose condition is a **Lua Predicate** (`c_predicate`) no longer loses the Lua code on save. The condition's `text` field is now dictionary-keyed (`KeyDict_text`) on import, matching ED's native on-disk shape — previously it was written as a raw literal, and ED's `saveTriggers` (which routes every condition's `text` through `textToMis`) wiped it to `nil`, leaving an empty predicate box after save. The same fix is applied to the `trigger add-condition` CLI verb, which had the identical flaw.
 
 ### [0.25.0] — 2026-06-12

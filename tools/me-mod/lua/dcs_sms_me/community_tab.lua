@@ -165,6 +165,10 @@ function M.build(parent, deps)
     -- Instance state — mirrors prefab_manager.lua's W pattern.
     local W = {
         widgets    = {},     -- every top-level widget, for show/hide en masse
+        shown      = false,  -- is this tab the active/visible one? relayout must
+                             -- NOT reveal media widgets while hidden (else a
+                             -- window resize re-shows the image/mod-warn over
+                             -- another tab — they'd "show through")
         chips      = {},     -- tag-chip ToggleButtons (rebuilt on each sync)
         entries    = {},     -- full manifest entries
         visible    = {},     -- filtered + sorted subset shown in the grid
@@ -843,8 +847,13 @@ function M.build(parent, deps)
         local content_bottom  = import_y - GAP - ((warn_h > 0) and (warn_h + GAP) or 0)
 
         -- Set visibility on a media widget (set_visible / setVisible).
+        -- Never reveal anything while the panel is hidden: relayout runs on
+        -- every window resize even when another tab is active (so the panel
+        -- stays correctly sized for when it's next shown), and the image /
+        -- mod-warn must not pop back up over that other tab.
         local function vis(w, on)
             if not w then return end
+            if not W.shown then on = false end
             if w.set_visible then pcall(function() w:set_visible(on) end)
             elseif w.setVisible then pcall(function() w:setVisible(on) end) end
         end
@@ -1290,6 +1299,7 @@ function M.build(parent, deps)
     local handle = {}
 
     function handle:show()
+        W.shown = true  -- must precede relayout so its vis() calls can reveal
         pcall(function()
             for _, w in ipairs(W.widgets) do
                 if w.set_visible then pcall(function() w:set_visible(true) end)
@@ -1303,12 +1313,17 @@ function M.build(parent, deps)
     end
 
     function handle:hide()
+        W.shown = false  -- a later resize-driven relayout must keep media hidden
         pcall(function()
             for _, w in ipairs(W.widgets) do
                 if w.set_visible then pcall(function() w:set_visible(false) end)
                 elseif w.setVisible then pcall(function() w:setVisible(false) end) end
             end
         end)
+        -- Leaving the Community tab also closes the pop-out image viewer — it's
+        -- a separate top-level window that would otherwise linger over another
+        -- tab with a stale screenshot. (Selection-change already hides it.)
+        if image_window and image_window.hide then pcall(image_window.hide) end
     end
 
     function handle:on_first_show()
