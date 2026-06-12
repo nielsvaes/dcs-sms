@@ -157,7 +157,7 @@ You do **not** have:
 |---|---|
 | `init.lua` | Bootstrap. Required by the `MissionEditor.lua` patch. Calls `menu.install`, `marquee_hook.install`, `new_mission_hook.install`, `bridge.install`. Wrapped in outer `pcall` so a load failure can't break the ME. |
 | `version.lua` | Single canonical version string. `me-mod-v<this>` is the release tag. |
-| `menu.lua` | Adds the "DCS-SMS" top-level menu to the editor menubar via `me_menubar.menuBar:insertItem`. Hosts the **Prefab Manager** entry, the **About** entry, and the **External execution: ON/OFF** toggle that gates `bridge.lua`. |
+| `menu.lua` | Adds the "DCS-SMS" top-level menu to the editor menubar via `me_menubar.menuBar:insertItem`. Hosts the **Prefab Manager**, **Mass Edit**, **Paint Statics**, **Hotkey Manager**, and **About** entries, and the **External execution: ON/OFF** toggle that gates `bridge.lua`. |
 | `bridge.lua` | The gui-bridge inbox poller. Registered to `UpdateManager.add(tick)`. Polls `<SavedGames>/DCS/dcs-sms/inbox/*.req.json` every tick, executes `target=gui` requests via `loadstring + xpcall`, writes responses to `outbox/`. Writes heartbeat to `state/me.json`. Gated by `_G.DCS_SMS_GUI_BRIDGE_ENABLED`. |
 | `verbs.lua` | Aggregator. Merges each `verbs/<noun>_verbs.lua`'s `M.*` exports into one table so the bridge can keep dispatching `verbs.<name>(args)`. See [Part 2.6](#26-the-verbslua-structure). |
 | `verb_helpers.lua` | Cross-noun verb helpers (walk_groups, find_*_in_mission, refresh_group_view, inject_group, strip_back_refs) plus the coordinate-axis convention block. Required by most noun files. |
@@ -181,6 +181,10 @@ You do **not** have:
 | `me_hotkey_script_editor.lua` | The editor window for one user script (name / hotkey-capture / multiline code / Run / Save / Delete). Persists via `me_hotkey_scripts` and calls `me_hotkeys.scripts_changed()`. |
 | `prefab_manager.lua` | The Prefab Manager window (uses `sms_window`). Library list, place-at-click / place-at-original, rotation, country override, undo. Save opens a folder-picker dialog (`open_save_modal`, cloned from `open_move_modal`) pre-selecting the highlighted folder, with an inline New Folder button; the folder-scoped overwrite check uses `prefab_ops.exists(name, folder)`. |
 | `context_menu.lua` | Right-click context menus for the Prefab Manager. Owns the dxgui `Menu` construction and the clipboard probe. Used by the file-row menu (Update Prefab with selection / Move to… / Rename / Delete / Copy file contents / Copy place snippet / Show in Explorer — Rename/Delete moved here from row-3 buttons; Delete stays visible on error rows) and the tree-node menu (New subfolder / Rename / Delete). |
+| `paint_statics.lua` | The Paint Statics window (uses `sms_window`): paint static objects onto the map under a held left-drag, foliage-brush style. Catalog browser (category + search + 3D preview) and eyedropper feed a weighted palette; brush radius / density / min-spacing / heading / seed controls; Erase mode deletes only tool-painted statics; one stroke = one undo record (erase undo re-injects). Owns the `me_map_window` brush state machine and a fast `batch_remove_groups` (Mission.remove_group is ~100 ms/group; see the M3 commit). |
+| `paint_scatter.lua` | **Pure Lua, no ME APIs.** Deterministic scatter core for Paint Statics: per-stroke sessions, density in objects/100 m², spatial-hash min-spacing rejection, swept-area re-saturation control, weighted type pick, heading policy, optional seed. Unit-tested (`test_paint_scatter.lua`). |
+| `static_catalog.lua` | Placeable Static types from `me_db_api` as plain rows `{type, display, shape_name, category, rate}`. Category labels derive from the `country.Units` plural table (mirrors `me_static.lua` addCategory) — the mission table stores display labels like `"Structures"`, and aircraft defs carry `category = nil`. Pure `filter`/`categories` helpers. |
+| `static_preview_panel.lua` | Embedded 3D model preview for Paint Statics — wraps ED's `DemoSceneWidget` (`staticPreview.lua` scene, the vanilla Static-panel recipe) with drag-rotate / wheel-zoom. pcall-isolated; degrades to a metadata caption without blocking the tool. |
 | `prefab_distill.lua`, `prefab_ops.lua` | Prefab save/load/placement core. |
 | `prefab_modules.lua` | Detect community-mod dependencies of a save selection (delegates to DCS's `me_mission.setRequiredModules`) and check, at placement, which required mods are missing. Sole owner of the mod-detection ED globals. `M.absent(list)` is the list-shaped sibling of `M.missing` for the Community tab, whose manifest entries carry a `required_modules` array rather than a map. |
 | `base64.lua` | Pure-Lua base64 encode/decode for prefab-embedded media. |
@@ -405,7 +409,7 @@ For verb logic that involves heavy ME-internal API surface (the trigger panel, t
 
 ## 2.9 The `sms_window` chrome (for new tool windows)
 
-If you're adding a new floating window (Prefab Manager and Mass Edit are the current users; force-build tool, payload sweeper, etc. are plausible follow-ups), don't roll your own chrome — use `sms_window`.
+If you're adding a new floating window (Prefab Manager, Mass Edit, and Paint Statics are the current users; force-build tool, payload sweeper, etc. are plausible follow-ups), don't roll your own chrome — use `sms_window`.
 
 The handle provides:
 - Branded title bar (`Coconut Cockpit · DCS-SMS — <name> v<version>`).
@@ -415,7 +419,7 @@ The handle provides:
 - `Ctrl+Z` wired to the project-wide undo bus.
 - Resize with min-size clamp and footer reposition.
 
-Two concrete examples live in the tree: [`prefab_manager.lua`](./lua/dcs_sms_me/prefab_manager.lua) (library list + place modes + narrow undo) and [`mass_edit.lua`](./lua/dcs_sms_me/mass_edit.lua) (scope tabs + property registry-driven editing + best-effort apply with single-undo restore). Read either before writing a new tool window.
+Three concrete examples live in the tree: [`prefab_manager.lua`](./lua/dcs_sms_me/prefab_manager.lua) (library list + place modes + narrow undo), [`mass_edit.lua`](./lua/dcs_sms_me/mass_edit.lua) (scope tabs + property registry-driven editing + best-effort apply with single-undo restore), and [`paint_statics.lua`](./lua/dcs_sms_me/paint_statics.lua) (a `me_map_window` brush state machine + catalog/palette split + registered undo handler). Read one before writing a new tool window.
 
 Usage:
 

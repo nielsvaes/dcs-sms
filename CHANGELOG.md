@@ -105,6 +105,19 @@ This is the first tag after a long quiet period — `sms.version` had been froze
 
 ## ME-mod
 
+### [0.27.0] — 2026-06-18
+
+**Added**
+- **Paint Statics** — a new tool window (DCS-SMS menu) that paints static objects onto the map like foliage brushes in Unreal/Unity: hold left mouse and drag, and statics scatter under a circular brush. Right/middle mouse still pan/zoom while painting; Esc stops.
+  - **Catalog browser** with category filter + live search, enumerated per selected country, and a **live 3D model preview** of the highlighted type (the vanilla Static-panel viewport — drag to rotate, wheel to zoom; degrades to text metadata if the viewport is unavailable).
+  - **Weighted palette**: add types from the catalog (button or double-click) or via the **eyedropper** ("Add selected from map"); each placement picks a type by weight.
+  - Brush **radius**, **density** (statics per 100 m²), **min-spacing** (anti-overlap), **random or fixed heading**, and an optional **seed** for reproducible scatter.
+  - **Country** selector and a **Name** field with `{n}` auto-indexing (`Barrel-{n}` → `Barrel-01`, `Barrel-02`, …).
+  - **Erase mode**: drag deletes statics this tool painted (never your hand-placed objects).
+  - **One stroke = one undo** (Ctrl+Z): a paint stroke's undo removes everything it created; an erase stroke's undo restores what it deleted.
+  - Editor-safe at scale: stroke commits are capped per drag event, and stroke removal uses a batched fast path (144 groups in 3 ms vs 16 s through per-group `Mission.remove_group`, measured).
+- New modules: `paint_statics.lua`, `paint_scatter.lua` (pure, unit-tested scatter core), `static_catalog.lua`, `static_preview_panel.lua`.
+
 ### [0.26.0] — 2026-06-16
 
 **Added**
