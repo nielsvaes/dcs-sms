@@ -75,6 +75,12 @@ local importer;   do local ok, m = pcall(require, 'dcs_sms_me.community_import')
 local cache;      do local ok, m = pcall(require, 'dcs_sms_me.community_cache');     if ok then cache      = m end end
 local transport;  do local ok, m = pcall(require, 'dcs_sms_me.community_transport'); if ok then transport  = m end end
 local json;       do local ok, m = pcall(require, 'dcs_sms_me.vendor.json');         if ok then json       = m end end
+local paths;         do local ok, m = pcall(require, 'dcs_sms_me.paths');             if ok then paths          = m end end
+local community_meta;do local ok, m = pcall(require, 'dcs_sms_me.community_meta');    if ok then community_meta = m end end
+-- SkinUtils paints a picture onto a Static from a local file path (the same
+-- mechanism MissionEditor/modules/imagePreview.lua uses). Guarded so the module
+-- still loads in the bare test VM where dxgui is absent.
+local SkinUtils;     do local ok, m = pcall(require, 'SkinUtils');                    if ok then SkinUtils      = m end end
 
 -- Apply a skin by name, fully guarded. Copied from prefab_manager.lua's
 -- try_skin shape (the codebase keeps a local copy per module). Only the skin
@@ -171,6 +177,18 @@ function M.build(parent, deps)
         -- Right-column (detail/description) width, dragged by the splitter.
         -- Was the constant DETAIL_W; now mutable so the user can resize it.
         detail_w = 300,
+        -- Image-preview panel state (right column, below the description).
+        media_job     = nil,    -- in-flight meta/image fetch (separate from W.job)
+        media_kind    = nil,    -- 'meta' | 'image'
+        media_pending = nil,    -- { token, entry } or { token, idx, rel, path }
+        media_token   = 0,      -- bumped on every selection change; stale completions skip the UI
+        media_entry   = nil,    -- entry media was last started for (selection-change guard)
+        cur_images    = {},     -- repo-relative image paths for the selected entry
+        cur_img_idx   = 1,      -- 1-based index into cur_images
+        img_state     = 'none', -- 'none' | 'loading' | 'ready' | 'failed'
+        img_path      = nil,    -- absolute local path of the displayed image
+        img_native_w  = nil,    -- native px dims (for aspect-correct re-fit on resize)
+        img_native_h  = nil,
     }
 
     -- Register a widget for bulk show/hide and parent it under the window.
@@ -214,6 +232,12 @@ function M.build(parent, deps)
     local SPLIT_GUTTER    = SPLITTER_MARGIN + SPLIT + SPLITTER_MARGIN  -- 26
     local DETAIL_MIN      = 200   -- description column never narrower than this
     local GRID_MIN        = 300   -- the entry list never narrower than this
+
+    -- Image-preview panel geometry (right column, below the description).
+    local IMG_MAX_H   = 220   -- cap on displayed image height
+    local DETAIL_KEEP = 80    -- description editbox never shorter than this when an image shows
+    local IMG_CTRL_H  = ROW_H -- the ◀ i/N ▶ control row height
+    local IMG_BTN_W   = 28    -- ◀ / ▶ button width
 
     -- Set bounds, guarded.
     local function bounds(widget, x, y, w, h)
@@ -273,6 +297,7 @@ function M.build(parent, deps)
     local render_grid, recompute_visible, rebuild_chips, do_refresh
     local update_detail, update_import_btn, selected_entry, on_import_click
     local update_header_labels, on_header_click, relayout, layout_chips
+    local start_media, sync_media, ensure_current_image, set_displayed, nav
 
     selected_entry = function()
         if not W.selected_idx then return nil end
@@ -305,6 +330,9 @@ function M.build(parent, deps)
             end
         end)
         update_import_btn()
+        -- Re-sync the image panel to the (possibly new) selection. Guarded in
+        -- case this runs before sync_media is assigned (build-time ordering).
+        pcall(function() if sync_media then sync_media() end end)
     end
 
     -- -----------------------------------------------------------------------
@@ -631,6 +659,39 @@ function M.build(parent, deps)
         end
     end
 
+    -- ----- Image-preview panel (right column, below the description) --------
+    -- A Static showing the screenshot via a picture-skin, a counter/status
+    -- label, and ◀ ▶ navigation buttons. All pcall-guarded so the module still
+    -- loads in the bare test VM (Static/Button/SkinUtils absent). A hidden,
+    -- untracked probe Static reads an image's native size via calcSize().
+    W.image = track(Static and Static.new())
+    if W.image then try_skin(W.image, 'staticSkin_ME') end
+    W.img_probe = Static and Static.new()   -- NOT tracked: never shown, sizing only
+
+    W.img_count = track(Static and Static.new())
+    if W.img_count then
+        try_skin(W.img_count, 'staticSkin_ME')
+        pcall(function() if W.img_count.setText then W.img_count:setText('') end end)
+    end
+
+    W.img_prev = track(Button and Button.new())
+    if W.img_prev then
+        try_skin(W.img_prev, 'sms_button')
+        pcall(function() if W.img_prev.setText then W.img_prev:setText('\226\151\128') end end)  -- ◀
+        if W.img_prev.addChangeCallback then
+            pcall(function() W.img_prev:addChangeCallback(function() pcall(function() nav(-1) end) end) end)
+        end
+    end
+
+    W.img_next = track(Button and Button.new())
+    if W.img_next then
+        try_skin(W.img_next, 'sms_button')
+        pcall(function() if W.img_next.setText then W.img_next:setText('\226\150\182') end end)  -- ▶
+        if W.img_next.addChangeCallback then
+            pcall(function() W.img_next:addChangeCallback(function() pcall(function() nav(1) end) end) end)
+        end
+    end
+
     -- Vertical splitter in the gutter between the entry list (left) and the
     -- detail/description column (right) — the same drag handle the My-Prefabs
     -- tree/grid use. invert=true because the tracked value is the RIGHT pane's
@@ -716,18 +777,266 @@ function M.build(parent, deps)
             if W.splitter.set_value  then W.splitter:set_value(W.detail_w) end
         end
 
-        -- Right column: chips under row 1, detail below them, import pinned
-        -- just above the footer.
+        -- Right column: chips under row 1, then the description, then the
+        -- image-preview panel, with the import button pinned above the footer.
         W.chips_x = right_x
         W.chips_y = row2
         W.chips_w = detail_w
-        local chips_bottom = layout_chips()
-        local import_h = ROW_H
-        local import_y = bottom - import_h
-        local detail_y = chips_bottom + GAP
-        local detail_h = math.max(60, import_y - GAP - detail_y)
-        bounds(W.detail, right_x, detail_y, detail_w, detail_h)
+        local chips_bottom    = layout_chips()
+        local import_h        = ROW_H
+        local import_y        = bottom - import_h
+        local top             = chips_bottom + GAP
+        local content_bottom  = import_y - GAP   -- description + image panel live above this
+
+        -- Set visibility on a media widget (set_visible / setVisible).
+        local function vis(w, on)
+            if not w then return end
+            if w.set_visible then pcall(function() w:set_visible(on) end)
+            elseif w.setVisible then pcall(function() w:setVisible(on) end) end
+        end
+
+        local n = #(W.cur_images or {})
+        if n <= 0 then
+            -- No images: description fills the whole right column (legacy layout).
+            vis(W.image, false); vis(W.img_count, false); vis(W.img_prev, false); vis(W.img_next, false)
+            local detail_h = math.max(60, content_bottom - top)
+            bounds(W.detail, right_x, top, detail_w, detail_h)
+            bounds(W.import_btn, right_x, import_y, detail_w, import_h)
+            return
+        end
+
+        -- Aspect-correct image box (only when an image is actually ready).
+        local disp_w, disp_h = 0, 0
+        if W.img_state == 'ready' and W.img_native_w and W.img_native_w > 0
+           and W.img_native_h and W.img_native_h > 0 then
+            local avail_h = math.max(0, content_bottom - top - DETAIL_KEEP - GAP - IMG_CTRL_H)
+            local box_h   = math.min(IMG_MAX_H, avail_h)
+            if box_h > 20 then
+                local scale = math.min(detail_w / W.img_native_w, box_h / W.img_native_h)
+                disp_w = math.floor(W.img_native_w * scale)
+                disp_h = math.floor(W.img_native_h * scale)
+            end
+        end
+
+        local panel_h  = IMG_CTRL_H + ((disp_h > 0) and (disp_h + GAP) or 0)
+        local detail_h = math.max(60, content_bottom - top - panel_h - GAP)
+        bounds(W.detail, right_x, top, detail_w, detail_h)
+
+        local panel_top = top + detail_h + GAP
+        local cy = panel_top
+        if disp_h > 0 then
+            vis(W.image, true)
+            bounds(W.image, right_x + math.floor((detail_w - disp_w) / 2), cy, disp_w, disp_h)
+            -- Re-assert the picture skin so a resize rescales the image (idempotent).
+            pcall(function()
+                if W.image and SkinUtils and SkinUtils.setStaticPictureRect and W.img_path then
+                    W.image:setSkin(SkinUtils.setStaticPictureRect(W.img_path, 0, 0,
+                        W.img_native_w, W.img_native_h, W.image:getSkin()))
+                end
+            end)
+            cy = cy + disp_h + GAP
+        else
+            vis(W.image, false)
+        end
+
+        -- Control row: ◀ left, ▶ right (only when >1 image), counter/status centred.
+        local count_txt
+        if W.img_state == 'loading'    then count_txt = 'loading\226\128\166'      -- loading…
+        elseif W.img_state == 'failed' then count_txt = 'preview unavailable'
+        else count_txt = string.format('%d / %d', W.cur_img_idx, n) end
+        vis(W.img_count, true)
+        pcall(function() if W.img_count.setText then W.img_count:setText(count_txt) end end)
+        bounds(W.img_count, right_x + IMG_BTN_W + 4, cy, math.max(0, detail_w - 2 * (IMG_BTN_W + 4)), IMG_CTRL_H)
+        if n > 1 then
+            vis(W.img_prev, true); vis(W.img_next, true)
+            bounds(W.img_prev, right_x, cy, IMG_BTN_W, IMG_CTRL_H)
+            bounds(W.img_next, right_x + detail_w - IMG_BTN_W, cy, IMG_BTN_W, IMG_CTRL_H)
+        else
+            vis(W.img_prev, false); vis(W.img_next, false)
+        end
+
         bounds(W.import_btn, right_x, import_y, detail_w, import_h)
+    end
+
+    -- =======================================================================
+    -- Image-preview / media flows. A dedicated W.media_job slot (kinds 'meta'
+    -- and 'image'), pumped alongside W.job in handle:tick(), keeps screenshot
+    -- traffic independent of the manifest-refresh / import job. W.media_token
+    -- (bumped on every selection change) makes a completion that lands after
+    -- the selection moved on a no-op for the UI — the bytes are still cached.
+    -- =======================================================================
+
+    -- True if a regular file exists at an absolute path.
+    local function file_exists(path)
+        if type(path) ~= 'string' or path == '' then return false end
+        local f = io.open(path, 'rb')
+        if f then f:close(); return true end
+        return false
+    end
+
+    -- Write raw bytes to an absolute path (binary). Returns true on success.
+    local function write_file(path, bytes)
+        if type(path) ~= 'string' or path == '' then return false end
+        local f = io.open(path, 'wb')
+        if not f then return false end
+        f:write(bytes or ''); f:close()
+        return true
+    end
+
+    -- Read an image file's native pixel size via the hidden probe Static.
+    -- Returns (w, h), or (0, 0) when the widget stack / file is unavailable.
+    local function probe_native(path)
+        if not (W.img_probe and SkinUtils and SkinUtils.setStaticPicture) then return 0, 0 end
+        local w, h = 0, 0
+        pcall(function()
+            W.img_probe:setSkin(SkinUtils.setStaticPicture(path, W.img_probe:getSkin()))
+            local cw, ch = W.img_probe:calcSize()
+            w, h = tonumber(cw) or 0, tonumber(ch) or 0
+        end)
+        return w, h
+    end
+
+    -- Apply `path` to the visible image widget + cache its native size, then
+    -- relayout (which fits it to the column, aspect-preserved). Sets img_state.
+    set_displayed = function(path)
+        local nw, nh = probe_native(path)
+        if nw > 0 and nh > 0 then
+            W.img_path = path; W.img_native_w = nw; W.img_native_h = nh
+            W.img_state = 'ready'
+            pcall(function()
+                if W.image and SkinUtils and SkinUtils.setStaticPictureRect then
+                    W.image:setSkin(SkinUtils.setStaticPictureRect(path, 0, 0, nw, nh, W.image:getSkin()))
+                end
+            end)
+        else
+            W.img_path = nil; W.img_native_w = nil; W.img_native_h = nil
+            W.img_state = 'failed'
+        end
+        relayout(W.cw, W.ch)
+    end
+
+    -- Make sure the image at cur_img_idx is on screen: show it from cache if
+    -- present, else kick a lazy download. No-op-safe when there are no images.
+    ensure_current_image = function()
+        local rel = W.cur_images and W.cur_images[W.cur_img_idx]
+        if not rel then W.img_state = 'none'; relayout(W.cw, W.ch); return end
+        if not (paths and paths.community_image_path) then
+            W.img_state = 'failed'; relayout(W.cw, W.ch); return
+        end
+        local path = paths.community_image_path(rel)
+        if file_exists(path) then set_displayed(path); return end
+        -- Not cached → download. Degrade to 'failed' with no networking.
+        if not (transport and transport.available and transport.available()
+                and fetch and fetch.new and cfg and cfg.image_url) then
+            W.img_state = 'failed'; relayout(W.cw, W.ch); return
+        end
+        W.img_state = 'loading'; W.img_path = nil; W.img_native_w = nil; W.img_native_h = nil
+        relayout(W.cw, W.ch)
+        W.media_job = fetch.new(transport)
+        W.media_kind = 'image'
+        W.media_pending = { token = W.media_token, idx = W.cur_img_idx, rel = rel, path = path }
+        local ok = pcall(function() W.media_job:fetch_file(cfg.image_url(rel)) end)
+        if not ok then
+            W.media_job = nil; W.media_kind = nil; W.media_pending = nil
+            W.img_state = 'failed'; relayout(W.cw, W.ch)
+        end
+    end
+
+    -- ◀/▶: move the current image by delta (wrapping), then ensure it's shown.
+    nav = function(delta)
+        local n = #(W.cur_images or {})
+        if n < 2 then return end
+        W.cur_img_idx = ((W.cur_img_idx - 1 + delta) % n) + 1
+        ensure_current_image()
+    end
+
+    -- Begin (or reset) the media flow for the currently-selected entry. Bumps
+    -- the token so any in-flight completion for a previous entry is ignored.
+    start_media = function()
+        W.media_token = (W.media_token or 0) + 1
+        W.media_job = nil; W.media_kind = nil; W.media_pending = nil
+        W.cur_images = {}; W.cur_img_idx = 1
+        W.img_state = 'none'; W.img_path = nil; W.img_native_w = nil; W.img_native_h = nil
+        local e = selected_entry()
+        W.media_entry = e
+        if not (e and e.path and e.path ~= '') then relayout(W.cw, W.ch); return end
+        if type(e._images) == 'table' then          -- already fetched once → reuse
+            W.cur_images = e._images
+            if #e._images > 0 then ensure_current_image() else relayout(W.cw, W.ch) end
+            return
+        end
+        -- Need the sidecar meta to learn the image list.
+        if not (transport and transport.available and transport.available()
+                and fetch and fetch.new and cfg and cfg.meta_url) then
+            relayout(W.cw, W.ch); return
+        end
+        W.media_job = fetch.new(transport)
+        W.media_kind = 'meta'
+        W.media_pending = { token = W.media_token, entry = e }
+        local ok = pcall(function() W.media_job:fetch_file(cfg.meta_url(e.path)) end)
+        if not ok then W.media_job = nil; W.media_kind = nil; W.media_pending = nil end
+        relayout(W.cw, W.ch)
+    end
+
+    -- Re-sync the panel to the current selection. Cheap to call from
+    -- update_detail (fires on every selection/sort/sync) — only (re)starts when
+    -- the selected entry actually changed.
+    sync_media = function()
+        if selected_entry() ~= W.media_entry then start_media() end
+    end
+
+    -- Completion: parsed the sidecar meta → memoise images on the entry, and
+    -- (if still selected) show the first one.
+    local function on_meta_done(job, pend)
+        if not pend then return end
+        local e = pend.entry
+        local images = {}
+        if community_meta and community_meta.parse and json and json.decode and job.file_body then
+            local ok, decoded = pcall(json.decode, job.file_body)
+            if ok then
+                local m = community_meta.parse(decoded)
+                if m and type(m.images) == 'table' then images = m.images end
+            end
+        end
+        if e then e._images = images end                 -- memoise regardless of staleness
+        if pend.token ~= W.media_token then return end    -- selection moved on
+        W.cur_images = images; W.cur_img_idx = 1
+        if #images > 0 then ensure_current_image()
+        else W.img_state = 'none'; relayout(W.cw, W.ch) end
+    end
+
+    -- Completion: downloaded an image → cache to disk; show it if still wanted.
+    local function on_image_done(job, pend)
+        if not pend then return end
+        local okw = write_file(pend.path, job.file_body)
+        if pend.token ~= W.media_token then return end    -- selection moved on
+        if pend.idx ~= W.cur_img_idx then return end       -- navigated away
+        if okw then set_displayed(pend.path)
+        else W.img_state = 'failed'; relayout(W.cw, W.ch) end
+    end
+
+    -- A media fetch errored. Only touch the UI if it's still the current one.
+    local function on_media_error(kind, pend)
+        if not pend or pend.token ~= W.media_token then return end
+        if kind == 'meta' then W.img_state = 'none' else W.img_state = 'failed' end
+        relayout(W.cw, W.ch)
+    end
+
+    -- Pump the media job once per tick (mirrors the W.job pump in handle:tick).
+    local function pump_media()
+        if not W.media_job then return end
+        local s
+        local ok = pcall(function() s = W.media_job:step() end)
+        if not ok then W.media_job = nil; W.media_kind = nil; W.media_pending = nil; return end
+        if s == 'running' or s == 'idle' then return end
+        local job, kind, pend = W.media_job, W.media_kind, W.media_pending
+        W.media_job = nil; W.media_kind = nil; W.media_pending = nil
+        if s == 'done' then
+            if kind == 'meta' then on_meta_done(job, pend)
+            elseif kind == 'image' then on_image_done(job, pend) end
+        elseif s == 'error' then
+            on_media_error(kind, pend)
+        end
     end
 
     -- =======================================================================
@@ -878,6 +1187,10 @@ function M.build(parent, deps)
                 elseif w.setVisible then pcall(function() w:setVisible(true) end) end
             end
         end)
+        -- The loop above un-hides every tracked widget, including the image
+        -- panel; relayout re-asserts the panel's correct visibility for the
+        -- current selection (collapsed when there's no image).
+        pcall(function() relayout(W.cw, W.ch) end)
     end
 
     function handle:hide()
@@ -899,6 +1212,7 @@ function M.build(parent, deps)
     -- right completion handler off W.job_kind.
     function handle:tick()
         pcall(function()
+            pump_media()
             if not W.job then return end
             local s
             local ok = pcall(function() s = W.job:step() end)
