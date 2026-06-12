@@ -204,6 +204,8 @@ You do **not** have:
 | `community_fetch.lua` | Non-blocking fetch orchestration — a coroutine pumped by the UpdateManager tick over an injectable transport. |
 | `community_transport.lua` | Real LuaSec/LuaSocket HTTPS transport (DCS-only); degrades gracefully when LuaSec is absent. Reads the response in bounded chunks per poll so a fast/large download never stalls the editor. |
 | `community_tab.lua` | The Community tab UI in the Prefab Manager (browse/search/sort/tags/detail/import + the right-column image-preview panel: lazy screenshot fetch via a dedicated `W.media_job` slot, disk cache, `◀ i / N ▶` navigation, aspect-correct fit-to-column). |
+| `community_image_fit.lua` | Pure aspect-preserving fit math (`fit(nW,nH,boxW,boxH)`), shared by the Community-tab thumbnail and the enlarge window. Unit-tested. |
+| `community_image_window.lua` | Singleton resizable `sms_window` image viewer — click a Community thumbnail to enlarge; `◀ ▶` navigation synced with the tab. Display-only (no fetch; the tab pushes cached paths). |
 | `lib_path.lua` | Builds the `package.cpath`/`path` entries for the bundled LuaSec payload under `dcs-sms/lib/`. |
 | `vendor/json.lua` | Vendored decode-only JSON. |
 

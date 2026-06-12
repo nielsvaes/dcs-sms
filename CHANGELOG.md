@@ -116,7 +116,10 @@ This is the first tag after a long quiet period — `sms.version` had been froze
   `◀ i / N ▶` navigation; it scales to the column width with aspect ratio
   preserved and re-fits live as the splitter or window is resized. Degrades
   silently (panel collapses, description fills the column) when a prefab has no
-  images or networking is unavailable.
+  images or networking is unavailable. The preview scales the whole screenshot
+  to fit the column (aspect preserved), and clicking it opens a larger,
+  resizable window showing the image with the same `◀ i / N ▶` navigation kept
+  in sync with the inline thumbnail.
 
 ### [0.24.1] — 2026-06-11
 
