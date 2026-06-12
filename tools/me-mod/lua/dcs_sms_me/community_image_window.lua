@@ -191,15 +191,20 @@ function M.show(opts)
     V.on_next = opts.on_next
     V.has_nav = opts.has_nav and true or false
     pcall(function() if V.win.show then V.win:show() end end)
-    M.set_image(opts.path, opts.count_text, V.has_nav)
+    M.set_image(opts.path, opts.count_text, V.has_nav, opts.native_w, opts.native_h)
 end
 
-function M.set_image(path, count_text, has_nav)
+function M.set_image(path, count_text, has_nav, nw, nh)
     if not V.win then return end
     if has_nav ~= nil then V.has_nav = has_nav and true or false end
     V.loading = false
     V.path = path
-    V.native_w, V.native_h = probe(path)
+    -- Prefer the native size the tab already probed; fall back to a local probe.
+    if nw and nh and nw > 0 and nh > 0 then
+        V.native_w, V.native_h = nw, nh
+    else
+        V.native_w, V.native_h = probe(path)
+    end
     set_text(V.count, count_text)
     refit()
 end

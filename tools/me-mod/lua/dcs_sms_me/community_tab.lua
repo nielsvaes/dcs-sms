@@ -924,7 +924,7 @@ function M.build(parent, deps)
         if not (image_window and image_window.is_open and image_window.is_open()) then return end
         local has_nav = #(W.cur_images or {}) > 1
         if W.img_state == 'ready' and W.img_path then
-            image_window.set_image(W.img_path, count_text(), has_nav)
+            image_window.set_image(W.img_path, count_text(), has_nav, W.img_native_w, W.img_native_h)
         else
             image_window.set_loading(count_text(), has_nav)
         end
