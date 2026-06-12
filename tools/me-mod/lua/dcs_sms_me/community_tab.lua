@@ -81,6 +81,8 @@ local community_meta;do local ok, m = pcall(require, 'dcs_sms_me.community_meta'
 -- mechanism MissionEditor/modules/imagePreview.lua uses). Guarded so the module
 -- still loads in the bare test VM where dxgui is absent.
 local SkinUtils;     do local ok, m = pcall(require, 'SkinUtils');                    if ok then SkinUtils      = m end end
+local image_fit;     do local ok, m = pcall(require, 'dcs_sms_me.community_image_fit');    if ok then image_fit    = m end end
+local image_window;  do local ok, m = pcall(require, 'dcs_sms_me.community_image_window'); if ok then image_window = m end end
 
 -- Apply a skin by name, fully guarded. Copied from prefab_manager.lua's
 -- try_skin shape (the codebase keeps a local copy per module). Only the skin
@@ -298,6 +300,7 @@ function M.build(parent, deps)
     local update_detail, update_import_btn, selected_entry, on_import_click
     local update_header_labels, on_header_click, relayout, layout_chips
     local start_media, sync_media, ensure_current_image, set_displayed, nav
+    local count_text, push_to_popup, open_enlarge
 
     selected_entry = function()
         if not W.selected_idx then return nil end
@@ -665,7 +668,17 @@ function M.build(parent, deps)
     -- loads in the bare test VM (Static/Button/SkinUtils absent). A hidden,
     -- untracked probe Static reads an image's native size via calcSize().
     W.image = track(Static and Static.new())
-    if W.image then try_skin(W.image, 'staticSkin_ME') end
+    if W.image then
+        try_skin(W.image, 'staticSkin_ME')
+        pcall(function() if W.image.setTooltipText then W.image:setTooltipText('Click to enlarge') end end)
+        if W.image.addMouseDownCallback then
+            pcall(function()
+                W.image:addMouseDownCallback(function(_, _, _, button)
+                    if button == 1 then pcall(function() if open_enlarge then open_enlarge() end end) end
+                end)
+            end)
+        end
+    end
     W.img_probe = Static and Static.new()   -- NOT tracked: never shown, sizing only
 
     W.img_count = track(Static and Static.new())
@@ -811,10 +824,8 @@ function M.build(parent, deps)
            and W.img_native_h and W.img_native_h > 0 then
             local avail_h = math.max(0, content_bottom - top - DETAIL_KEEP - GAP - IMG_CTRL_H)
             local box_h   = math.min(IMG_MAX_H, avail_h)
-            if box_h > 20 then
-                local scale = math.min(detail_w / W.img_native_w, box_h / W.img_native_h)
-                disp_w = math.floor(W.img_native_w * scale)
-                disp_h = math.floor(W.img_native_h * scale)
+            if box_h > 20 and image_fit and image_fit.fit then
+                disp_w, disp_h = image_fit.fit(W.img_native_w, W.img_native_h, detail_w, box_h)
             end
         end
 
@@ -827,11 +838,17 @@ function M.build(parent, deps)
         if disp_h > 0 then
             vis(W.image, true)
             bounds(W.image, right_x + math.floor((detail_w - disp_w) / 2), cy, disp_w, disp_h)
-            -- Re-assert the picture skin so a resize rescales the image (idempotent).
+            -- Paint the whole image scaled to the box. picture.size (the
+            -- destination render size) is what makes DCS scale it; picture.rect
+            -- would crop at native resolution instead (the old bug). Re-applied
+            -- each relayout so a splitter/window resize rescales.
             pcall(function()
-                if W.image and SkinUtils and SkinUtils.setStaticPictureRect and W.img_path then
-                    W.image:setSkin(SkinUtils.setStaticPictureRect(W.img_path, 0, 0,
-                        W.img_native_w, W.img_native_h, W.image:getSkin()))
+                if W.image and SkinUtils and SkinUtils.setStaticPicture and W.img_path then
+                    local skin = SkinUtils.setStaticPicture(W.img_path, W.image:getSkin())
+                    if SkinUtils.setStaticPictureSize then
+                        skin = SkinUtils.setStaticPictureSize(disp_w, disp_h, skin)
+                    end
+                    W.image:setSkin(skin)
                 end
             end)
             cy = cy + disp_h + GAP
@@ -840,10 +857,7 @@ function M.build(parent, deps)
         end
 
         -- Control row: ◀ left, ▶ right (only when >1 image), counter/status centred.
-        local count_txt
-        if W.img_state == 'loading'    then count_txt = 'loading\226\128\166'      -- loading…
-        elseif W.img_state == 'failed' then count_txt = 'preview unavailable'
-        else count_txt = string.format('%d / %d', W.cur_img_idx, n) end
+        local count_txt = (count_text and count_text()) or string.format('%d / %d', W.cur_img_idx, n)
         vis(W.img_count, true)
         pcall(function() if W.img_count.setText then W.img_count:setText(count_txt) end end)
         bounds(W.img_count, right_x + IMG_BTN_W + 4, cy, math.max(0, detail_w - 2 * (IMG_BTN_W + 4)), IMG_CTRL_H)
@@ -896,23 +910,61 @@ function M.build(parent, deps)
         return w, h
     end
 
+    -- Counter / status line shared by the thumbnail control row and the enlarge
+    -- window: 'i / N', or the loading / failure state.
+    count_text = function()
+        local n = #(W.cur_images or {})
+        if W.img_state == 'loading' then return 'loading\226\128\166' end
+        if W.img_state == 'failed'  then return 'preview unavailable' end
+        return string.format('%d / %d', W.cur_img_idx, n)
+    end
+
+    -- Mirror the current image state into the enlarge window when it's open.
+    push_to_popup = function()
+        if not (image_window and image_window.is_open and image_window.is_open()) then return end
+        local has_nav = #(W.cur_images or {}) > 1
+        if W.img_state == 'ready' and W.img_path then
+            image_window.set_image(W.img_path, count_text(), has_nav)
+        else
+            image_window.set_loading(count_text(), has_nav)
+        end
+    end
+
+    -- relayout the thumbnail panel AND keep the enlarge window (if open) in sync.
+    local function render()
+        relayout(W.cw, W.ch)
+        if push_to_popup then push_to_popup() end
+    end
+
+    -- Open (or refocus) the enlarge window on the current image. No-op until an
+    -- image is ready. The popup's ◀ ▶ drive the same nav() the thumbnail uses,
+    -- so the two stay in sync.
+    open_enlarge = function()
+        if not (image_window and image_window.show) then return end
+        if W.img_state ~= 'ready' or not W.img_path then return end
+        image_window.show({
+            path       = W.img_path,
+            native_w   = W.img_native_w,
+            native_h   = W.img_native_h,
+            count_text = count_text(),
+            has_nav    = #(W.cur_images or {}) > 1,
+            on_prev    = function() pcall(function() nav(-1) end) end,
+            on_next    = function() pcall(function() nav(1) end) end,
+        })
+    end
+
     -- Apply `path` to the visible image widget + cache its native size, then
-    -- relayout (which fits it to the column, aspect-preserved). Sets img_state.
+    -- render (fit to the column, aspect-preserved, and sync the enlarge window).
     set_displayed = function(path)
         local nw, nh = probe_native(path)
         if nw > 0 and nh > 0 then
             W.img_path = path; W.img_native_w = nw; W.img_native_h = nh
             W.img_state = 'ready'
-            pcall(function()
-                if W.image and SkinUtils and SkinUtils.setStaticPictureRect then
-                    W.image:setSkin(SkinUtils.setStaticPictureRect(path, 0, 0, nw, nh, W.image:getSkin()))
-                end
-            end)
         else
             W.img_path = nil; W.img_native_w = nil; W.img_native_h = nil
             W.img_state = 'failed'
         end
-        relayout(W.cw, W.ch)
+        render()
     end
 
     -- Make sure the image at cur_img_idx is on screen: show it from cache if
@@ -925,26 +977,26 @@ function M.build(parent, deps)
             W.media_job = nil; W.media_kind = nil; W.media_pending = nil
         end
         local rel = W.cur_images and W.cur_images[W.cur_img_idx]
-        if not rel then W.img_state = 'none'; relayout(W.cw, W.ch); return end
+        if not rel then W.img_state = 'none'; render(); return end
         if not (paths and paths.community_image_path) then
-            W.img_state = 'failed'; relayout(W.cw, W.ch); return
+            W.img_state = 'failed'; render(); return
         end
         local path = paths.community_image_path(rel)
         if file_exists(path) then set_displayed(path); return end
         -- Not cached → download. Degrade to 'failed' with no networking.
         if not (transport and transport.available and transport.available()
                 and fetch and fetch.new and cfg and cfg.image_url) then
-            W.img_state = 'failed'; relayout(W.cw, W.ch); return
+            W.img_state = 'failed'; render(); return
         end
         W.img_state = 'loading'; W.img_path = nil; W.img_native_w = nil; W.img_native_h = nil
-        relayout(W.cw, W.ch)
+        render()
         W.media_job = fetch.new(transport)
         W.media_kind = 'image'
         W.media_pending = { token = W.media_token, idx = W.cur_img_idx, rel = rel, path = path }
         local ok = pcall(function() W.media_job:fetch_file(cfg.image_url(rel)) end)
         if not ok then
             W.media_job = nil; W.media_kind = nil; W.media_pending = nil
-            W.img_state = 'failed'; relayout(W.cw, W.ch)
+            W.img_state = 'failed'; render()
         end
     end
 
@@ -959,6 +1011,9 @@ function M.build(parent, deps)
     -- Begin (or reset) the media flow for the currently-selected entry. Bumps
     -- the token so any in-flight completion for a previous entry is ignored.
     start_media = function()
+        -- Selection changed → the enlarge window (if open) was showing the old
+        -- prefab's image; hide it so it never shows a stale cross-prefab shot.
+        if image_window and image_window.hide then pcall(image_window.hide) end
         W.media_token = (W.media_token or 0) + 1
         W.media_job = nil; W.media_kind = nil; W.media_pending = nil
         W.cur_images = {}; W.cur_img_idx = 1
@@ -1020,14 +1075,14 @@ function M.build(parent, deps)
         if pend.token ~= W.media_token then return end    -- selection moved on
         if pend.idx ~= W.cur_img_idx then return end       -- navigated away
         if okw then set_displayed(pend.path)
-        else W.img_state = 'failed'; relayout(W.cw, W.ch) end
+        else W.img_state = 'failed'; render() end
     end
 
     -- A media fetch errored. Only touch the UI if it's still the current one.
     local function on_media_error(kind, pend)
         if not pend or pend.token ~= W.media_token then return end
         if kind == 'meta' then W.img_state = 'none' else W.img_state = 'failed' end
-        relayout(W.cw, W.ch)
+        render()
     end
 
     -- Pump the media job once per tick (mirrors the W.job pump in handle:tick).
