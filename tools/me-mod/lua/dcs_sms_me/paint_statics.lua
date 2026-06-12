@@ -36,6 +36,7 @@ local SpinBox;      do local ok, m = pcall(require, 'SpinBox');      if ok then 
 local ComboList;    do local ok, m = pcall(require, 'ComboList');    if ok then ComboList    = m end end
 local ListBoxItem;  do local ok, m = pcall(require, 'ListBoxItem');  if ok then ListBoxItem  = m end end
 local ToggleButton; do local ok, m = pcall(require, 'ToggleButton'); if ok then ToggleButton = m end end
+local CheckBoxModule; do local ok, m = pcall(require, 'CheckBox'); if ok then CheckBoxModule = m end end
 local Skin;         do local ok, m = pcall(require, 'Skin');         if ok then Skin         = m end end
 
 local Grid;           do local ok, m = pcall(require, 'Grid');           if ok then Grid           = m end end
@@ -112,8 +113,14 @@ local W = {
         min_spacing = 4,     -- meters
         name        = '',
         mode        = 'paint',
+        heading_random = true,
+        heading_deg = 0,
+        seed_on     = false,
+        seed        = 12345,
     },
     erase_toggle = nil,
+    heading_toggle = nil, heading_label = nil, heading_spin = nil,
+    seed_check = nil, seed_spin = nil,
 
     -- paint state
     armed     = false,
@@ -185,6 +192,29 @@ local function get_density()     return math.max(0.01, spin_value(W.density_spin
 local function get_min_spacing() return math.max(0, spin_value(W.spacing_spin, W.cfg.min_spacing)) end
 local function get_name_pattern()
     return edit_text(W.name_input, W.cfg.name)
+end
+
+-- Heading policy: 'random' or a fixed degrees number.
+local function get_heading_policy()
+    local random = W.cfg.heading_random
+    pcall(function()
+        if W.heading_toggle and W.heading_toggle.getState then
+            -- Toggle ON = random heading (its default state).
+            random = W.heading_toggle:getState() == true
+        end
+    end)
+    if random then return 'random' end
+    return spin_value(W.heading_spin, W.cfg.heading_deg) % 360
+end
+
+-- Optional reproducible-scatter seed; nil = unseeded (fresh each stroke).
+local function get_seed()
+    local on = W.cfg.seed_on
+    pcall(function()
+        if W.seed_check and W.seed_check.getState then on = W.seed_check:getState() == true end
+    end)
+    if not on then return nil end
+    return spin_value(W.seed_spin, W.cfg.seed)
 end
 
 -- Country selection (prefab_manager pattern, without the keep-original
@@ -785,8 +815,8 @@ local function begin_stroke(wx, wy, opts)
         density         = opts.density or get_density(),
         min_spacing     = opts.min_spacing or get_min_spacing(),
         palette         = palette,
-        heading         = opts.heading or 'random',
-        seed            = opts.seed,
+        heading         = opts.heading or get_heading_policy(),
+        seed            = opts.seed or get_seed(),
         existing_points = registry_points(),
     })
     if not session then return nil, serr end
@@ -1120,7 +1150,7 @@ local function relayout(x, y, w, h)
 
     -- The catalog grid soaks up the slack when the window grows: it gets
     -- whatever height remains after the fixed-height rows below.
-    local fixed_below = 32 + 8 + 24 + 126 + 30 + 8 + 30 + 30 + 30 + 30 + 30 + 36
+    local fixed_below = 32 + 8 + 24 + 126 + 30 + 8 + 30 + 30 + 30 + 30 + 30 + 30 + 30 + 36
     local catalog_h = math.max(100, h - (cur_y - y) - fixed_below)
     set(W.catalog_grid, x, cur_y, w, catalog_h)
     cur_y = cur_y + catalog_h + 6
@@ -1170,6 +1200,15 @@ local function relayout(x, y, w, h)
 
     set(W.spacing_label, x, cur_y, label_w, ROW_H)
     set(W.spacing_spin, input_x, cur_y, 90, ROW_H)
+    cur_y = cur_y + ROW_PITCH
+
+    set(W.heading_toggle, x, cur_y, 130, ROW_H)
+    set(W.heading_label, x + 140, cur_y, 70, ROW_H)
+    set(W.heading_spin, x + 214, cur_y, 90, ROW_H)
+    cur_y = cur_y + ROW_PITCH
+
+    set(W.seed_check, x, cur_y, 130, ROW_H)
+    set(W.seed_spin, x + 140, cur_y, 110, ROW_H)
     cur_y = cur_y + ROW_PITCH + 8
 
     if W.erase_toggle then
@@ -1186,8 +1225,8 @@ end
 local function build_window()
     W.sms_window = sms_window.new({
         title    = 'Paint Statics',
-        size     = { w = 500, h = 780 },
-        min_size = { w = 470, h = 700 },
+        size     = { w = 500, h = 840 },
+        min_size = { w = 470, h = 760 },
         on_resize = function(swin, x, y, w, h)
             relayout(x, y, w, h)
         end,
@@ -1465,6 +1504,48 @@ local function build_window()
         pcall(function() W.cfg.min_spacing = tonumber(self:getValue()) or W.cfg.min_spacing end)
     end)
 
+    -- Heading row: random toggle (default ON) + fixed-degrees spin used
+    -- when the toggle is off.
+    if ToggleButton then
+        W.heading_toggle = ToggleButton.new()
+        pcall(function() W.heading_toggle:setText('Random heading') end)
+        try_skin(W.heading_toggle, 'sms_button')
+        pcall(function() W.heading_toggle:setState(true) end)
+        pcall(function() W.heading_toggle:setTooltipText('ON: each static gets a random heading. OFF: the fixed value on the right.') end)
+        pcall(function()
+            if W.heading_toggle.addChangeCallback then
+                W.heading_toggle:addChangeCallback(function(self)
+                    local on = self.getState and self:getState() or false
+                    W.cfg.heading_random = on
+                end)
+            end
+        end)
+        insert(W.heading_toggle)
+    end
+    W.heading_label = mk_label('Fixed (°):')
+    W.heading_spin  = mk_spin(W.cfg.heading_deg, 0, 359, 1, false, 'Fixed heading in degrees (used when Random heading is off)', function(self)
+        pcall(function() W.cfg.heading_deg = (tonumber(self:getValue()) or 0) % 360 end)
+    end)
+
+    -- Seed row: opt-in reproducible scatter.
+    if CheckBoxModule then
+        W.seed_check = CheckBoxModule.new('Seed')
+        pcall(function() W.seed_check:setTooltipText('Seed the scatter RNG per stroke for reproducible results') end)
+        pcall(function()
+            if W.seed_check.addChangeCallback then
+                W.seed_check:addChangeCallback(function(self)
+                    pcall(function() W.cfg.seed_on = self:getState() == true end)
+                end)
+            end
+        end)
+        insert(W.seed_check)
+    else
+        W.seed_check = mk_label('Seed (n/a):')
+    end
+    W.seed_spin = mk_spin(W.cfg.seed, 0, 999999, 1, false, 'Seed value (only used when Seed is checked)', function(self)
+        pcall(function() W.cfg.seed = tonumber(self:getValue()) or W.cfg.seed end)
+    end)
+
     if ToggleButton then
         W.erase_toggle = ToggleButton.new()
         pcall(function() W.erase_toggle:setText('Erase mode') end)
@@ -1643,6 +1724,30 @@ function M._debug_set_brush(radius, density, spacing)
         pcall(function() if W.spacing_spin and W.spacing_spin.setValue then W.spacing_spin:setValue(spacing) end end)
     end
     return { ok = true, radius = get_radius(), density = get_density(), spacing = get_min_spacing() }
+end
+
+-- Merge fields into cfg and mirror to widgets where they exist. Fields:
+-- heading_random (bool), heading_deg, seed_on (bool), seed, mode.
+function M._debug_set_cfg(tbl)
+    for k, v in pairs(tbl or {}) do W.cfg[k] = v end
+    pcall(function()
+        if tbl.heading_random ~= nil and W.heading_toggle and W.heading_toggle.setState then
+            W.heading_toggle:setState(tbl.heading_random == true)
+        end
+        if tbl.heading_deg and W.heading_spin and W.heading_spin.setValue then
+            W.heading_spin:setValue(tbl.heading_deg)
+        end
+        if tbl.seed_on ~= nil and W.seed_check and W.seed_check.setState then
+            W.seed_check:setState(tbl.seed_on == true)
+        end
+        if tbl.seed and W.seed_spin and W.seed_spin.setValue then
+            W.seed_spin:setValue(tbl.seed)
+        end
+        if tbl.mode and W.erase_toggle and W.erase_toggle.setState then
+            W.erase_toggle:setState(tbl.mode == 'erase')
+        end
+    end)
+    return { ok = true, cfg = W.cfg }
 end
 
 function M._debug_eyedrop()
