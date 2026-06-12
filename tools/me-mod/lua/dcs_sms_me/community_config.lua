@@ -36,4 +36,18 @@ end
 function M.manifest_url() return M.RAW_BASE .. M.MANIFEST_PATH end
 function M.file_url(rel_path) return M.RAW_BASE .. tostring(rel_path or '') end
 
+-- Sidecar metadata URL for a prefab: 'prefabs/x.prefab' -> the x.meta.json
+-- next to it. The community catalog stores each prefab's screenshot list in
+-- this sidecar; index.json (the manifest) does not carry it.
+function M.meta_url(prefab_path)
+    local p = tostring(prefab_path or ''):gsub('%.prefab$', '')
+    return M.RAW_BASE .. p .. '.meta.json'
+end
+
+-- URL for a community screenshot given its repo-relative path
+-- ('<thread_id>/<n>.png'); images live under the repo's images/ dir.
+function M.image_url(rel)
+    return M.RAW_BASE .. 'images/' .. tostring(rel or '')
+end
+
 return M

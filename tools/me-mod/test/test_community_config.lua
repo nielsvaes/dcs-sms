@@ -28,5 +28,17 @@ check('normal folder no match',       ic('CAP') == false, 'CAP')
 check('CommunityCenter no match',     ic('CommunityCenter') == false, 'CommunityCenter')
 check('MANAGED_MSG non-empty',        type(cfg.MANAGED_MSG) == 'string' and #cfg.MANAGED_MSG > 0, cfg.MANAGED_MSG)
 
+-- meta_url: prefab path -> sibling .meta.json under RAW_BASE.
+check('meta_url swaps .prefab for .meta.json',
+      cfg.meta_url('prefabs/snow-city.prefab') == cfg.RAW_BASE .. 'prefabs/snow-city.meta.json',
+      cfg.meta_url('prefabs/snow-city.prefab'))
+check('meta_url tolerates no .prefab suffix',
+      cfg.meta_url('prefabs/x') == cfg.RAW_BASE .. 'prefabs/x.meta.json',
+      cfg.meta_url('prefabs/x'))
+-- image_url: repo-relative screenshot path under images/.
+check('image_url joins raw base + images/ + rel',
+      cfg.image_url('123/1.png') == cfg.RAW_BASE .. 'images/123/1.png',
+      cfg.image_url('123/1.png'))
+
 if failures > 0 then os.exit(1) end
 print('All community_config tests passed.')
