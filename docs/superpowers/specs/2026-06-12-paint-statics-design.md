@@ -38,6 +38,7 @@ A tool to **"paint" Static objects onto the DCS map** — the same workflow as f
 | D7 | Ownership | **Country selector** in the panel (reuse the Prefab Manager's country combo), plus a **Name field** so every painted static gets a chosen name, auto-indexed. |
 | D8 | Process | No formal spec→plan→implement ceremony. This brief = spec; §9 milestones = plan; commit per milestone; verify visually via `dcs-sms` + screenshots. TDD only for the deterministic scatter core (§7). |
 | D9 | Isolation | Do all work in a **fresh git worktree** branched off `main` at current HEAD. |
+| D10 | Catalog browser + 3D preview | Mirror the vanilla ME Static panel's 3D model viewport: browse the static catalog, see a live 3D model of the highlighted type, then add it to the palette. Realistic — the viewport is a standard, embeddable dxgui widget — and degrades to a text list + metadata if the widget resists embedding. The 3D preview is an enhancement and must never block painting. |
 
 What we explicitly do **not** do (statics don't support it): scale randomization, pitch/roll, align-to-surface-normal. Heading is the only per-instance randomization.
 
@@ -75,6 +76,8 @@ This is a **pure ME-mod tool window** — it does its work inside the editor aga
 |------|------|
 | `tools/me-mod/lua/dcs_sms_me/paint_statics.lua` | The tool window (`sms_window` subclass): palette UI, brush controls, country combo, Name field, mode toggle (Paint/Erase), and the `me_map_window` brush state machine. Mirror the structure of `prefab_manager.lua`. |
 | `tools/me-mod/lua/dcs_sms_me/paint_scatter.lua` | **Pure Lua, no dxgui.** The deterministic scatter core: given a brush stroke (path of world points + radius), density, min-spacing, a weighted type palette, heading policy, and an optional seed, return the list of statics to create `{type, x, y, heading, ...}`. This is the unit-tested heart of the tool (§7). Keep it free of any ME API so it runs under the plain Lua test harness. |
+| `tools/me-mod/lua/dcs_sms_me/static_catalog.lua` | Enumerate placeable Static types from `me_db_api`, grouped by category, as plain rows `{type, display, shape_name, category}`. Wrap/reuse `prefab_ops.build_country_type_set` (~765-800), which already walks `DB.db.Countries[*].Units[*][*]`. Keep the ME-API touch thin so the list/filter logic is unit-testable. |
+| `tools/me-mod/lua/dcs_sms_me/static_preview_panel.lua` | The embedded 3D model preview (a `DemoSceneWidget` via `ManagerDemoScene`). Sub-module of `paint_statics.lua`; isolate it so a 3D-widget failure degrades to no-preview without taking the tool down. |
 | `tools/me-mod/test/test_paint_scatter.lua` | Unit tests for `paint_scatter.lua`. Register it in `run-tests.ps1`'s hardcoded `$tests` array (it does not glob — unregistered tests silently never run). |
 
 ### Files to reuse (do not reinvent)
@@ -87,6 +90,8 @@ This is a **pure ME-mod tool window** — it does its work inside the editor aga
 | Static data model + how a static is built/injected | `verbs/group_verbs.lua` `group_create_static` (~591-676). Statics are single-unit groups under `country.static.group`; fields: `type`, `x`, `y`, `heading` (radians in the table; degrees in public API), `category` (`Cargos`/`Fortifications`/`Warehouses`/`Trucks`), `shape_name`, `canCargo`, `mass`, `rate=100`. Reuse `inject_group` from `verb_helpers.lua` and `refresh_group_view` after mutation. |
 | Undo bus | `undo.lua`; the Prefab Manager records placements via `undo.record(rec)` (`prefab_manager.lua:1413`) and `sms_window` wires Ctrl+Z to it. |
 | Selection snapshot (for the eyedropper + erase hit-testing) | `selection.lua` (`snapshot`/`snapshot_mission`) — already understands statics. |
+| Static type catalog (browsable list, grouped by category) | `me_db_api`: walk `DB.db.Countries[*].Units[<category>][*]`; entries carry `Name` / `ShapeName` / `category`. `DB.unit_by_type[type]` → the unit def (with `.ShapeName`). We already do this walk in `prefab_ops.lua` `build_country_type_set` (~765-800). Categories incl. `Cargos`, `Fortifications`, `Warehouses`, `Cars`, `Personnel`, `ADEquipment`, … |
+| 3D model preview viewport | `ManagerDemoScene.newDemoScene('staticPreview.lua')` → a `DemoSceneWidget` (ordinary dxgui widget; `insertWidget` it into the `sms_window` like any other). `widget:getScene()` → `sceneAPI`; `sceneAPI:addModel(shape, 0, y, 0)` loads the model; the demo scene auto-rotates + handles mouse drag-rotate / wheel-zoom. Vanilla reference: `<DCS>\MissionEditor\modules\me_static.lua` `initLiveryPreview` + `setPreviewType` (~2293-2426); scene script `<DCS>\Scripts\DemoScenes\staticPreview.lua`. |
 | Menu wiring | `menu.lua` — add a "Paint Statics" item next to Prefab Manager; `item.func = function() require('dcs_sms_me.paint_statics').toggle() end`. Pattern in `tools/me-mod/AGENTS.md` §2.10. |
 | House skins / scrollbars | `sms_skins.lua`, `sms_scrollbars.lua`. |
 | dxgui / undo / marquee gotchas | `tools/me-mod/GOTCHAS.md` — skim before touching window/map code. |
@@ -124,17 +129,23 @@ Keep this module **pure** (inputs → outputs, no ME globals) so it's fully unit
 
 ---
 
-## 7. The palette UI and the eyedropper
+## 7. The palette, the catalog browser, and the 3D preview
 
-The palette is a small list: each row is a static **type** + a **weight**. Painting picks a type by weight per placement.
+The **palette** ("bucket") is the set of types you'll paint: each row is a static **type** + a **weight**; painting picks a type by weight per placement.
 
-**How types get into the palette** — build the cheapest robust path first:
-1. **Primary — Eyedropper / "Add from selection":** the user selects a static in the ME, clicks "Add selected", and its `type`/`shape_name`/`category` are read from the live mission via `selection.lua` and added as a palette row. This reuses existing, tested selection code and needs no static-type database. It is also very paint-tool-idiomatic.
-2. **Stretch — Browse the static catalog:** a searchable list of all static types (investigate how the ME's own static-placement panel enumerates them — likely a `me_db`/static-object table). Nice-to-have; do not block the build on it.
+There are two ways to add to the palette — build both; they produce the same palette-row format:
 
-**Data model (future-proofing, D4):** a palette row should be a tagged record, e.g. `{ kind = 'static', type=…, shape_name=…, category=…, weight=… }`. Reserve `kind = 'prefab'` for later so adding prefab brushes is additive, not a rewrite. Only `kind='static'` ships now.
+1. **Catalog browser + 3D preview (the main flow, D10).** A browsable list of placeable static types grouped by category (`Cargos`, `Fortifications`, `Warehouses`, `Cars`, `Personnel`, `ADEquipment`, …), enumerated from `me_db_api` via `static_catalog.lua` (reusing `prefab_ops.build_country_type_set`). Selecting a row shows a **live 3D model** of that static in an embedded viewport; an "Add to palette" button drops the highlighted type into the bucket. This mirrors the vanilla ME Static panel and is how the user expects to shop for clutter.
+2. **Eyedropper / "Add from selection".** Select a static already in the mission, click "Add selected" — its `type`/`shape_name`/`category` are read via `selection.lua` and added as a palette row. Cheap, reuses tested code, needs no catalog. Keep it as a fast alternative.
 
-Panel layout (follow `prefab_manager.lua` conventions; use `sms_window` chrome): palette list with add/remove + per-row weight; Paint/Erase toggle; brush sliders (radius, density, min-spacing); random-heading toggle (+ fixed-heading field when off); optional seed field; country combo; Name field; and a prominent "Paint" enter/exit button that arms the map state machine (mirror the place-pending "PLACING…" affordance: title-bar hint, sticky status, Esc cancels).
+**The 3D preview — concrete recipe** (vanilla reference: `me_static.lua` `initLiveryPreview`/`setPreviewType`, ~2293-2426):
+- Create once: `local DSW = ManagerDemoScene.newDemoScene('staticPreview.lua')`, then `panel:insertWidget(DSW)` and `DSW:setBounds(...)`. It's a normal dxgui widget — it lives happily inside `sms_window`.
+- On selection change: `local sceneAPI = DSW:getScene()`; remove the previous `DSW.modelObj`; resolve the shape (`DB.unit_by_type[type].ShapeName`); `DSW.modelObj = sceneAPI:addModel(shape, 0, objectHeight, 0)`; if `modelObj.valid`, fit the camera from `modelObj:getRadius()` / `getBBox()` exactly as `setPreviewType` does. The demo scene auto-rotates and handles mouse drag-rotate / wheel-zoom.
+- **Wrap every ME-API call in `pcall`** and isolate this in `static_preview_panel.lua`. **Graceful fallback:** if `ManagerDemoScene`/`DemoSceneWidget` can't be created or `addModel` fails, hide the viewport and fall back to a text list + metadata (`shape_name`, `category`, `mass`, `can_cargo`). The preview is an enhancement; **it must never block palette-building or painting.**
+
+**Data model (future-proofing, D4):** a palette row is a tagged record, e.g. `{ kind = 'static', type=…, shape_name=…, category=…, weight=… }`. Reserve `kind = 'prefab'` for later so prefab brushes are additive, not a rewrite. Only `kind='static'` ships now.
+
+**Panel layout** (follow `prefab_manager.lua`; use `sms_window` chrome): a catalog browser region (category filter + search + the 3D preview viewport + "Add to palette"); the palette list with per-row weight + remove + the eyedropper "Add selected"; Paint/Erase toggle; brush sliders (radius, density, min-spacing); random-heading toggle (+ fixed-heading field when off); optional seed; country combo; Name field; and a prominent "Paint" arm/disarm button that installs the map state machine (mirror the place-pending "PLACING…" affordance: title-bar hint, sticky status, Esc cancels). This window is busier than the Prefab Manager — give the catalog/preview its own region (a splitter, like the Prefab Manager's tree/grid split, fits well).
 
 ---
 
@@ -144,7 +155,7 @@ You can close the loop on almost everything overnight without a human, via `dcs-
 
 1. **Drive the editor headlessly.** `dcs-sms exec --target gui --code '<lua>'` runs arbitrary Lua in the live ME state (same state the tool runs in). The gui bridge must be ON (DCS-SMS menu → *External execution: OFF→ON*); calls return exit code 4 if it's off.
 2. **Self-test the scatter without a mouse.** Expose a small internal entry point on the tool (e.g. `paint_statics._debug_stroke(points, opts)`) that runs `paint_scatter` + the real commit path. Call it via `exec --target gui` with a synthetic stroke (a line, an arc, a filled circle). This exercises generation → commit → naming → undo end-to-end with **no human mouse needed**.
-3. **Screenshot to confirm.** Take an F10/map screenshot after a synthetic stroke and *look*: is the density right, are statics spaced (no overlaps), are headings varied, did the right types appear, is the area correct? Iterate against what you see, not what you assume.
+3. **Screenshot to confirm.** Take an F10/map screenshot after a synthetic stroke and *look*: is the density right, are statics spaced (no overlaps), are headings varied, did the right types appear, is the area correct? Iterate against what you see, not what you assume. The 3D preview viewport is screenshot-verifiable too — confirm the selected catalog type renders the right model.
 4. **What still needs the human (you, in the morning):** only the literal *feel* of holding the mouse and dragging — does the brush track smoothly, does Esc cancel, does pan/zoom still work mid-paint. Leave a short **manual verification checklist** in the PR/branch notes for these.
 
 **If the bridge stops responding, DCS probably crashed.** Recovery procedure:
@@ -162,11 +173,12 @@ Build as an ever-working vertical slice. If you run out of time or tokens, ship 
 
 - **M0 — Brush spike (the only real unknown).** Arm a `me_map_window` brush state via `setState`; on left-down/drag, `getMapPoint`→world and drop a single hardcoded static at each sampled point; draw a cursor-following brush circle; right/middle still pan/zoom; Esc restores `getPanState()`. Confirm (screenshot) that a held left-drag paints a continuous trail. Resolve the "does onMouseDrag fire continuously?" question here and pick the drag-sampling vs move-sampling path. **Gate: a drag visibly paints a line of statics.**
 - **M1 — Vertical slice.** Real tool window (`sms_window`) + menu entry; paint ONE chosen static type with the country combo and the Name field (indexed); the pure `paint_scatter` module with brush **radius** wired; per-stroke **undo**. **Gate: open tool → pick country/name → drag → named statics appear, Ctrl+Z removes the stroke.**
-- **M2 — Weighted palette.** Palette list + per-row weights + eyedropper "Add from selection"; weighted random type pick per placement. **Gate: a stroke produces a mix matching the weights (verify via screenshot + counts).**
+- **M2 — Weighted palette + catalog browse.** Palette list + per-row weights; the catalog browser (text list grouped by category via `static_catalog.lua`) and the eyedropper "Add from selection" as the two add-paths; weighted random type pick per placement. (3D preview comes in M6 — the text list is enough here.) **Gate: build a mixed-weight palette by browsing + eyedropper, then a stroke produces a mix matching the weights (screenshot + counts).**
 - **M3 — Density + spacing + perf.** Density control; `min_spacing` with the spatial-hash rejection; **measure** commit cost on a long drag and batch/throttle until the editor stays responsive. **Gate: a big drag is dense, non-overlapping, and does not freeze the ME (observed, not assumed).**
 - **M4 — Erase (MVP).** Paint/Erase toggle; erase-drag deletes tool-placed statics under the brush; erase strokes are undoable. **Gate: paint then erase then undo all behave.**
 - **M5 — Random heading + polish.** Random-heading toggle (+ fixed value), optional seed, status/affordance polish, missing-state guards (no palette types, etc.).
-- **M6 — Docs, tests, version (stretch: catalog browser).** Finalize unit tests + register in `run-tests.ps1`; update `tools/me-mod/AGENTS.md` (new tool window in §2.2 file table and §2.9; mention in the menu section); bump `version.lua` (a new tool is a **minor** bump) + add a CHANGELOG entry; if you added any CLI verb, run `dcs-sms doc` and update the §1.4 verb table. Optionally add the static-catalog browse path.
+- **M6 — 3D model preview.** Embed the `DemoSceneWidget` preview in the catalog browser (§7 recipe), with the text-list/metadata fallback. **This is the natural cut point** — if the night runs short, stop here-or-before and you still ship a fully working paint tool with a browsable + eyedropper palette. **Gate: selecting a catalog row shows the correct 3D model (confirm by screenshot); broken/missing models degrade to the fallback, not a crash.**
+- **M7 — Finalize.** Unit tests green + registered in `run-tests.ps1`; update `tools/me-mod/AGENTS.md` (new tool window + new modules in the §2.2 file table, §2.9, and the menu section); bump `version.lua` (a new tool is a **minor** bump) + add a CHANGELOG entry; if you added any CLI verb, run `dcs-sms doc` and update the §1.4 verb table. Per §10, also fold each milestone's own doc/version touch-ups into that milestone's commit so any stopping point is shippable — this is the final consolidation.
 
 ---
 
@@ -178,6 +190,7 @@ Build as an ever-working vertical slice. If you run out of time or tokens, ship 
 - **Refresh after mutation.** Statics you create/delete won't show until you refresh the relevant map/group view (`refresh_group_view`, `mapObjects` lazy-creation — see `tools/me-mod/AGENTS.md` §2.7).
 - **Doc-sync, versioning, CHANGELOG** updates go in the **same commit** as the code that needs them.
 - **Commits:** commit at each milestone with clear messages. **Never push**, and never open a PR, without explicit human approval — the morning review decides that.
+- **DCS install path (for reading vanilla ME modules as reference).** On this machine DCS is at `D:\Program Files\Eagle Dynamics\DCS World`. The vanilla `me_static.lua` (the 3D-preview reference) is under `<DCS>\MissionEditor\modules\`; the scene script `staticPreview.lua` is under `<DCS>\Scripts\DemoScenes\`. Read these for reference. For any install/path CLI op, set `--dcs-path` or the `DCS_SMS_DCS_INSTALL` env var to that path (discovery logic: `tools/internal/dcspath/dcspath.go`).
 
 ---
 
@@ -185,6 +198,7 @@ Build as an ever-working vertical slice. If you run out of time or tokens, ship 
 
 - A "Paint Statics" tool opens from the DCS-SMS menu, on the `sms_window` chrome.
 - Holding left-mouse and dragging on the map scatters statics under a circular brush, controlled by radius/density/min-spacing, with weighted type selection from the palette, random (or fixed) heading, a chosen country, and an indexed Name.
+- The palette is built by browsing the static catalog (with a live 3D model preview, or the text/metadata fallback) and/or the eyedropper, with per-type weights.
 - Erase mode removes tool-placed statics by dragging.
 - Each stroke is a single undo.
 - The pure scatter core is unit-tested and the tests are registered + green.
