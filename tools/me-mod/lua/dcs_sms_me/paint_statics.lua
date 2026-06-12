@@ -1,42 +1,358 @@
--- paint_statics.lua — "Paint Statics" tool window (M0 spike stage).
+-- paint_statics.lua — the "Paint Statics" tool window.
 --
--- M0: instrumented brush state machine over me_map_window. Arms a map
--- state that paints a hardcoded static type along a held left-drag and
--- draws a cursor-following brush circle. Records event counts so the
--- "does onMouseDrag fire continuously?" question (design brief §3) can
--- be answered empirically via the gui bridge.
+-- Paint static objects onto the ME map like foliage in Unreal/Unity:
+-- arm the brush, hold left mouse and drag — statics scatter under a
+-- circular brush per radius / density / min-spacing, with weighted type
+-- selection, a country, and an indexed name. One stroke = one undo.
 --
--- Debug surface (gui-bridge driven, no UI yet):
---   M._arm_spike(opts)     — install the brush map state
---   M._disarm_spike()      — restore pan state, remove overlay
---   M._spike_stats()       — event counters + placed-static names
+-- Architecture:
+--   * paint_scatter.lua   — pure scatter core (unit-tested, no ME APIs)
+--   * static_catalog.lua  — static type metadata from me_db_api
+--   * this file           — sms_window UI + the me_map_window brush state
+--                           machine + the commit path (verb_helpers.inject_group)
+--
+-- The map mouse hook mirrors prefab_manager.lua's place-pending state
+-- machine, inverted for continuous painting: onMouseDown begins a stroke,
+-- onMouseDrag (which DOES fire continuously during a held left-drag —
+-- verified empirically in M0) extends it, onMouseUp commits one undo
+-- record for the whole stroke. Right/middle events forward to the captured
+-- pan state so pan/zoom keep working while armed.
+--
+-- Debug surface (gui-bridge driven, used by the agent verification loop):
+--   M._debug_stroke(points, opts) — run a synthetic stroke through the
+--     real generate → commit → name → undo pipeline, no mouse needed.
 --
 -- See: docs/superpowers/specs/2026-06-12-paint-statics-design.md
 
 local M = {}
 
-local S = {
-    armed       = false,
-    painting    = false,
-    pan_state   = nil,
-    brush_id    = nil,   -- MapWindow draw-object id for the brush circle
-    brush_data  = nil,
-    radius      = 50,    -- meters
-    country     = nil,   -- country name used by the spike
-    static_type = 'Oil Barrel',
-    category    = 'Structures',
-    shape_name  = 'M92_Oilbarrel',
-    min_step    = 8,     -- meters between spike placements along a drag
-    last        = nil,   -- last placed world point {x, y}
-    events      = nil,
-    placed      = nil,   -- list of group names created by the spike
-}
+-- ---------------------------------------------------------------------------
+-- dxgui modules (pcall-guarded so the module loads in test VMs)
+-- ---------------------------------------------------------------------------
+local Static;       do local ok, m = pcall(require, 'Static');       if ok then Static       = m end end
+local Button;       do local ok, m = pcall(require, 'Button');       if ok then Button       = m end end
+local EditBox;      do local ok, m = pcall(require, 'EditBox');      if ok then EditBox      = m end end
+local SpinBox;      do local ok, m = pcall(require, 'SpinBox');      if ok then SpinBox      = m end end
+local ComboList;    do local ok, m = pcall(require, 'ComboList');    if ok then ComboList    = m end end
+local ListBoxItem;  do local ok, m = pcall(require, 'ListBoxItem');  if ok then ListBoxItem  = m end end
+local ToggleButton; do local ok, m = pcall(require, 'ToggleButton'); if ok then ToggleButton = m end end
+local Skin;         do local ok, m = pcall(require, 'Skin');         if ok then Skin         = m end end
+
+local sms_window     = require('dcs_sms_me.sms_window')
+local sms_skins;     do local ok, m = pcall(require, 'dcs_sms_me.sms_skins'); if ok then sms_skins = m end end
+local skin_helper;   do local ok, m = pcall(require, 'dcs_sms_me.skin_helper'); if ok then skin_helper = m end end
+local version        = require('dcs_sms_me.version')
+local undo           = require('dcs_sms_me.undo')
+local scatter        = require('dcs_sms_me.paint_scatter')
+local static_catalog = require('dcs_sms_me.static_catalog')
+local H              = require('dcs_sms_me.verb_helpers')
+local prefab_ops     = require('dcs_sms_me.prefab_ops')
 
 local function log_write(level, msg)
     pcall(function() log.write('sms.me.paint', level, msg) end)
 end
 
--- Build a closed N-gon approximating a circle, for MapWindow draw objects.
+local function try_skin(widget, skin_name)
+    pcall(function()
+        if skin_helper and skin_helper.apply then
+            skin_helper.apply(widget, skin_name)
+            return
+        end
+        if widget and widget.setSkin and Skin and Skin[skin_name] then
+            widget:setSkin(Skin[skin_name]())
+        end
+    end)
+end
+
+-- ---------------------------------------------------------------------------
+-- Module state
+-- ---------------------------------------------------------------------------
+local W = {
+    sms_window = nil,
+    window     = nil,
+
+    -- widgets
+    type_label = nil, type_input = nil,
+    country_label = nil, country_combo = nil, country_filter_btn = nil,
+    name_label = nil, name_input = nil,
+    radius_label = nil, radius_spin = nil,
+    density_label = nil, density_spin = nil,
+    spacing_label = nil, spacing_spin = nil,
+    paint_btn = nil,
+
+    -- settings mirror (authoritative when widgets are absent, e.g. headless)
+    cfg = {
+        radius      = 25,    -- meters
+        density     = 1.0,   -- objects per 100 m²
+        min_spacing = 4,     -- meters
+        type_name   = 'Oil Barrel',
+        name        = '',
+    },
+
+    -- paint state
+    armed     = false,
+    painting  = false,
+    pan_state = nil,
+    brush_id  = nil,
+    brush_data = nil,
+    session   = nil,    -- scatter session for the in-flight stroke
+    stroke_groups = nil,
+    stroke_failed = 0,
+
+    -- registry of tool-placed statics: { group = group_obj, x = , y = }.
+    -- Drives erase hit-testing and cross-stroke min-spacing.
+    registry = {},
+
+    -- naming
+    name_seq     = 0,
+    last_pattern = nil,
+}
+
+-- ---------------------------------------------------------------------------
+-- Status helpers
+-- ---------------------------------------------------------------------------
+local function set_status(text, severity)
+    pcall(function()
+        if W.sms_window then W.sms_window:flash_status(text, severity) end
+    end)
+end
+
+local function set_status_sticky(text, severity)
+    pcall(function()
+        if W.sms_window then W.sms_window:set_status(text, severity) end
+    end)
+end
+
+-- ---------------------------------------------------------------------------
+-- Settings readers (widget if present, cfg mirror otherwise)
+-- ---------------------------------------------------------------------------
+local function spin_value(widget, fallback)
+    local v
+    pcall(function()
+        if widget and widget.getValue then v = tonumber(widget:getValue()) end
+    end)
+    return v or fallback
+end
+
+local function edit_text(widget, fallback)
+    local t
+    pcall(function()
+        if widget and widget.getText then t = widget:getText() end
+    end)
+    if type(t) ~= 'string' then return fallback end
+    return t
+end
+
+local function get_radius()      return math.max(1, spin_value(W.radius_spin, W.cfg.radius)) end
+local function get_density()     return math.max(0.01, spin_value(W.density_spin, W.cfg.density)) end
+local function get_min_spacing() return math.max(0, spin_value(W.spacing_spin, W.cfg.min_spacing)) end
+local function get_type_name()
+    local t = edit_text(W.type_input, W.cfg.type_name)
+    t = t:gsub('^%s+', ''):gsub('%s+$', '')
+    return t ~= '' and t or W.cfg.type_name
+end
+local function get_name_pattern()
+    return edit_text(W.name_input, W.cfg.name)
+end
+
+-- Country selection (prefab_manager pattern, without the keep-original
+-- sentinel — painting always needs a concrete country).
+local function get_country_name()
+    local name
+    pcall(function()
+        if not (W.country_combo and W.country_combo.getSelectedItem) then return end
+        local item = W.country_combo:getSelectedItem()
+        if item and item.getText then
+            local txt = item:getText()
+            if type(txt) == 'string' and txt ~= '' then name = txt end
+        end
+    end)
+    return name
+end
+
+local function country_coalition(Mission, name)
+    if not (Mission and type(Mission.countryCoalition) == 'table') then return nil end
+    local entry = Mission.countryCoalition[name]
+    if type(entry) ~= 'table' then return nil end
+    local cn = entry.name
+    if cn == 'red' or cn == 'blue' then return cn end
+    if cn == 'neutrals' or cn == 'neutral' then return 'neutral' end
+    return nil
+end
+
+local COALITION_SKIN = {
+    red     = 'listBoxItemCoalRedSkin',
+    blue    = 'listBoxItemCoalBlueSkin',
+    neutral = 'listBoxItemCoalNeutralSkin',
+}
+
+local function is_filter_all()
+    local on = false
+    pcall(function()
+        if W.country_filter_btn and W.country_filter_btn.getState then
+            on = W.country_filter_btn:getState() == true
+        end
+    end)
+    return on
+end
+
+local function populate_country_combo()
+    pcall(function()
+        if not (W.country_combo and ListBoxItem) then return end
+        local ok_req, Mission = pcall(require, 'me_mission')
+        if not ok_req or type(Mission.missionCountry) ~= 'table' then
+            log_write(log.WARNING, 'Mission.missionCountry unavailable — country dropdown empty')
+            return
+        end
+        local show_all = is_filter_all()
+        local prev = get_country_name()
+        if W.country_combo.removeAllItems then W.country_combo:removeAllItems() end
+
+        local names = {}
+        for name in pairs(Mission.missionCountry) do
+            if type(name) == 'string' then names[#names + 1] = name end
+        end
+        table.sort(names)
+
+        local first_item, prev_item
+        for _, name in ipairs(names) do
+            local coalition = country_coalition(Mission, name)
+            local include = show_all or coalition == 'red' or coalition == 'blue'
+            if include then
+                local item = ListBoxItem.new(name)
+                local skin_name = COALITION_SKIN[coalition or 'neutral']
+                if skin_name then try_skin(item, skin_name) end
+                W.country_combo:insertItem(item)
+                first_item = first_item or item
+                if name == prev then prev_item = item end
+            end
+        end
+        local pick = prev_item or first_item
+        if pick and W.country_combo.selectItem then
+            pcall(function() W.country_combo:selectItem(pick) end)
+        end
+    end)
+end
+
+-- First mission country (sorted) — headless fallback when no combo exists.
+local function pick_default_country()
+    local name
+    pcall(function()
+        local Mission = require('me_mission')
+        if type(Mission.missionCountry) ~= 'table' then return end
+        local names = {}
+        for n in pairs(Mission.missionCountry) do
+            if type(n) == 'string' then names[#names + 1] = n end
+        end
+        table.sort(names)
+        name = names[1]
+    end)
+    return name
+end
+
+-- ---------------------------------------------------------------------------
+-- Naming: expand the Name pattern for the next static.
+--   ''            → the static type (ME dedupes collisions)
+--   'Barrel'      → 'Barrel' (ME dedupes collisions)
+--   'Barrel-{n}'  → 'Barrel-01', 'Barrel-02', … (sequence persists across
+--                   strokes; resets when the pattern text changes)
+-- ---------------------------------------------------------------------------
+local function expand_name(pattern, type_name)
+    if type(pattern) ~= 'string' or pattern:gsub('%s', '') == '' then
+        return type_name
+    end
+    if pattern ~= W.last_pattern then
+        W.last_pattern = pattern
+        W.name_seq = 0
+    end
+    if pattern:find('{n}', 1, true) then
+        W.name_seq = W.name_seq + 1
+        return (pattern:gsub('%{n%}', string.format('%02d', W.name_seq)))
+    end
+    return pattern
+end
+
+-- ---------------------------------------------------------------------------
+-- Commit path: one scatter placement → one injected static group.
+-- Mirrors verbs/group_verbs.lua group_create_static, inlined so we control
+-- rate (from the DB, not hardcoded) and skip per-call country lookups.
+-- ---------------------------------------------------------------------------
+local function commit_placement(p, country, name_pattern)
+    local heading = math.rad(p.heading_deg or 0)
+    local group_name = expand_name(name_pattern, p.type)
+    local g = {
+        name = group_name,
+        x = p.x, y = p.y,
+        hidden = false,
+        dead = false,
+        heading = heading,
+        units = {
+            {
+                name = group_name,
+                type = p.type,
+                x = p.x, y = p.y,
+                heading = heading,
+                category = p.category,
+                shape_name = p.shape_name,
+                rate = (p.row and p.row.rate) or 100,
+                canCargo = false,
+                mass = 0,
+                dead = false,
+            },
+        },
+        route = {
+            points = {
+                {
+                    x = p.x, y = p.y,
+                    action = 'Off Road',
+                    type = 'Turning Point',
+                    ETA = 0, ETA_locked = true,
+                    formation_template = '',
+                    speed = 0, speed_locked = true,
+                    task = H.new_combo_task(),
+                },
+            },
+            routeRelativeTOT = false,
+        },
+    }
+    local injected, err = H.inject_group(g, country, 'static')
+    if not injected then
+        return nil, err or 'inject_group failed'
+    end
+    return injected
+end
+
+-- ---------------------------------------------------------------------------
+-- Undo handler: one stroke = one record.
+--   { kind = 'paint', groups = {group_obj, …} }  → remove them
+-- (M4 adds kind = 'erase' with re-inject payloads.)
+-- ---------------------------------------------------------------------------
+local function purge_registry(group_set)
+    local kept = {}
+    for _, entry in ipairs(W.registry) do
+        if not group_set[entry.group] then kept[#kept + 1] = entry end
+    end
+    W.registry = kept
+end
+
+undo.register_handler('paint_statics', function(payload)
+    if type(payload) ~= 'table' then return nil, 'bad paint undo payload' end
+    if payload.kind == 'paint' then
+        local errors = 0
+        local set = {}
+        for _, g in ipairs(payload.groups or {}) do
+            local ok = prefab_ops._remove.group(g)
+            if ok then set[g] = true else errors = errors + 1 end
+        end
+        purge_registry(set)
+        return true, errors > 0 and (errors .. ' partial failures') or nil
+    end
+    return nil, 'unknown paint undo kind: ' .. tostring(payload.kind)
+end)
+
+-- ---------------------------------------------------------------------------
+-- Brush overlay (cursor-following circle)
+-- ---------------------------------------------------------------------------
 local function circle_points(radius, n)
     n = n or 36
     local pts = {}
@@ -49,14 +365,14 @@ end
 
 local function remove_brush_overlay()
     pcall(function()
-        if S.brush_id then
+        if W.brush_id then
             local MapWindow = require('me_map_window')
             if MapWindow and MapWindow.removeDrawObject then
-                MapWindow.removeDrawObject(S.brush_id)
+                MapWindow.removeDrawObject(W.brush_id)
             end
         end
     end)
-    S.brush_id, S.brush_data = nil, nil
+    W.brush_id, W.brush_data = nil, nil
 end
 
 local function create_brush_overlay()
@@ -65,103 +381,154 @@ local function create_brush_overlay()
         if not (MapWindow and MapWindow.createDrawObject) then return end
         local data = {
             objectType = 'Polygon',
-            points     = circle_points(S.radius),
+            points     = circle_points(get_radius()),
             thickness  = 2,
-            color      = { 0.2, 1, 0.4, 1 },     -- green outline
-            fillColor  = { 0.2, 1, 0.4, 0.08 },  -- faint green fill
+            color      = { 0.2, 1, 0.4, 1 },
+            fillColor  = { 0.2, 1, 0.4, 0.08 },
             file       = './MissionEditor/data/NewMap/images/draw/polyline_solid.png',
             x          = 0,
             y          = 0,
             angle      = 0,
         }
-        S.brush_data = data
-        S.brush_id = MapWindow.createDrawObject(data)
-        if S.brush_id and MapWindow.addDrawObject then
-            pcall(function() MapWindow.addDrawObject(S.brush_id) end)
+        W.brush_data = data
+        W.brush_id = MapWindow.createDrawObject(data)
+        if W.brush_id and MapWindow.addDrawObject then
+            pcall(function() MapWindow.addDrawObject(W.brush_id) end)
         end
     end)
 end
 
 local function move_brush_overlay(wx, wy)
     pcall(function()
-        if not (S.brush_id and S.brush_data) then return end
-        S.brush_data.x, S.brush_data.y = wx, wy
+        if not (W.brush_id and W.brush_data) then return end
+        W.brush_data.x, W.brush_data.y = wx, wy
         local MapWindow = require('me_map_window')
         if MapWindow and MapWindow.updateDrawObject then
-            MapWindow.updateDrawObject(S.brush_id, S.brush_data)
+            MapWindow.updateDrawObject(W.brush_id, W.brush_data)
         end
     end)
 end
 
--- Pick a usable country for the spike: prefer USA, else first mission country.
-local function pick_country()
-    local name
+local function resize_brush_overlay()
     pcall(function()
-        local Mission = require('me_mission')
-        if type(Mission.missionCountry) ~= 'table' then return end
-        if Mission.missionCountry['USA'] then name = 'USA'; return end
-        local names = {}
-        for n in pairs(Mission.missionCountry) do
-            if type(n) == 'string' then names[#names + 1] = n end
-        end
-        table.sort(names)
-        name = names[1]
-    end)
-    return name
-end
-
--- Place one hardcoded static at world (wx, wy) through the real verb path.
-local function spike_place(wx, wy, source)
-    local ok = pcall(function()
-        local verbs = require('dcs_sms_me.verbs')
-        local r = verbs.group_create_static({
-            country     = S.country,
-            type        = S.static_type,
-            category    = S.category,
-            shape_name  = S.shape_name,
-            north       = wx,
-            east        = wy,
-            name        = 'PaintSpike #001',
-            heading_deg = 0,
-        })
-        if r and r.ok then
-            S.placed[#S.placed + 1] = r.name
-        else
-            log_write(log.WARNING, 'spike place failed: ' .. tostring(r and r.error))
+        if not (W.brush_id and W.brush_data) then return end
+        W.brush_data.points = circle_points(get_radius())
+        local MapWindow = require('me_map_window')
+        if MapWindow and MapWindow.updateDrawObject then
+            MapWindow.updateDrawObject(W.brush_id, W.brush_data)
         end
     end)
-    if not ok then log_write(log.ERROR, 'spike_place threw (' .. tostring(source) .. ')') end
 end
 
--- Place if the cursor world point moved at least min_step from last placement.
-local function spike_step(wx, wy, source)
-    if S.last then
-        local dx, dy = wx - S.last.x, wy - S.last.y
-        if (dx * dx + dy * dy) < (S.min_step * S.min_step) then return end
+-- ---------------------------------------------------------------------------
+-- Stroke machinery (shared by the live map state and _debug_stroke)
+-- ---------------------------------------------------------------------------
+
+-- Resolve the current palette. M1: one row from the type input. (M2 swaps
+-- this to the weighted palette list.)
+local function current_palette()
+    local row, err = static_catalog.resolve_type(get_type_name())
+    if not row then return nil, err end
+    row.kind = 'static'
+    row.weight = 1
+    return { row }
+end
+
+local function registry_points()
+    local pts = {}
+    for _, e in ipairs(W.registry) do
+        pts[#pts + 1] = { x = e.x, y = e.y }
     end
-    S.last = { x = wx, y = wy }
-    spike_place(wx, wy, source)
+    return pts
 end
 
-function M._arm_spike(opts)
+-- Begin a stroke at world (wx, wy). Returns true, or nil + error.
+local function begin_stroke(wx, wy, opts)
     opts = opts or {}
-    if S.armed then return { ok = false, error = 'already armed' } end
-    S.radius      = tonumber(opts.radius) or S.radius
-    S.min_step    = tonumber(opts.min_step) or S.min_step
-    S.country     = opts.country or pick_country()
-    if not S.country then return { ok = false, error = 'no country available in mission' } end
-    S.events = { down = 0, drag = 0, drag_other = 0, move = 0, up = 0, wheel = 0 }
-    S.placed = {}
-    S.last   = nil
+    local palette, perr = opts.palette, nil
+    if not palette then palette, perr = current_palette() end
+    if not palette then return nil, perr end
+
+    local country_name = opts.country or get_country_name() or pick_default_country()
+    if not country_name then return nil, 'no country available' end
+    local country = H.find_country_by_name(country_name)
+    if not country then return nil, 'country not in mission: ' .. country_name end
+
+    local session, serr = scatter.new_session({
+        radius          = opts.radius or get_radius(),
+        density         = opts.density or get_density(),
+        min_spacing     = opts.min_spacing or get_min_spacing(),
+        palette         = palette,
+        heading         = opts.heading or 'random',
+        seed            = opts.seed,
+        existing_points = registry_points(),
+    })
+    if not session then return nil, serr end
+
+    W.session       = session
+    W.stroke_country = country
+    W.stroke_name_pattern = opts.name or get_name_pattern()
+    W.stroke_groups = {}
+    W.stroke_failed = 0
+    return true
+end
+
+-- Extend the stroke with a brush position. Generates + commits.
+local function stroke_step(wx, wy)
+    if not W.session then return 0 end
+    local placements = W.session:step(wx, wy)
+    for _, p in ipairs(placements) do
+        local g, err = commit_placement(p, W.stroke_country, W.stroke_name_pattern)
+        if g then
+            W.stroke_groups[#W.stroke_groups + 1] = g
+            W.registry[#W.registry + 1] = { group = g, x = p.x, y = p.y }
+        else
+            W.stroke_failed = W.stroke_failed + 1
+            log_write(log.WARNING, 'placement failed: ' .. tostring(err))
+        end
+    end
+    return #placements
+end
+
+-- End the stroke: one undo record for everything it created.
+local function end_stroke()
+    local groups = W.stroke_groups or {}
+    local failed = W.stroke_failed or 0
+    if #groups > 0 then
+        undo.record_generic('paint_statics', { kind = 'paint', groups = groups })
+    end
+    W.session, W.stroke_groups, W.stroke_failed = nil, nil, 0
+    return #groups, failed
+end
+
+-- ---------------------------------------------------------------------------
+-- Arm / disarm the map brush state
+-- ---------------------------------------------------------------------------
+local disarm_paint  -- forward declaration
+
+local function arm_paint()
+    if W.armed then return end
+
+    -- Validate inputs before grabbing the map.
+    local palette, perr = current_palette()
+    if not palette then
+        set_status('Cannot paint: ' .. tostring(perr), 'error')
+        return
+    end
+    local country_name = get_country_name() or pick_default_country()
+    if not country_name then
+        set_status('Cannot paint: no country available in mission', 'error')
+        return
+    end
 
     local ok, err = pcall(function()
         local MapWindow = require('me_map_window')
         if not (MapWindow and MapWindow.setState and MapWindow.getPanState and MapWindow.getMapPoint) then
             error('me_map_window missing required symbols')
         end
-        S.pan_state = MapWindow.getPanState()
+        W.pan_state = MapWindow.getPanState()
         local function forward(method, ...)
-            local ps = S.pan_state
+            local ps = W.pan_state
             if not ps then return end
             local fn = ps[method]
             if type(fn) == 'function' then pcall(fn, ps, ...) end
@@ -174,13 +541,18 @@ function M._arm_spike(opts)
                 forward('onMouseDown', x, y, button)
                 return
             end
-            S.events.down = S.events.down + 1
             pcall(function()
+                if not W.armed then return end
                 local wx, wy = MapWindow.getMapPoint(x, y)
                 if not (wx and wy) then return end
-                S.painting = true
-                S.last = nil
-                spike_step(wx, wy, 'down')
+                local ok_b, berr = begin_stroke(wx, wy)
+                if not ok_b then
+                    set_status('Paint failed: ' .. tostring(berr), 'error')
+                    disarm_paint()
+                    return
+                end
+                W.painting = true
+                stroke_step(wx, wy)
                 move_brush_overlay(wx, wy)
             end)
         end
@@ -190,42 +562,41 @@ function M._arm_spike(opts)
                 forward('onMouseUp', x, y, button)
                 return
             end
-            S.events.up = S.events.up + 1
-            S.painting = false
+            pcall(function()
+                if not W.painting then return end
+                W.painting = false
+                local n, failed = end_stroke()
+                local msg = 'Stroke: ' .. n .. ' statics placed'
+                if failed > 0 then msg = msg .. ' (' .. failed .. ' failed)' end
+                msg = msg .. ' — Ctrl+Z undoes this stroke'
+                set_status(msg, failed > 0 and 'warning' or 'success')
+            end)
         end
 
         function brush_state:onMouseDrag(dx, dy, button, x, y)
             if button ~= 1 then
-                S.events.drag_other = S.events.drag_other + 1
                 forward('onMouseDrag', dx, dy, button, x, y)
                 return
             end
-            S.events.drag = S.events.drag + 1
             pcall(function()
-                if not S.painting then return end
+                if not W.painting then return end
                 local wx, wy = MapWindow.getMapPoint(x, y)
                 if not (wx and wy) then return end
-                spike_step(wx, wy, 'drag')
+                stroke_step(wx, wy)
                 move_brush_overlay(wx, wy)
             end)
         end
 
         function brush_state:onMouseMove(x, y)
-            S.events.move = S.events.move + 1
             forward('onMouseMove', x, y)
             pcall(function()
                 local wx, wy = MapWindow.getMapPoint(x, y)
                 if not (wx and wy) then return end
                 move_brush_overlay(wx, wy)
-                -- Fallback sampling path: if onMouseDrag turns out not to
-                -- fire during a held left-drag, S.painting set by onMouseDown
-                -- lets us sample here instead. Tagged 'move' in stats.
-                if S.painting then spike_step(wx, wy, 'move') end
             end)
         end
 
         function brush_state:onMouseWheel(x, y, clicks)
-            S.events.wheel = S.events.wheel + 1
             forward('onMouseWheel', x, y, clicks)
         end
 
@@ -234,16 +605,33 @@ function M._arm_spike(opts)
     end)
     if not ok then
         remove_brush_overlay()
-        S.pan_state = nil
-        return { ok = false, error = tostring(err) }
+        W.pan_state = nil
+        set_status('Brush unavailable: ' .. tostring(err) .. ' — see dcs.log', 'error')
+        log_write(log.ERROR, 'arm_paint failed: ' .. tostring(err))
+        return
     end
-    S.armed = true
-    log_write(log.INFO, 'spike armed (country=' .. tostring(S.country) .. ')')
-    return { ok = true, country = S.country }
+
+    W.armed = true
+    pcall(function()
+        if W.window and W.window.setText then
+            W.window:setText('PAINTING — HOLD LEFT MOUSE + DRAG ON MAP (Esc stops)')
+        end
+    end)
+    pcall(function()
+        if W.paint_btn and W.paint_btn.setText then W.paint_btn:setText('Stop painting (Esc)') end
+    end)
+    set_status_sticky('PAINTING — hold left mouse and drag on the map (Esc stops)', 'success')
+    log_write(log.INFO, 'paint armed')
 end
 
-function M._disarm_spike()
-    if not S.armed then return { ok = false, error = 'not armed' } end
+disarm_paint = function()
+    if not W.armed then return end
+    if W.painting then
+        -- Mouse-up never arrived (e.g. Esc mid-drag): close the stroke.
+        W.painting = false
+        pcall(end_stroke)
+    end
+    W.armed = false
     remove_brush_overlay()
     pcall(function()
         local MapWindow = require('me_map_window')
@@ -251,19 +639,289 @@ function M._disarm_spike()
             MapWindow.setState(MapWindow.getPanState())
         end
     end)
-    S.armed, S.painting, S.pan_state, S.last = false, false, nil, nil
-    log_write(log.INFO, 'spike disarmed; placed=' .. tostring(S.placed and #S.placed or 0))
-    return { ok = true, placed = S.placed and #S.placed or 0 }
+    W.pan_state = nil
+    pcall(function()
+        if W.window and W.window.setText then
+            W.window:setText(sms_window.compose_title('Paint Statics', version))
+        end
+    end)
+    pcall(function()
+        if W.paint_btn and W.paint_btn.setText then W.paint_btn:setText('Paint on map') end
+    end)
+    pcall(function()
+        if W.sms_window and W.sms_window.clear_sticky_status then
+            W.sms_window:clear_sticky_status()
+        end
+    end)
+    set_status('Painting stopped.')
+    log_write(log.INFO, 'paint disarmed')
 end
 
-function M._spike_stats()
-    return {
-        ok      = true,
-        armed   = S.armed,
-        events  = S.events,
-        placed  = S.placed and #S.placed or 0,
-        names   = S.placed,
-    }
+-- ---------------------------------------------------------------------------
+-- Layout
+-- ---------------------------------------------------------------------------
+local ROW_H = 22
+local ROW_PITCH = 30
+
+local function set(widget, x, y, w, h)
+    pcall(function()
+        if widget and widget.setBounds then widget:setBounds(x, y, w, h) end
+    end)
+end
+
+local function relayout(x, y, w, h)
+    local label_w = 100
+    local gap = 6
+    local input_x = x + label_w + gap
+    local input_w = w - label_w - gap
+    local cur_y = y
+
+    set(W.type_label, x, cur_y, label_w, ROW_H)
+    set(W.type_input, input_x, cur_y, input_w, ROW_H)
+    cur_y = cur_y + ROW_PITCH
+
+    local filter_w = 80
+    set(W.country_label, x, cur_y, label_w, ROW_H)
+    set(W.country_combo, input_x, cur_y,
+        (W.country_filter_btn and (input_w - filter_w - gap)) or input_w, ROW_H)
+    set(W.country_filter_btn, x + w - filter_w, cur_y, filter_w, ROW_H)
+    cur_y = cur_y + ROW_PITCH
+
+    set(W.name_label, x, cur_y, label_w, ROW_H)
+    set(W.name_input, input_x, cur_y, input_w, ROW_H)
+    cur_y = cur_y + ROW_PITCH
+
+    set(W.radius_label, x, cur_y, label_w, ROW_H)
+    set(W.radius_spin, input_x, cur_y, 90, ROW_H)
+    cur_y = cur_y + ROW_PITCH
+
+    set(W.density_label, x, cur_y, label_w, ROW_H)
+    set(W.density_spin, input_x, cur_y, 90, ROW_H)
+    cur_y = cur_y + ROW_PITCH
+
+    set(W.spacing_label, x, cur_y, label_w, ROW_H)
+    set(W.spacing_spin, input_x, cur_y, 90, ROW_H)
+    cur_y = cur_y + ROW_PITCH + 8
+
+    set(W.paint_btn, x, cur_y, w, 28)
+end
+
+-- ---------------------------------------------------------------------------
+-- Window construction
+-- ---------------------------------------------------------------------------
+local function build_window()
+    W.sms_window = sms_window.new({
+        title    = 'Paint Statics',
+        size     = { w = 420, h = 420 },
+        min_size = { w = 380, h = 380 },
+        on_resize = function(swin, x, y, w, h)
+            relayout(x, y, w, h)
+        end,
+        on_close = function()
+            disarm_paint()
+        end,
+    })
+    if not W.sms_window then
+        log_write(log.ERROR, 'sms_window.new failed')
+        return false
+    end
+    W.window = W.sms_window:raw()
+
+    -- Esc stops painting (same pattern as prefab place-pending).
+    pcall(function()
+        if W.window.addHotKeyCallback then
+            W.window:addHotKeyCallback('escape', function()
+                if W.armed then disarm_paint() end
+            end)
+        end
+    end)
+
+    local function insert(widget)
+        pcall(function() W.window:insertWidget(widget) end)
+    end
+
+    local function mk_label(text)
+        local s = Static.new()
+        pcall(function() s:setText(text) end)
+        try_skin(s, 'staticSkin_ME')
+        insert(s)
+        return s
+    end
+
+    local function mk_edit(initial, tooltip)
+        local e
+        if EditBox then e = EditBox.new() else e = Static.new() end
+        pcall(function() e:setText(initial or '') end)
+        try_skin(e, 'editBoxSkin_ME')
+        if tooltip then pcall(function() e:setTooltipText(tooltip) end) end
+        insert(e)
+        return e
+    end
+
+    local function mk_spin(value, min, max, step, decimal, tooltip, on_change)
+        local s
+        if SpinBox then
+            s = SpinBox.new()
+            try_skin(s, 'spinBoxSkin_MENew')
+            pcall(function() s:setRange(min, max) end)
+            pcall(function() s:setStep(step) end)
+            pcall(function() s:setCheckRange(true) end)
+            pcall(function() s:setAcceptDecimalPoint(decimal == true) end)
+            pcall(function() s:setValue(value) end)
+            if tooltip then pcall(function() s:setTooltipText(tooltip) end) end
+            if on_change and s.addChangeCallback then
+                pcall(function() s:addChangeCallback(on_change) end)
+            end
+        else
+            s = Static.new()
+            pcall(function() s:setText(tostring(value)) end)
+            try_skin(s, 'staticSkin_ME')
+        end
+        insert(s)
+        return s
+    end
+
+    W.type_label = mk_label('Static type:')
+    W.type_input = mk_edit(W.cfg.type_name, 'DCS unit type id of the static to paint (e.g. "Oil Barrel")')
+
+    W.country_label = mk_label('Country:')
+    if ToggleButton then
+        W.country_filter_btn = ToggleButton.new()
+        pcall(function() W.country_filter_btn:setText('Combat') end)
+        try_skin(W.country_filter_btn, 'sms_button')
+        pcall(function()
+            if W.country_filter_btn.addChangeCallback then
+                W.country_filter_btn:addChangeCallback(function(self)
+                    local on = self.getState and self:getState() or false
+                    pcall(function() self:setText(on and 'All' or 'Combat') end)
+                    populate_country_combo()
+                end)
+            end
+        end)
+        insert(W.country_filter_btn)
+    end
+    if ComboList then
+        W.country_combo = ComboList.new()
+        try_skin(W.country_combo, 'comboListSkinNew_')
+        insert(W.country_combo)
+    else
+        W.country_combo = Static.new()
+        pcall(function() W.country_combo:setText('(ComboList unavailable)') end)
+        try_skin(W.country_combo, 'staticSkin_ME')
+        insert(W.country_combo)
+    end
+
+    W.name_label = mk_label('Name:')
+    W.name_input = mk_edit('', 'Name for painted statics. {n} = running index (Barrel-{n} → Barrel-01). Empty = type name.')
+
+    W.radius_label  = mk_label('Brush radius (m):')
+    W.radius_spin   = mk_spin(W.cfg.radius, 1, 2000, 5, false, 'Brush circle radius in meters', function(self)
+        pcall(function() W.cfg.radius = math.max(1, tonumber(self:getValue()) or W.cfg.radius) end)
+        if W.armed then resize_brush_overlay() end
+    end)
+
+    W.density_label = mk_label('Density /100m²:')
+    W.density_spin  = mk_spin(W.cfg.density, 0.01, 50, 0.1, true, 'Target statics per 100 m² (a 10×10 m square)', function(self)
+        pcall(function() W.cfg.density = math.max(0.01, tonumber(self:getValue()) or W.cfg.density) end)
+    end)
+
+    W.spacing_label = mk_label('Min spacing (m):')
+    W.spacing_spin  = mk_spin(W.cfg.min_spacing, 0, 500, 1, false, 'Minimum distance between painted statics, meters', function(self)
+        pcall(function() W.cfg.min_spacing = tonumber(self:getValue()) or W.cfg.min_spacing end)
+    end)
+
+    if Button then
+        W.paint_btn = Button.new()
+        pcall(function() W.paint_btn:setText('Paint on map') end)
+        try_skin(W.paint_btn, 'sms_button')
+        pcall(function()
+            W.paint_btn.onChange = function()
+                if W.armed then disarm_paint() else arm_paint() end
+            end
+        end)
+        insert(W.paint_btn)
+    end
+
+    populate_country_combo()
+
+    local x, y, w, h = W.sms_window:get_content_bounds()
+    relayout(x, y, w, h)
+    return true
+end
+
+-- ---------------------------------------------------------------------------
+-- Public lifecycle
+-- ---------------------------------------------------------------------------
+function M.show()
+    if W.sms_window then
+        populate_country_combo()
+        W.sms_window:show()
+        return
+    end
+    local ok, err = pcall(build_window)
+    if not ok then
+        log_write(log.ERROR, 'build_window threw: ' .. tostring(err))
+        return
+    end
+    if W.sms_window then W.sms_window:show() end
+end
+
+function M.hide()
+    disarm_paint()
+    pcall(function() if W.sms_window then W.sms_window:hide() end end)
+end
+
+function M.toggle()
+    if not W.sms_window then
+        M.show()
+        return
+    end
+    local visible = false
+    pcall(function()
+        local raw = W.sms_window:raw()
+        if raw and raw.getVisible then visible = raw:getVisible() end
+    end)
+    if visible then M.hide() else M.show() end
+end
+
+-- ---------------------------------------------------------------------------
+-- Debug / verification surface (gui-bridge driven, §8 of the design brief)
+-- ---------------------------------------------------------------------------
+
+-- Run a synthetic stroke through the real pipeline. points = { {x=,y=}, … }
+-- (world coords). opts may override radius / density / min_spacing / type /
+-- country / name / heading / seed. Returns counts + created names.
+function M._debug_stroke(points, opts)
+    if type(points) ~= 'table' or #points == 0 then
+        return { ok = false, error = 'points must be a non-empty list' }
+    end
+    opts = opts or {}
+    if opts.type then
+        local row, err = static_catalog.resolve_type(opts.type)
+        if not row then return { ok = false, error = err } end
+        row.kind, row.weight = 'static', 1
+        opts.palette = { row }
+    end
+    local first = points[1]
+    local ok, err = begin_stroke(first.x, first.y, opts)
+    if not ok then return { ok = false, error = err } end
+    for _, p in ipairs(points) do
+        stroke_step(p.x, p.y)
+    end
+    local n, failed = end_stroke()
+    local names = {}
+    for _, e in ipairs(W.registry) do
+        if e.group and e.group.name then names[#names + 1] = e.group.name end
+    end
+    return { ok = true, placed = n, failed = failed, registry = #W.registry, names = names }
+end
+
+function M._registry_size()
+    return { ok = true, size = #W.registry }
+end
+
+function M._state()
+    return { ok = true, armed = W.armed, painting = W.painting, registry = #W.registry }
 end
 
 return M

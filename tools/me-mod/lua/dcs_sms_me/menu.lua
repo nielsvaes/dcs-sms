@@ -300,6 +300,7 @@ local HIDE_ON_EXIT = {
     'dcs_sms_me.trigger_finder',
     'dcs_sms_me.mass_edit',
     'dcs_sms_me.me_hotkey_window',
+    'dcs_sms_me.paint_statics',
 }
 
 local function patch_menubar_hideME()
