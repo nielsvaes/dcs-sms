@@ -23,7 +23,7 @@ No DCS crashes. The gui bridge stayed up all night. One self-inflicted recoverab
 - **No surface check**: painting over water places statics in the sea (the vanilla panel's `MapWindow.checkSurface` is not consulted; it needs a group per probe and would cost per-candidate). Candidate for a follow-up.
 - **Menu entry appears after a DCS restart only** — the DCS-SMS menu is built once per session and the rebuild guard (`mb._dcs_sms_top_added`) skips hot-reload additions. Fresh DCS launches show "Paint Statics" between Mass Edit and Hotkey Manager. (Bridge auto-enables on restart: `me_settings.lua` has `gui_bridge = true` remembered.)
 - Single-slot undo bus (project-wide): only the most recent stroke is undoable; the footer says so after every stroke.
-- The 3D preview shares the vanilla `staticPreview` scene globals; if the vanilla Static panel's preview is open at the same time the two camera states fight harmlessly.
+- ~~The 3D preview shares the vanilla `staticPreview` scene globals~~ — **fixed** (2026-06-13): the preview now loads a private scene (`scenes/sms_static_preview_scene.lua`, global `dcs_sms_static_preview`), so it no longer contends with the vanilla ME Static panel. Verified: both viewports spin simultaneously and independently, and closing the vanilla panel no longer freezes ours.
 - Palette/settings are session-sticky (like the Prefab Manager); no persistence to disk.
 
 ## Manual verification checklist (human, mouse-feel — everything else verified headlessly)

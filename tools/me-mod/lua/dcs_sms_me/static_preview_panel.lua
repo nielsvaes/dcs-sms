@@ -2,12 +2,21 @@
 --
 -- Wraps ED's DemoScene machinery (the same widget the vanilla ME Static
 -- panel uses for its livery preview — see me_static.lua initLiveryPreview /
--- setPreviewType): ManagerDemoScene.newDemoScene('staticPreview.lua')
--- returns a DemoSceneWidget, an ordinary dxgui widget we insert into the
--- tool window. The scene script defines a GLOBAL `staticPreview` table
--- (camera state + per-frame update funcs); drag-rotate and wheel-zoom
--- work by adjusting its cameraAngH/V / cameraDistMult fields, exactly as
--- the vanilla panel does.
+-- setPreviewType): a DemoSceneWidget is an ordinary dxgui widget we insert
+-- into the tool window, driven by a scene script that defines a global
+-- state table (camera + per-frame update funcs). Drag-rotate and wheel-zoom
+-- adjust that table's cameraAngH/V / cameraDistMult, exactly as vanilla does.
+--
+-- PRIVATE SCENE (not the shared one): DCS's own Scripts/DemoScenes/
+-- staticPreview.lua keeps its camera in a single GLOBAL `staticPreview`
+-- table, and the vanilla ME Static panel uses the same file — so whichever
+-- DemoSceneWidget loaded last owned the one camera slot and the other froze
+-- (and a closing panel destroyed the shared camera, dangling the survivor).
+-- We instead load our own clone, scenes/sms_static_preview_scene.lua, which
+-- defines a private `dcs_sms_static_preview` global — fully isolated from the
+-- vanilla panel regardless of open/close order. If our scene can't be loaded
+-- (odd install), we fall back to the shared vanilla scene so the preview
+-- still works, just with the old contention.
 --
 -- Everything is pcall-guarded and the module degrades to "no preview":
 -- create() returns nil on any failure, set_type() returns false — the
@@ -27,13 +36,21 @@ local function log_write(level, msg)
     pcall(function() log.write('sms.me.paint.preview', level, msg) end)
 end
 
+-- DCS-root-relative path to our private scene script (installed alongside
+-- the rest of the mod under MissionEditor/modules/dcs_sms_me/). loadScript
+-- resolves relative to the DCS root, the same way the vanilla panel loads
+-- 'Scripts/DemoScenes/staticPreview.lua'.
+local PRIVATE_SCENE_PATH   = 'MissionEditor/modules/dcs_sms_me/scenes/sms_static_preview_scene.lua'
+local PRIVATE_SCENE_GLOBAL = 'dcs_sms_static_preview'
+local SHARED_SCENE_GLOBAL  = 'staticPreview'
+
 local Handle = {}
 Handle.__index = Handle
 
--- The scene globals (populated by Scripts/DemoScenes/staticPreview.lua
--- when the scene loads). nil until the first newDemoScene call.
-local function scene_globals()
-    local sp = _G.staticPreview
+-- The scene state table for THIS handle (our private global, or the shared
+-- vanilla one if we fell back). self.scene_global is the global's name.
+local function scene_globals(self)
+    local sp = _G[self.scene_global]
     if type(sp) == 'table' then return sp end
     return nil
 end
@@ -41,41 +58,62 @@ end
 function M.create(parent_raw)
     if not (parent_raw and parent_raw.insertWidget) then return nil end
 
-    local widget
+    -- Prefer our private scene (isolated camera). Fall back to the shared
+    -- vanilla scene via ManagerDemoScene if loadScript fails for any reason.
+    local widget, scene_global
     local ok = pcall(function()
-        local ManagerDemoScene = require('ManagerDemoScene')
-        widget = ManagerDemoScene.newDemoScene('staticPreview.lua')
-        if not widget then error('newDemoScene returned nil') end
+        local DemoSceneWidget = require('DemoSceneWidget')
+        local w = DemoSceneWidget.new()
+        w:loadScript(PRIVATE_SCENE_PATH)
+        if type(_G[PRIVATE_SCENE_GLOBAL]) ~= 'table' then
+            error('private scene global not defined after loadScript')
+        end
+        widget, scene_global = w, PRIVATE_SCENE_GLOBAL
         parent_raw:insertWidget(widget)
     end)
     if not ok or not widget then
-        log_write(log and log.WARNING or 2, '3D preview unavailable — falling back to text metadata')
-        return nil
+        log_write(log and log.WARNING or 2,
+            'private preview scene unavailable, using shared vanilla scene')
+        widget, scene_global = nil, nil
+        local ok2 = pcall(function()
+            local ManagerDemoScene = require('ManagerDemoScene')
+            local w = ManagerDemoScene.newDemoScene('staticPreview.lua')
+            if not w then error('newDemoScene returned nil') end
+            widget, scene_global = w, SHARED_SCENE_GLOBAL
+            parent_raw:insertWidget(widget)
+        end)
+        if not ok2 or not widget then
+            log_write(log and log.WARNING or 2, '3D preview unavailable — falling back to text metadata')
+            return nil
+        end
     end
 
     local self = setmetatable({
-        widget   = widget,
-        model    = nil,
-        dragging = false,
-        last_x   = 0,
-        last_y   = 0,
-        ang_h0   = 0,
-        ang_v0   = 0,
+        widget       = widget,
+        scene_global = scene_global,                       -- 'dcs_sms_static_preview' or 'staticPreview'
+        update_func  = scene_global .. '.payloadPreviewUpdate',
+        norot_func   = scene_global .. '.payloadPreviewUpdateNoRotate',
+        model        = nil,
+        dragging     = false,
+        last_x       = 0,
+        last_y       = 0,
+        ang_h0       = 0,
+        ang_v0       = 0,
     }, Handle)
 
     -- Drag-rotate + wheel-zoom, mirroring me_static.lua's callbacks. The
-    -- camera state lives in the scene's global table; the per-frame update
-    -- func reads it back.
+    -- camera state lives in this handle's scene global table; the per-frame
+    -- update func reads it back.
     pcall(function()
         widget:addMouseDownCallback(function(w, x, y, button)
-            local sp = scene_globals()
+            local sp = scene_globals(self)
             if not sp then return end
             self.dragging = true
             self.last_x, self.last_y = x, y
             self.ang_h0, self.ang_v0 = sp.cameraAngH, sp.cameraAngV
             pcall(function()
                 local sceneAPI = widget:getScene()
-                sceneAPI:setUpdateFunc('staticPreview.payloadPreviewUpdateNoRotate')
+                sceneAPI:setUpdateFunc(self.norot_func)
             end)
             pcall(function() w:captureMouse() end)
         end)
@@ -85,7 +123,7 @@ function M.create(parent_raw)
         end)
         widget:addMouseMoveCallback(function(_, x, y)
             if not self.dragging then return end
-            local sp = scene_globals()
+            local sp = scene_globals(self)
             if not sp then return end
             sp.cameraAngH = self.ang_h0 + (self.last_x - x) * sp.mouseSensitivity
             sp.cameraAngV = self.ang_v0 - (self.last_y - y) * sp.mouseSensitivity
@@ -94,7 +132,7 @@ function M.create(parent_raw)
             if sp.cameraAngV < -cap then sp.cameraAngV = -cap end
         end)
         widget:addMouseWheelCallback(function(_, _, _, clicks)
-            local sp = scene_globals()
+            local sp = scene_globals(self)
             if not sp then return end
             sp.cameraDistMult = sp.cameraDistMult - clicks * sp.wheelSensitivity
             if sp.cameraDistMult > 2.3 then sp.cameraDistMult = 2.3 end
@@ -133,8 +171,8 @@ function Handle:set_type(type_name)
         local shape = resolve_shape(unitDef)
         if not shape then error('no shape for type: ' .. tostring(type_name)) end
 
-        local sp = scene_globals()
-        if not sp then error('staticPreview scene globals missing') end
+        local sp = scene_globals(self)
+        if not sp then error(self.scene_global .. ' scene globals missing') end
 
         local model = sceneAPI:addModel(shape, 0, sp.objectHeight, 0)
         if not (model and model.valid == true) then
@@ -152,7 +190,7 @@ function Handle:set_type(type_name)
         sp.cameraDistMult = 0
         sp.cameraAngV = sp.cameraAngVDefault
         sp.cameraDistance = radius / math.tan(math.rad(sp.cameraFov * 0.5))
-        sceneAPI:setUpdateFunc('staticPreview.payloadPreviewUpdate')
+        sceneAPI:setUpdateFunc(self.update_func)
 
         -- Encyclopedia pose arguments (gear up, doors closed, …).
         if unitDef.encyclopediaAnimation and unitDef.encyclopediaAnimation.args then
