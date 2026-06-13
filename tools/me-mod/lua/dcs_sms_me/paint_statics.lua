@@ -1583,6 +1583,9 @@ local function build_window()
     -- Seed row: opt-in reproducible scatter.
     if CheckBoxModule then
         W.seed_check = CheckBoxModule.new('Seed')
+        -- Same native ME checkbox skin the Prefab Manager's "Fixed location"
+        -- box uses, so it visually matches the rest of the tool windows.
+        try_skin(W.seed_check, 'checkBoxSkin_MENew')
         pcall(function() W.seed_check:setTooltipText('Seed the scatter RNG per stroke for reproducible results') end)
         pcall(function()
             if W.seed_check.addChangeCallback then
