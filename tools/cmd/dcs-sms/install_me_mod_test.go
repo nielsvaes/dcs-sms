@@ -66,20 +66,34 @@ func TestInstallMeMod_PatchesAndBacksUp(t *testing.T) {
 	}
 }
 
-func TestInstallMeMod_RefusesIfBackupExists(t *testing.T) {
+// Post-DCS-update recovery: a DCS update reverts MissionEditor.lua to vanilla
+// while the old .dcs-sms.bak lingers. The installer must re-patch the current
+// (vanilla) file and refresh the backup — NOT dead-end. Before the fix it
+// refused to overwrite the existing backup and returned exit 3, leaving every
+// Program-Files user unable to reinstall after a DCS update.
+func TestInstallMeMod_RepatchesWhenBackupExists(t *testing.T) {
 	install := newFakeInstall(t)
-	// Simulate a stale backup from a previous incomplete uninstall.
-	if err := os.WriteFile(filepath.Join(install, "MissionEditor", "MissionEditor.lua.dcs-sms.bak"),
-		[]byte("stale"), 0o644); err != nil {
+	bakPath := filepath.Join(install, "MissionEditor", "MissionEditor.lua.dcs-sms.bak")
+	// Stale backup from a previous DCS version.
+	if err := os.WriteFile(bakPath, []byte("stale older vanilla"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	var stdout, stderr bytes.Buffer
 	code := installMeModCmd([]string{"--dcs-path", install, "--no-config-save"}, &stdout, &stderr)
-	if code == 0 {
-		t.Fatal("expected non-zero exit when backup already exists")
+	if code != 0 {
+		t.Fatalf("expected success re-patching over a stale backup, exit %d, stderr: %s", code, stderr.String())
 	}
-	if !strings.Contains(stderr.String(), "backup") {
-		t.Fatalf("stderr should mention backup, got: %s", stderr.String())
+	patched, _ := os.ReadFile(filepath.Join(install, "MissionEditor", "MissionEditor.lua"))
+	if !strings.Contains(string(patched), "require('dcs_sms_me.init')") {
+		t.Fatalf("MissionEditor.lua was not patched: %s", patched)
+	}
+	// The backup must be refreshed to the current vanilla file, not the stale text.
+	bak, _ := os.ReadFile(bakPath)
+	if !strings.Contains(string(bak), "original ME bootstrap") {
+		t.Fatalf("backup not refreshed to current vanilla content, got: %q", bak)
+	}
+	if strings.Contains(string(bak), "stale older vanilla") {
+		t.Fatalf("backup still holds stale content: %q", bak)
 	}
 }
 

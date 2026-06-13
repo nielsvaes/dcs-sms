@@ -18,9 +18,15 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 )
+
+// errConfigKeyNotFound is returned by discoverConfigKey when the config file
+// exists but does not contain the requested key. Discover treats it like a
+// missing file (fall through to the next discovery step) rather than a hard
+// failure — otherwise a config.toml holding only dcs_install (the normal
+// state after install-me-mod) would dead-end every Saved Games lookup.
+var errConfigKeyNotFound = errors.New("key not found in config")
 
 // DefaultConfigPath returns the config file path for the current user.
 func DefaultConfigPath() (string, error) {
@@ -128,7 +134,7 @@ func discoverConfigKey(configPath, key string) (string, error) {
 	if err := scanner.Err(); err != nil {
 		return "", err
 	}
-	return "", fmt.Errorf("%s key not found in config", key)
+	return "", fmt.Errorf("%s %w", key, errConfigKeyNotFound)
 }
 
 // upsertConfigKey writes key = "value" into configPath, replacing any prior
@@ -174,20 +180,27 @@ func upsertConfigKey(configPath, key, value string) error {
 	return os.WriteFile(configPath, []byte(strings.Join(lines, "\n")), 0o644)
 }
 
-// DiscoverDefault returns the conventional Windows path:
-//   %USERPROFILE%\Saved Games\DCS  (or DCS.openbeta)
-// whichever exists. Returns ("", false) if neither exists or we're not on
-// Windows.
+// DiscoverDefault returns the DCS variant folder under the user's real
+// "Saved Games" location:
+//   <Saved Games>\DCS  (or DCS.openbeta / DCS.server)
+// whichever exists. The Saved Games base comes from savedGamesBase(), which on
+// Windows queries the Known Folder API so a relocated Saved Games (moved to
+// another drive) resolves the same way DCS itself resolves it. Returns
+// ("", false) if the base can't be found or no variant folder exists.
 func DiscoverDefault() (string, bool) {
-	if runtime.GOOS != "windows" {
+	base, ok := savedGamesBase()
+	if !ok {
 		return "", false
 	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", false
-	}
+	return pickVariantDir(base)
+}
+
+// pickVariantDir returns the first existing DCS variant subfolder under base
+// (DCS, then DCS.openbeta, then DCS.server). Pure filesystem logic, split out
+// so it's unit-testable without touching the real Saved Games folder.
+func pickVariantDir(base string) (string, bool) {
 	for _, sub := range []string{"DCS", "DCS.openbeta", "DCS.server"} {
-		p := filepath.Join(home, "Saved Games", sub)
+		p := filepath.Join(base, sub)
 		if info, err := os.Stat(p); err == nil && info.IsDir() {
 			return p, true
 		}
@@ -212,7 +225,10 @@ func Discover(override, configPath string) (string, error) {
 		if err == nil {
 			return v, nil
 		}
-		if !errors.Is(err, fs.ErrNotExist) {
+		// A missing file OR a present file without the saved_games key both mean
+		// "config can't tell us" — fall through to the default discovery. Only a
+		// genuine read error (permissions, scanner failure) is fatal.
+		if !errors.Is(err, fs.ErrNotExist) && !errors.Is(err, errConfigKeyNotFound) {
 			return "", fmt.Errorf("reading %s: %w", configPath, err)
 		}
 	}

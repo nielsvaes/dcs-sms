@@ -105,6 +105,14 @@ This is the first tag after a long quiet period — `sms.version` had been froze
 
 ## ME-mod
 
+### [0.25.2] — 2026-06-13
+
+**Fixed**
+- **The Community library (and the hook) silently failed to install for many users after updating.** Once `config.toml` held a `dcs_install` value — which the first install always writes — Saved Games discovery hard-failed with "saved_games key not found in config" instead of falling back to the default location. So on every *subsequent* install the LuaSec HTTPS payload and the `Scripts/Hooks` hook were skipped, and the Community tab reported "Secure networking unavailable — install LuaSec in dcs-sms\lib." Discovery now treats a present-but-incomplete config like a missing one and falls through to the default lookup.
+- **Saved Games discovery now respects a relocated "Saved Games" folder** by querying the Windows Known Folder API rather than assuming `%USERPROFILE%\Saved Games`. Users who moved Saved Games to another drive previously had the LuaSec payload and hook skipped even though DCS found the folder fine.
+- **Reinstalling after a DCS update no longer dead-ends.** A DCS update reverts `MissionEditor.lua` to vanilla while the old `…dcs-sms.bak` lingers; `install-me-mod` refused to overwrite the existing backup and aborted without re-patching, so the mod wouldn't load. It now re-patches the current vanilla file and refreshes the backup to match the installed DCS version.
+- The installer now prints a clear **warning** (not a quiet "note") when it genuinely can't resolve Saved Games, pointing at `DCS_SMS_SAVED_GAMES` / `--saved-games`.
+
 > **Release `me-mod-v0.25.1`** — first tagged release since `v0.19.1`, bundling everything merged to main across 0.20.0–0.25.1.
 >
 > **New features since v0.19.1:**

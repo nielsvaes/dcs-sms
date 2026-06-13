@@ -1,10 +1,60 @@
 package dcspath
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
+
+// Bug #1 regression: a config.toml that exists but has no saved_games key
+// (the normal state after install-me-mod writes only dcs_install) must NOT
+// hard-fail Discover — it has to fall through to the default discovery.
+// Before the fix, Discover returned "reading <cfg>: saved_games key not found
+// in config", which broke the LuaSec lib copy on update and the hook install.
+func TestDiscover_FallsThroughWhenConfigMissingKey(t *testing.T) {
+	t.Setenv("DCS_SMS_SAVED_GAMES", "") // isolate from the host env
+	dir := t.TempDir()
+	cfg := filepath.Join(dir, "config.toml")
+	// Config has dcs_install but no saved_games — exactly what install-me-mod
+	// leaves behind.
+	if err := os.WriteFile(cfg, []byte(`dcs_install = "C:\\Games\\DCS World"`+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, err := Discover("", cfg)
+	// Whether DiscoverDefault then succeeds or not is environment-dependent;
+	// the contract under test is only that we did NOT dead-end on the missing
+	// key.
+	if err != nil && errors.Is(err, errConfigKeyNotFound) {
+		t.Fatalf("Discover must fall through past a missing config key, got: %v", err)
+	}
+	if err != nil && strings.Contains(err.Error(), "key not found in config") {
+		t.Fatalf("Discover leaked the config-key error instead of falling through: %v", err)
+	}
+}
+
+func TestPickVariantDir(t *testing.T) {
+	base := t.TempDir()
+	// Nothing present yet → no variant.
+	if _, ok := pickVariantDir(base); ok {
+		t.Fatal("expected no variant when base is empty")
+	}
+	// DCS.openbeta only → picked.
+	if err := os.MkdirAll(filepath.Join(base, "DCS.openbeta"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if got, ok := pickVariantDir(base); !ok || got != filepath.Join(base, "DCS.openbeta") {
+		t.Fatalf("expected DCS.openbeta, got %q ok=%v", got, ok)
+	}
+	// DCS takes priority once it exists.
+	if err := os.MkdirAll(filepath.Join(base, "DCS"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if got, ok := pickVariantDir(base); !ok || got != filepath.Join(base, "DCS") {
+		t.Fatalf("expected DCS to win, got %q ok=%v", got, ok)
+	}
+}
 
 func TestDiscoverFromConfig(t *testing.T) {
 	configDir := t.TempDir()

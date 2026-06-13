@@ -118,7 +118,11 @@ func installMeModCmd(args []string, stdout, stderr io.Writer) int {
 			fmt.Fprintf(stdout, "copied LuaSec lib payload (%d files) → %s\n", n, libDst)
 		}
 	} else {
-		fmt.Fprintln(stdout, "note: Saved Games path not resolved; skipped LuaSec lib payload")
+		fmt.Fprintln(stderr, "dcs-sms install-me-mod: WARNING: could not resolve your DCS Saved Games folder")
+		fmt.Fprintf(stderr, "  (%v)\n", derr)
+		fmt.Fprintln(stderr, "  The LuaSec HTTPS payload was NOT installed, so the Community prefab library will")
+		fmt.Fprintln(stderr, "  report \"Secure networking unavailable.\" Set DCS_SMS_SAVED_GAMES to your")
+		fmt.Fprintln(stderr, "  \"...\\Saved Games\\DCS\" folder and re-run, or pass --saved-games.")
 	}
 	binTotal := 0
 	for _, sub := range []string{"bin", "bin-mt"} {
@@ -145,17 +149,17 @@ func installMeModCmd(args []string, stdout, stderr io.Writer) int {
 	if bytes.Contains(meSrc, []byte(memod.RequireBeginMarker)) {
 		fmt.Fprintf(stdout, "patch already present in %s, skipping\n", meFile)
 	} else {
+		// No patch marker → MissionEditor.lua is vanilla. This is a first
+		// install OR (commonly) a DCS update that reverted our patch. Refresh
+		// the backup from the current vanilla file and (re-)apply the patch.
+		//
+		// We intentionally overwrite any pre-existing .bak rather than dead-end:
+		// the current file is guaranteed unpatched in this branch, so the backup
+		// stays a faithful vanilla copy matching the installed DCS version. The
+		// old behaviour refused when a .bak already existed, which left every
+		// Program-Files user unable to reinstall after a DCS update (the update
+		// reverts MissionEditor.lua while the old .bak lingers).
 		backup := meFile + meModBackupSuffix
-		if _, err := os.Stat(backup); err == nil {
-			fmt.Fprintf(stderr,
-				"dcs-sms install-me-mod: refusing to overwrite existing backup %s\n"+
-					"  (run `dcs-sms uninstall-me-mod` first, or remove the .bak manually)\n",
-				backup)
-			return 3
-		} else if !errors.Is(err, os.ErrNotExist) {
-			fmt.Fprintln(stderr, "dcs-sms install-me-mod: stat backup:", err)
-			return 3
-		}
 		if err := os.WriteFile(backup, meSrc, 0o644); err != nil {
 			fmt.Fprintln(stderr, "dcs-sms install-me-mod: write backup:", err)
 			return 3
