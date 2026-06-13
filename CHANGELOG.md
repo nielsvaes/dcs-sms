@@ -105,6 +105,20 @@ This is the first tag after a long quiet period — `sms.version` had been froze
 
 ## ME-mod
 
+> **Release `me-mod-v0.25.1`** — first tagged release since `v0.19.1`, bundling everything merged to main across 0.20.0–0.25.1.
+>
+> **New features since v0.19.1:**
+>
+> - **Community prefab library** — a new **Community** tab browses a vetted, GitHub-hosted prefab catalog over HTTPS (search, sort, tag filters) with one-click "Add to my library". Files load parse-don't-execute through a data-only validator, fetch/import run non-blocking on the editor tick, and the last catalog is cached for offline use. Includes per-prefab **image previews** (scale-to-fit thumbnail + click-to-enlarge window), a **resizable description column**, and an **Author column** in My Prefabs.
+> - **Triggers in prefabs** — a **Triggers** tab saves mission triggers into a prefab; normal saves offer to bundle triggers that reference your selection; placement re-imports them with reference rebinding, embedded media (pictures/sounds/scripts), a manual-map dialog for unresolved references, and a flag-overlap warning. Trigger prefabs live in a reserved `Triggers/` folder.
+> - **Prefab mod dependencies** — prefabs record the community mods their units/statics need; placing one warns when a required mod isn't installed, and the library (`M` column) and Community browser ("requires mods" line, plus a yellow warning when you're missing it) surface it.
+> - **Save-to folder dialog** — **Save** opens a folder picker (with an inline **New Folder** button) so the destination is always deliberate; **Rename**/**Delete** moved to the file-row right-click menu; the overwrite check is now folder-scoped.
+> - **Mass Edit "From map" for statics** — the Static scope gains a **From map** button matching Group and Unit.
+>
+> **Notable fixes:** drawings no longer vanish on save (Prefab Manager placements + `me drawing` verbs); Lua Predicate trigger conditions keep their code through save/import; the Community image preview and missing-mod warning no longer show through onto the My Prefabs tab.
+>
+> Per-version detail below.
+
 ### [0.25.1] — 2026-06-12
 
 **Added**
