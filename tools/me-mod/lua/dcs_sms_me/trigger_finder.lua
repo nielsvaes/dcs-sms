@@ -126,7 +126,20 @@ local function jump_to_trigger(index)
         if not m then error('trigger panel module unavailable') end
         local vis = false
         pcall(function() vis = m.isVisible() end)
-        if not vis then pcall(function() m.show() end) end
+        if not vis then
+            -- Open the panel the way the toolbar does, so the Triggers
+            -- toolbar button state stays in sync. toolbarCallback toggles,
+            -- so only call it while the panel is closed.
+            pcall(function()
+                local tb = require('me_toolbar')
+                if tb and tb.toolbarCallback and tb.toggleButtonTrigRules then
+                    tb.toolbarCallback(tb.toggleButtonTrigRules)
+                end
+            end)
+            local now = false
+            pcall(function() now = m.isVisible() end)
+            if not now then pcall(function() m.show(true) end) end  -- fallback: show(true) opens + wires callbacks
+        end
         local tl = m.triggersWindow and m.triggersWindow.Box and m.triggersWindow.Box.triggersList
         if not tl then error('trigger list not found') end
         local entry
