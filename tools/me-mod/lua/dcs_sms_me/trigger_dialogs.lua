@@ -196,6 +196,7 @@ function M.show_bundle_dialog(opts)
     opts = type(opts) == 'table' and opts or {}
     local related    = type(opts.related) == 'table' and opts.related or {}
     local summarize  = opts.summarize
+    local name_for   = type(opts.name_for) == 'function' and opts.name_for or nil
     local on_confirm = opts.on_confirm or function() end
     local on_cancel  = opts.on_cancel or function() end
 
@@ -268,7 +269,14 @@ function M.show_bundle_dialog(opts)
             if #outside > 0 then
                 local seen, parts = {}, {}
                 for _, r in ipairs(outside) do
-                    local tag = tostring(r.kind) .. ' ' .. tostring(r.id)
+                    local nm
+                    if name_for then
+                        local okn, n = pcall(name_for, r.kind, r.id)
+                        if okn then nm = n end
+                    end
+                    local tag = (nm and nm ~= '')
+                        and (tostring(nm) .. ' (' .. tostring(r.kind) .. ')')
+                        or (tostring(r.kind) .. ' ' .. tostring(r.id))
                     if not seen[tag] then seen[tag] = true; parts[#parts + 1] = tag end
                 end
                 make_label(win, 'also references: ' .. truncate(table.concat(parts, ', '), 80),
