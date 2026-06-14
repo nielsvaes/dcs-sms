@@ -846,6 +846,28 @@ local function read_fixed_check()
     return v
 end
 
+-- Resolve an entity reference to a display name for save-time warnings.
+-- pcall-guarded; returns nil when the id can't be resolved (callers fall
+-- back to "<kind> <id>"). Standalone twin of the entity_name closure inside
+-- build_triggers_payload, usable outside to_portable.
+local function entity_display_name(kind, id)
+    local name
+    pcall(function()
+        local Mission = require('me_mission')
+        if kind == 'group' and Mission.group_by_id and Mission.group_by_id[id] then
+            name = Mission.group_by_id[id].name
+        elseif kind == 'unit' and Mission.unit_by_id and Mission.unit_by_id[id] then
+            name = Mission.unit_by_id[id].name
+        elseif kind == 'zone' then
+            local TZD = require('Mission.TriggerZoneData')
+            if TZD and type(TZD.getTriggerZoneName) == 'function' then
+                name = TZD.getTriggerZoneName(id)
+            end
+        end
+    end)
+    return name
+end
+
 -- checked_indices are 1-based indices into mission.trigrules. Builds the
 -- to_portable payload with the live-editor env. Returns payload | nil.
 local function build_triggers_payload(checked_indices)
@@ -957,10 +979,41 @@ local function with_bundled_triggers(k)
     trigger_dialogs.show_bundle_dialog({
         related = related,
         summarize = function(t) return triggers_tab.refs_summary(t, env.schema) end,
+        name_for = entity_display_name,
         on_confirm = function(checked_indices)
             if #checked_indices == 0 then k(nil); return end
-            local payload = build_triggers_payload(checked_indices)
-            k(payload)
+            local export = require('dcs_sms_me.trigger_export')
+            local dangling = export.dangling_refs(related, checked_indices)
+            if #dangling == 0 then
+                k(build_triggers_payload(checked_indices))
+                return
+            end
+            local parts = {}
+            for _, r in ipairs(dangling) do
+                local nm = entity_display_name(r.kind, r.id)
+                parts[#parts + 1] = (nm and nm ~= '')
+                    and (tostring(nm) .. ' (' .. tostring(r.kind) .. ')')
+                    or (tostring(r.kind) .. ' ' .. tostring(r.id))
+            end
+            -- buttons[1] = Save anyway: show_overlay fires the first button in
+            -- the test VM / when MsgWindow is unavailable, so the save flow
+            -- degrades to "proceed" rather than deadlocking.
+            show_overlay(
+                "These bundled triggers reference entities that won't be saved "
+                    .. "in the prefab:\n\n" .. table.concat(parts, ', ') .. "\n\n"
+                    .. "They'll be kept as loose references and only resolve if "
+                    .. "the target mission already has matching entities.\n\n"
+                    .. "Save anyway, or cancel and widen your selection?",
+                {
+                    { label = 'Save anyway', on_click = function()
+                        k(build_triggers_payload(checked_indices))
+                    end },
+                    { label = 'Cancel', on_click = function()
+                        set_status('Save cancelled - adjust your selection.')
+                    end },
+                },
+                'question',
+                'Triggers reference entities not in this prefab')
         end,
         on_cancel = function() k(nil) end,
     })
