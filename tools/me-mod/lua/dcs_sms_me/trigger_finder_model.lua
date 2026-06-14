@@ -59,7 +59,7 @@ function M.build(opts)
             group_id   = g.id,
             expandable = has_units or false,
         })
-        group_by_id[g.id] = gnode
+        if g.id ~= nil then group_by_id[g.id] = gnode end
         if not is_static then
             for _, u in ipairs(g.units or {}) do
                 local unode = add_node({
@@ -70,21 +70,23 @@ function M.build(opts)
                     parent  = gnode.key,
                     unit_id = u.id,
                 })
-                unit_by_id[u.id] = unode
+                if u.id ~= nil then unit_by_id[u.id] = unode end
             end
         end
     end
 
     for _, z in ipairs(zones) do
-        local znode = add_node({
-            key        = zkey(z.id),
-            kind       = 'zone',
-            name       = z.name or '',
-            depth      = 0,
-            zone_id    = z.id,
-            expandable = false,
-        })
-        zone_by_id[z.id] = znode
+        if z.id ~= nil then
+            local znode = add_node({
+                key        = zkey(z.id),
+                kind       = 'zone',
+                name       = z.name or '',
+                depth      = 0,
+                zone_id    = z.id,
+                expandable = false,
+            })
+            zone_by_id[z.id] = znode
+        end
     end
 
     local function attribute(node, rec, seen)

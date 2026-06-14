@@ -101,10 +101,21 @@ local function build_model(snap)
         end
     end
 
+    -- Selected zone objects carry no id — only a name. Map name → zoneId via
+    -- TriggerZoneData (same approach the Prefab Manager uses).
     local zones_in = {}
-    if snap and snap.ok and type(snap.zones) == 'table' then
+    if snap and snap.ok and type(snap.zones) == 'table' and #snap.zones > 0 then
+        local zone_id_by_name = {}
+        local ok_tzd, TZD = pcall(require, 'Mission.TriggerZoneData')
+        if ok_tzd and TZD and type(TZD.getTriggerZoneIds) == 'function' then
+            for _, zid in ipairs(TZD.getTriggerZoneIds() or {}) do
+                local nm = TZD.getTriggerZoneName(zid)
+                if nm then zone_id_by_name[nm] = zid end
+            end
+        end
         for _, z in ipairs(snap.zones) do
-            zones_in[#zones_in + 1] = { id = z.zoneId, name = z.name or '?' }
+            local zid = z.name and zone_id_by_name[z.name]
+            if zid then zones_in[#zones_in + 1] = { id = zid, name = z.name } end
         end
     end
 
@@ -327,7 +338,9 @@ local function tick()
     -- M.refresh() / reopen to deliberately resync to an empty selection.
     if sig ~= '' and sig ~= W.last_sig then
         W.last_sig = sig
-        rebuild(snap)
+        -- Never let a rebuild error throw into the ME's UpdateManager loop.
+        local ok, err = pcall(rebuild, snap)
+        if not ok then log_warn('rebuild failed: ' .. tostring(err)) end
     end
 end
 
