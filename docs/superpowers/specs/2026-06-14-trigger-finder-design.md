@@ -1,7 +1,7 @@
 # Trigger Finder — design
 
 **Date:** 2026-06-14
-**Status:** Approved (brainstorm), pending implementation plan
+**Status:** Approved — planning + implementation under way (autonomous /write-it)
 **Area:** `tools/me-mod` — Mission Editor mod, new standalone tool window
 
 ## Problem
@@ -174,6 +174,37 @@ only from real unit nodes under non-static groups.
    enough to run per tick (it walks selection state, not the whole mission); if not,
    throttle (every N ticks) or hook the single-select code path instead. Measure, don't
    assume (per the "measure DCS freezes" rule).
+
+## Decisions (autonomous calls — revisit if any feel wrong)
+
+1. **Name:** "Trigger Finder" (window title `Coconut Cockpit · DCS-SMS — Trigger Finder
+   v<ver>`). Menu entry "Trigger Finder" under DCS-SMS.
+2. **Menu behaviour:** the menu item **toggles** the window (show if hidden, hide if
+   shown), mirroring the Prefab Manager / Mass Edit pattern (`M.toggle()`).
+3. **Module split:** `trigger_finder.lua` (dxgui window + selection feed + render) and
+   `trigger_finder_model.lua` (pure, dxgui-free model builder, unit-tested). Keeps the
+   testable logic isolated per the project's small-focused-units preference.
+4. **Selection feed:** subscribe to `marquee_hook` **and** poll `selection.snapshot()` on
+   the `UpdateManager` tick, both gated on window visibility, diffing a cheap selection
+   signature and only rebuilding the tree on change. (Single mechanism — the poll — would
+   suffice functionally; the marquee subscription just makes marquee updates feel instant.
+   If the poll proves too costly per the risk below, the marquee hook remains the
+   fallback.)
+5. **Badges:** amber chip when a node's trigger count ≥ 1, grey "0" when none. Counts are
+   per-node (a trigger referencing both a unit and its group counts on both).
+6. **Tree shape:** unit and group are **separate** nodes (group expandable → units);
+   statics are leaf nodes. Selecting a node shows only that node's own refs (unit-level vs
+   group-level kept distinct). Empty groups (no units, e.g. a ship/vehicle single) still
+   expand to show their unit(s).
+7. **Button content:** trigger name + type (once/continuous/start/front) + a one-line
+   "why it matched" derived from the matching ref (`<condition|action> · <predicate
+   label>`). Clicking jumps to the vanilla panel; no inline detail.
+8. **Sort order:** tree nodes follow selection/mission order; trigger buttons follow
+   `mission.trigrules` order (matches the vanilla panel's order, so the jump target's
+   position is predictable).
+9. **No CLI verb** this change-set (GUI-only), per Non-goals.
+10. **Default window size:** ~460×360, min ~360×240, splitter starting ~42% tree / 58%
+    buttons. Tunable; not load-bearing.
 
 ## Error handling
 
