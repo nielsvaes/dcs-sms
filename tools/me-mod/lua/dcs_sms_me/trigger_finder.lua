@@ -34,7 +34,7 @@ local W = {
     right_empty  = nil,
     btn_pool     = {},     -- array of { btn=Button, sub=Static, _index=int, _wired=bool }
     right_count  = 0,
-    left_w       = 190,
+    left_w       = 170,
     collapsed    = {},     -- node key -> true when folded
     row_meta     = {},     -- grid row (0-based) -> node key
     model        = nil,
@@ -210,10 +210,14 @@ local function render_right(node)
         local slot = get_slot(i)
         slot._index = tr.index
         local label = (tr.name ~= '' and tr.name) or ('Trigger #' .. tostring(tr.index))
-        local detail = tr.type .. '  ·  ' .. tr.why
+        -- Visible sub-line is just the "why" (source · predicate) — short enough
+        -- not to clip in a narrow pane. Full detail (incl. trigger type) on hover.
+        local sub  = tr.why
+        local full = tr.type .. '  ·  ' .. tr.why
         pcall(function() slot.btn:setText(label) end)
-        pcall(function() if slot.btn.setTooltipText then slot.btn:setTooltipText(detail) end end)
-        pcall(function() slot.sub:setText(detail) end)
+        pcall(function() if slot.btn.setTooltipText then slot.btn:setTooltipText(full) end end)
+        pcall(function() slot.sub:setText(sub) end)
+        pcall(function() if slot.sub.setTooltipText then slot.sub:setTooltipText(full) end end)
         pcall(function() slot.btn:setVisible(true) end)
         pcall(function() slot.sub:setVisible(true) end)
     end
@@ -286,6 +290,14 @@ local function rebuild(snap)
     end
 end
 
+-- Paint immediately from the current selection (used on open / manual refresh),
+-- seeding last_sig so the tick only fires on subsequent changes.
+local function paint_now()
+    local snap = selection.snapshot()
+    W.last_sig = selection_signature(snap)
+    rebuild(snap)
+end
+
 -- ── per-frame selection poll ────────────────────────────────────────────────
 
 local function tick()
@@ -296,7 +308,13 @@ local function tick()
     if not visible then return end
     local snap = selection.snapshot()
     local sig = selection_signature(snap)
-    if sig ~= W.last_sig then
+    -- Keep the last populated tree when the live selection goes empty — clicking
+    -- a trigger button opens the vanilla panel, which clears the map's
+    -- multi-selection. Only rebuild on a NEW, non-empty selection, so multi-select
+    -- survives a jump and the window "holds" your selection instead of blanking.
+    -- (Single-select already survived because its selection isn't cleared.) Use
+    -- M.refresh() / reopen to deliberately resync to an empty selection.
+    if sig ~= '' and sig ~= W.last_sig then
         W.last_sig = sig
         rebuild(snap)
     end
@@ -316,7 +334,7 @@ end
 -- ── layout ──────────────────────────────────────────────────────────────────
 
 local LAYOUT = { GAP = 6, HEADER_H = 20, SPLIT_W = 6, SPLIT_GUTTER = 14,
-                 BTN_H = 24, SUB_H = 14, ENTRY_GAP = 8, MIN_LEFT = 140, MIN_RIGHT = 160 }
+                 BTN_H = 24, SUB_H = 16, ENTRY_GAP = 8, MIN_LEFT = 140, MIN_RIGHT = 200 }
 
 local function relayout(x, y, w, h)
     if not (W.sms_window and W.grid) then return end
@@ -450,24 +468,22 @@ function M.show()
     if W.sms_window and W.sms_window:raw() then
         W.sms_window:show()
         install_tick()
-        W.last_sig = nil
-        pcall(tick)
+        pcall(paint_now)
         return
     end
     W.sms_window = sms_window.new({
         title    = 'Trigger Finder',
-        size     = { w = 460, h = 360 },
-        min_size = { w = 360, h = 240 },
+        size     = { w = 540, h = 380 },
+        min_size = { w = 420, h = 260 },
         disable_undo_hotkey = true,
         on_resize = function(_, x, y, w, h) relayout(x, y, w, h) end,
     })
     if not W.sms_window then log_warn('sms_window.new returned nil'); return end
     build_body(W.sms_window:raw())
     install_tick()
-    W.last_sig = nil
     M._relayout()
     W.sms_window:show()
-    pcall(tick)         -- initial populate from the current selection
+    pcall(paint_now)    -- initial populate from the current selection
     log_info('Trigger Finder opened')
 end
 
@@ -484,8 +500,7 @@ function M.toggle()
 end
 
 function M.refresh()
-    W.last_sig = nil
-    pcall(tick)
+    pcall(paint_now)
 end
 
 return M
