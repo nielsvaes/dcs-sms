@@ -105,8 +105,29 @@ local function run_edges()
     assert_eq(r2.by_key['u11'].triggers[1].index, r2.by_key['g1'].triggers[1].index, 'edge: same trigger index under both')
 end
 
+local function run_zones()
+    local r = model.build({
+        groups = { { id = 1, name = 'CAP-1', kind = 'group', units = { { id = 11, name = 'CAP-1-1' } } } },
+        zones  = { { id = 7, name = 'CAP Zone' }, { id = 8, name = 'Empty Zone' } },
+        trigrules = {
+            { comment = 'IN ZONE', predicate = 'triggerOnce',
+              rules = { { predicate = 'group-in-zone', group = 1, zone = 7 } }, actions = {} },
+        },
+        field_kind = field_kind, type_label = type_label })
+    -- 1 group + 1 unit + 2 zones = 4 nodes
+    assert_eq(#r.nodes, 4, 'zones: node count')
+    assert_eq(r.by_key['z7'].kind, 'zone', 'zones: z7 kind')
+    assert_eq(r.by_key['z7'].depth, 0, 'zones: z7 depth 0 (leaf)')
+    assert_true(not r.by_key['z7'].expandable, 'zones: z7 not expandable')
+    assert_eq(r.by_key['z7'].count, 1, 'zones: z7 referenced once')
+    assert_eq(r.by_key['z7'].triggers[1].why, 'condition · group-in-zone', 'zones: z7 why')
+    assert_eq(r.by_key['z8'].count, 0, 'zones: unreferenced zone is zero')
+    assert_eq(r.by_key['g1'].count, 1, 'zones: same trigger also lands on the group')
+end
+
 run()
 run_edges()
+run_zones()
 print(string.format('test_trigger_finder: %d passed, %d failed', passed, failed))
 for _, e in ipairs(errors) do print('  FAIL: ' .. e) end
 os.exit(failed == 0 and 0 or 1)

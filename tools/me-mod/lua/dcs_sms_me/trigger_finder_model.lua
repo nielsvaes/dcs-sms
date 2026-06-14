@@ -11,6 +11,8 @@
 --   opts.groups: array (display order), each:
 --     { id=<groupId>, name=<string>, kind='group'|'static',
 --       units = { { id=<unitId>, name=<string> }, ... } }   -- statics: units ignored
+--   opts.zones: array (display order), each { id=<zoneId>, name=<string> }
+--     -- rendered as leaf nodes after the groups
 --   opts.trigrules: array of raw trigger entries:
 --     { comment=<string>, predicate=<pred>, rules={...}, actions={...} }
 --     each rule/action: { predicate=<pred>, [fieldKey]=<number>, ... }
@@ -18,23 +20,25 @@
 --   opts.type_label(predicate) -> short string (e.g. 'once', 'unit-dead')
 --
 -- Each node:
---   { key, kind='group'|'static'|'unit', name, depth (0|1),
---     parent (unit only), group_id|unit_id, expandable (group with units),
+--   { key, kind='group'|'static'|'unit'|'zone', name, depth (0|1),
+--     parent (unit only), group_id|unit_id|zone_id, expandable (group with units),
 --     triggers = { { index, name, type, why }, ... } (index order), count }
 local M = {}
 
 local function gkey(id) return 'g' .. tostring(id) end
 local function ukey(id) return 'u' .. tostring(id) end
+local function zkey(id) return 'z' .. tostring(id) end
 
 function M.build(opts)
     opts = opts or {}
     local groups     = opts.groups or {}
+    local zones      = opts.zones or {}
     local trigrules  = opts.trigrules or {}
     local field_kind = opts.field_kind or function() return nil end
     local type_label = opts.type_label or function() return '' end
 
     local nodes, by_key = {}, {}
-    local group_by_id, unit_by_id = {}, {}
+    local group_by_id, unit_by_id, zone_by_id = {}, {}, {}
 
     local function add_node(n)
         n.triggers = {}
@@ -71,6 +75,18 @@ function M.build(opts)
         end
     end
 
+    for _, z in ipairs(zones) do
+        local znode = add_node({
+            key        = zkey(z.id),
+            kind       = 'zone',
+            name       = z.name or '',
+            depth      = 0,
+            zone_id    = z.id,
+            expandable = false,
+        })
+        zone_by_id[z.id] = znode
+    end
+
     local function attribute(node, rec, seen)
         if not node then return end
         local sk = node.key .. '#' .. rec.index
@@ -93,7 +109,8 @@ function M.build(opts)
                                 local kind = field_kind(entry.predicate, k)
                                 local node
                                 if kind == 'group' then node = group_by_id[v]
-                                elseif kind == 'unit' then node = unit_by_id[v] end
+                                elseif kind == 'unit' then node = unit_by_id[v]
+                                elseif kind == 'zone' then node = zone_by_id[v] end
                                 if node then
                                     attribute(node, {
                                         index = index,

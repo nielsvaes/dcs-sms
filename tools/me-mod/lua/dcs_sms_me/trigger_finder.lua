@@ -73,9 +73,10 @@ end
 -- group regardless of which unit was clicked, so a within-group unit change
 -- can't make the displayed tree stale. Statics ride snap.groups too.
 local function selection_signature(snap)
-    if not (snap and snap.ok and type(snap.groups) == 'table') then return '' end
+    if not (snap and snap.ok) then return '' end
     local parts = {}
-    for _, g in ipairs(snap.groups) do parts[#parts + 1] = tostring(g.groupId or g.name) end
+    for _, g in ipairs(snap.groups or {}) do parts[#parts + 1] = 'g' .. tostring(g.groupId or g.name) end
+    for _, z in ipairs(snap.zones or {})  do parts[#parts + 1] = 'z' .. tostring(z.zoneId or z.name) end
     table.sort(parts)
     return table.concat(parts, ',')
 end
@@ -100,6 +101,13 @@ local function build_model(snap)
         end
     end
 
+    local zones_in = {}
+    if snap and snap.ok and type(snap.zones) == 'table' then
+        for _, z in ipairs(snap.zones) do
+            zones_in[#zones_in + 1] = { id = z.zoneId, name = z.name or '?' }
+        end
+    end
+
     local schema = trigger_schema.from_editor()
     local trigrules = {}
     pcall(function() trigrules = require('me_mission').mission.trigrules or {} end)
@@ -118,7 +126,7 @@ local function build_model(snap)
     end
 
     W.model = model.build({
-        groups = groups_in, trigrules = trigrules,
+        groups = groups_in, zones = zones_in, trigrules = trigrules,
         field_kind = field_kind, type_label = type_label,
     })
 end
@@ -170,8 +178,11 @@ end
 -- ── render: right pane (trigger buttons) ────────────────────────────────────
 
 local function node_title(node)
-    if not node then return 'Select a unit, group, or static on the map' end
-    local what = (node.kind == 'unit') and 'unit' or (node.kind == 'static') and 'static' or 'group'
+    if not node then return 'Select a unit, group, zone, or static on the map' end
+    local what = (node.kind == 'unit') and 'unit'
+              or (node.kind == 'static') and 'static'
+              or (node.kind == 'zone') and 'zone'
+              or 'group'
     return 'Triggers referencing ' .. what .. ' "' .. node.name .. '"'
 end
 
