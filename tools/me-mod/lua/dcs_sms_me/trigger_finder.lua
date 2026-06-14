@@ -67,6 +67,11 @@ local function collect_static_ids()
     return ids
 end
 
+-- A cheap fingerprint of the current selection, used by the tick to decide
+-- whether to rebuild. Intentionally keyed on the selected GROUPS only (not
+-- individual units): the tree always shows every unit of every selected
+-- group regardless of which unit was clicked, so a within-group unit change
+-- can't make the displayed tree stale. Statics ride snap.groups too.
 local function selection_signature(snap)
     if not (snap and snap.ok and type(snap.groups) == 'table') then return '' end
     local parts = {}
