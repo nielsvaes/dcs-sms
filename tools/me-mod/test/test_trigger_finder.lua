@@ -86,7 +86,27 @@ local function run()
     assert_eq(#empty.nodes, 0, 'empty build node count')
 end
 
+local function run_edges()
+    -- (a) non-static group with no units
+    local r = model.build({
+        groups = { { id = 5, name = 'Empty', kind = 'group', units = {} } },
+        trigrules = {}, field_kind = field_kind, type_label = type_label })
+    assert_eq(#r.nodes, 1, 'edge: empty-units group yields one node')
+    assert_true(not r.by_key['g5'].expandable, 'edge: empty-units group not expandable')
+
+    -- (b) one trigger referencing both a unit and its parent group
+    local r2 = model.build({
+        groups = { { id = 1, name = 'CAP-1', kind = 'group', units = { { id = 11, name = 'CAP-1-1' } } } },
+        trigrules = { { comment = 'BOTH', predicate = 'triggerOnce',
+            rules = { { predicate = 'in-zone', unit = 11, group = 1 } }, actions = {} } },
+        field_kind = field_kind, type_label = type_label })
+    assert_eq(r2.by_key['u11'].count, 1, 'edge: unit node gets the trigger')
+    assert_eq(r2.by_key['g1'].count, 1, 'edge: group node also gets the same trigger')
+    assert_eq(r2.by_key['u11'].triggers[1].index, r2.by_key['g1'].triggers[1].index, 'edge: same trigger index under both')
+end
+
 run()
+run_edges()
 print(string.format('test_trigger_finder: %d passed, %d failed', passed, failed))
 for _, e in ipairs(errors) do print('  FAIL: ' .. e) end
 os.exit(failed == 0 and 0 or 1)

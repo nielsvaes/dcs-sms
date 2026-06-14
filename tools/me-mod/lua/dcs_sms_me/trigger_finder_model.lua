@@ -87,6 +87,7 @@ function M.build(opts)
             local function scan(list, source)
                 for _, entry in ipairs(list or {}) do
                     if type(entry) == 'table' then
+                        local entry_label = type_label(entry.predicate)
                         for k, v in pairs(entry) do
                             if k ~= 'predicate' and type(v) == 'number' then
                                 local kind = field_kind(entry.predicate, k)
@@ -98,7 +99,7 @@ function M.build(opts)
                                         index = index,
                                         name  = tname,
                                         type  = ttype,
-                                        why   = source .. ' · ' .. type_label(entry.predicate),
+                                        why   = source .. ' · ' .. entry_label,
                                     }, seen)
                                 end
                             end
