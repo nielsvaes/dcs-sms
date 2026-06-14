@@ -133,6 +133,36 @@ local rel2 = export.find_related({ t_flags }, {
 }, s)
 check(#rel2 == 0, 'flag-only trigger not related to entity selection')
 
+-- dangling_refs: deduped outside_refs of the CHECKED related triggers.
+-- `rel` above = one related trigger at index 1 whose outside_refs are
+-- group 7 + zone 99 (2 entries).
+local dang = export.dangling_refs(rel, { 1 })
+check(#dang == 2, 'dangling_refs: two outside refs for the checked trigger')
+
+local dang_none = export.dangling_refs(rel, {})
+check(#dang_none == 0, 'dangling_refs: nothing checked -> empty')
+
+local dang_miss = export.dangling_refs(rel, { 99 })
+check(#dang_miss == 0, 'dangling_refs: checked index not in related -> empty')
+
+-- dedup across triggers + check-state, via a synthetic related set.
+local rel_dup = {
+    { index = 1, outside_refs = { { kind = 'group', id = 7 }, { kind = 'zone', id = 99 } } },
+    { index = 2, outside_refs = { { kind = 'group', id = 7 } } },
+}
+local dang_dup = export.dangling_refs(rel_dup, { 1, 2 })
+check(#dang_dup == 2, 'dangling_refs: group 7 deduped across two triggers (group 7 + zone 99)')
+
+local dang_sel = export.dangling_refs(rel_dup, { 2 })
+check(#dang_sel == 1 and dang_sel[1].kind == 'group' and dang_sel[1].id == 7,
+      'dangling_refs: unchecked triggers excluded')
+
+local rel_clean = { { index = 1, outside_refs = {} } }
+check(#export.dangling_refs(rel_clean, { 1 }) == 0,
+      'dangling_refs: no outside refs -> empty')
+
+check(#export.dangling_refs(nil, { 1 }) == 0, 'dangling_refs: nil related -> empty')
+
 print(string.format('test_trigger_export: %d passed, %d failed', passed, failed))
 for _, e in ipairs(errors) do print('  FAIL ' .. e) end
 os.exit(failed == 0 and 0 or 1)

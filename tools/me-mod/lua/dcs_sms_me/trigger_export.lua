@@ -214,4 +214,32 @@ function M.extract_flags(entries, schema)
     return out
 end
 
+-- dangling_refs(related, checked_indices) -> { {kind=, id=}, ... }
+-- The deduped (by kind+id) union of outside_refs across the find_related
+-- entries whose .index appears in checked_indices. "Dangling" = referenced
+-- by a trigger the user is bundling, but not part of the selection/prefab.
+-- Pure: no Mission/DCS dependency (name resolution is the caller's job).
+function M.dangling_refs(related, checked_indices)
+    if type(related) ~= 'table' or type(checked_indices) ~= 'table' then
+        return {}
+    end
+    local checked = {}
+    for _, idx in ipairs(checked_indices) do checked[idx] = true end
+    local seen, out = {}, {}
+    for _, e in ipairs(related) do
+        if type(e) == 'table' and checked[e.index] then
+            for _, r in ipairs(e.outside_refs or {}) do
+                if type(r) == 'table' and r.kind ~= nil and r.id ~= nil then
+                    local key = tostring(r.kind) .. ':' .. tostring(r.id)
+                    if not seen[key] then
+                        seen[key] = true
+                        out[#out + 1] = { kind = r.kind, id = r.id }
+                    end
+                end
+            end
+        end
+    end
+    return out
+end
+
 return M
