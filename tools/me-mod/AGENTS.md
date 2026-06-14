@@ -189,6 +189,8 @@ You do **not** have:
 | `trigger_media.lua` | ResKey read/add over ED's `dictionary` resource API (`getValueResource` / `setValueToResource`). |
 | `trigger_dialogs.lua` | Save-time bundle checklist + combined post-place import dialog. |
 | `triggers_tab.lua` | The Prefab Manager Triggers tab (checkable master–detail over mission.trigrules + save form). |
+| `trigger_finder.lua` | The Trigger Finder tool window (`sms_window`): left Grid tree of the current map selection (groups → units, statics as leaves) with per-node trigger-count badges, right pane of one Button per referencing trigger. Per-frame `selection.snapshot()` poll auto-follows selection; clicking a trigger drives the native `me_trigrules` listbox (`selectItem`+`setItemVisible`+`onChange`) to select it, opening the panel via the toolbar toggle if closed. |
+| `trigger_finder_model.lua` | Pure (dxgui-free, unit-tested) model for `trigger_finder`: builds the selection tree and buckets each `mission.trigrules` entry under the nodes it references, via injected `field_kind`/`type_label` schema closures. |
 | `serializer.lua` | Lua-table serializer used to write prefab files. |
 | `warehouse_ops.lua`, `ship_warehouse.lua` | Airbase + per-ship warehouse capture for the Prefab Manager. |
 | `airbase_detect.lua` | Detect when a marquee selection includes an airbase. |

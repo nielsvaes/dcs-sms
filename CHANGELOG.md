@@ -105,6 +105,11 @@ This is the first tag after a long quiet period — `sms.version` had been froze
 
 ## ME-mod
 
+### [0.26.0] — 2026-06-14
+
+**Added**
+- **Trigger Finder** — a new DCS-SMS tool window (DCS-SMS → Trigger Finder). Follows the live map selection and shows, per selected group / unit / static, which triggers reference it, as a tree with per-node trigger-count badges. Click a trigger to select it in the vanilla ME trigger panel. Answers "which triggers affect this unit?" without trawling the trigger list — the one-to-many reverse lookup.
+
 ### [0.25.2] — 2026-06-13
 
 **Fixed**
