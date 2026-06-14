@@ -304,7 +304,7 @@ before it's saved.
 
 The **Triggers tab** (third tab in the Prefab Manager) lists every trigger in the open mission with its condition and action counts. Check the ones you want to keep, give the prefab a name, and click **Save triggers** — a triggers-only prefab is written to your library just like a regular prefab, but with no map footprint.
 
-When you save a **normal prefab** (groups, zones, drawings), the manager scans for triggers that reference the selection. If it finds any, a checklist overlay appears with those triggers pre-checked — confirm to bundle them into the prefab alongside the entities.
+When you save a **normal prefab** (groups, zones, drawings), the manager scans for triggers that reference the selection. If it finds any, a checklist overlay appears with those triggers pre-checked — confirm to bundle them into the prefab alongside the entities. If a trigger you bundle also references a group, unit, or zone that isn't part of the prefab, a confirmation lists those by name (e.g. `help-viper (group)`) before the save completes — **Save anyway** keeps them as loose references that resolve at import, or **Cancel** aborts so you can widen your selection.
 
 **Placing a prefab with triggers** shows an import dialog before anything lands in your mission:
 

@@ -140,6 +140,12 @@ those save as `{id, name}` and surface in the dialog ("also references:
 JTAC-1 ⚠ not in selection") so the user can widen the selection or accept a
 loose ref that will name-resolve / manual-map at import.
 
+> **Update (2026-06-14):** the passive "also references" surface is now a
+> blocking confirmation gate — see
+> [`2026-06-14-prefab-trigger-dangling-ref-gate-design.md`](2026-06-14-prefab-trigger-dangling-ref-gate-design.md).
+> Bundling a trigger with references outside the prefab requires an explicit
+> *Save anyway*; *Cancel* aborts the save.
+
 Detection is exactly groups + units + zones (drawings can't be referenced
 by triggers; trigger→trigger references don't exist in the schema).
 

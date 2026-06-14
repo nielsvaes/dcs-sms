@@ -105,6 +105,11 @@ This is the first tag after a long quiet period — `sms.version` had been froze
 
 ## ME-mod
 
+### [0.26.0] — 2026-06-14
+
+**Changed**
+- Saving a prefab now **blocks on a confirmation** when a bundled trigger references a group, unit, or zone that isn't part of the prefab. Previously this was only a passive "also references …" line in the bundle dialog, so it was easy to save a prefab whose triggers point at entities that won't travel with it. After you choose which triggers to bundle, a dialog lists any that would dangle (resolved to names, e.g. `help-viper (group)` instead of `group 42`) and offers **Save anyway** / **Cancel** — Cancel aborts the save so you can widen your selection. The bundle dialog's existing "also references" line now shows names too. Standalone trigger-only prefabs are unaffected: their references are meant to be rebound at import.
+
 ### [0.25.2] — 2026-06-13
 
 **Fixed**
