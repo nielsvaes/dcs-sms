@@ -151,6 +151,28 @@ local function add_top_level_menu()
         log.write('sms.me', log.ERROR, 'Hotkey Manager menu:newItem failed: ' .. tostring(hk_err))
     end
 
+    -- "Trigger Finder" entry — opens the reverse trigger-lookup window.
+    local trigfinder_item
+    local ok_tf, tf_err = pcall(function() trigfinder_item = menu:newItem('Trigger Finder') end)
+    if ok_tf and trigfinder_item then
+        pcall(function()
+            local sibling_item = sibling_menu
+                and (sibling_menu.missionOptions or sibling_menu.mapOptions
+                     or sibling_menu.setPosition  or sibling_menu.logbook)
+            if sibling_item and sibling_item.getSkin and trigfinder_item.setSkin then
+                trigfinder_item:setSkin(sibling_item:getSkin())
+            end
+        end)
+        trigfinder_item.func = function()
+            local ok2, err = pcall(function() require('dcs_sms_me.trigger_finder').toggle() end)
+            if not ok2 then
+                log.write('sms.me', log.ERROR, 'Trigger Finder toggle failed: ' .. tostring(err))
+            end
+        end
+    else
+        log.write('sms.me', log.ERROR, 'Trigger Finder menu:newItem failed: ' .. tostring(tf_err))
+    end
+
     -- Sibling "About" menu entry. Same skin-clone pattern as the Prefab
     -- Manager item; opens the about-dialog via require('dcs_sms_me.about').
     local about_item
