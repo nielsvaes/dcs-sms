@@ -89,11 +89,16 @@ Reused, unchanged where possible:
 
 - `dcs_sms_me.selection` — `snapshot()` to read the current map selection (groups,
   units, statics, zones).
-- `dcs_sms_me.marquee_hook` — `subscribe(cb)` to learn when a marquee selection completes.
 - `dcs_sms_me.trigger_schema` — `from_editor()` for the descriptor cache + field-kind
-  classifier.
-- `dcs_sms_me.trigger_export` — `find_related(trigrules, sel, schema)` for the reverse
-  lookup (see Data flow; statics ride the group path — see "Statics — resolved").
+  classifier. The window builds two closures from it — `field_kind(predicate, field_key)`
+  and `type_label(predicate)` — and injects them into the pure model.
+- **Own trigrules walk (not `find_related`).** `trigger_export.find_related` returns
+  `{kind,id,field}` per ref but discards *which* entry matched (condition vs action) and
+  its predicate — both of which the "why" line needs. So `trigger_finder_model` does its
+  own walk of each trigger's `rules`/`actions` (the same ~10-line pattern as
+  `trigger_export.walk_refs`, using the injected `field_kind`), tagging each match with
+  `source` + predicate alias. No change to `trigger_export`. Statics still ride the group
+  path (group-kind ref by `groupId`) — see "Statics — resolved".
 - `dcs_sms_me.sms_window`, `sms_skins`, `sms_scrollbars` — chrome, splitter, scrollbars.
 - `menu.lua` — a new **Trigger Finder** entry under the DCS-SMS menu.
 
@@ -184,21 +189,24 @@ only from real unit nodes under non-static groups.
 3. **Module split:** `trigger_finder.lua` (dxgui window + selection feed + render) and
    `trigger_finder_model.lua` (pure, dxgui-free model builder, unit-tested). Keeps the
    testable logic isolated per the project's small-focused-units preference.
-4. **Selection feed:** subscribe to `marquee_hook` **and** poll `selection.snapshot()` on
-   the `UpdateManager` tick, both gated on window visibility, diffing a cheap selection
-   signature and only rebuilding the tree on change. (Single mechanism — the poll — would
-   suffice functionally; the marquee subscription just makes marquee updates feel instant.
-   If the poll proves too costly per the risk below, the marquee hook remains the
-   fallback.)
+4. **Selection feed:** poll `selection.snapshot()` on the `UpdateManager` tick, gated on
+   window visibility, diffing a cheap selection signature (sorted selected groupIds) and
+   only rebuilding the tree on change. The per-frame poll already catches marquee
+   completion *and* single-click selection uniformly, so **no separate `marquee_hook`
+   subscription** is used — one mechanism, no double-rebuild, no reload subscriber leak.
+   The tick is guarded by a module generation counter (`_G.DCS_SMS_TF_GEN`, mirroring
+   `bridge.lua`) so ticks from a previous hot-reload silence themselves.
 5. **Badges:** amber chip when a node's trigger count ≥ 1, grey "0" when none. Counts are
    per-node (a trigger referencing both a unit and its group counts on both).
-6. **Tree shape:** unit and group are **separate** nodes (group expandable → units);
-   statics are leaf nodes. Selecting a node shows only that node's own refs (unit-level vs
-   group-level kept distinct). Empty groups (no units, e.g. a ship/vehicle single) still
-   expand to show their unit(s).
-7. **Button content:** trigger name + type (once/continuous/start/front) + a one-line
-   "why it matched" derived from the matching ref (`<condition|action> · <predicate
-   label>`). Clicking jumps to the vanilla panel; no inline detail.
+6. **Tree shape & interaction:** unit and group are **separate** nodes (group expandable →
+   units); statics are leaf nodes. Groups are **expanded by default**. **Single-click**
+   any row selects it (right pane shows that node's triggers); **double-click** a group
+   row toggles collapse/expand. Selecting a node shows only that node's own refs
+   (unit-level vs group-level kept distinct).
+7. **Button content:** each trigger is a `Button` (text = trigger name) with a small grey
+   `Static` sub-line beneath it reading `<type> · <source> · <predicate-alias>` (e.g.
+   `once · condition · unit-dead`), plus the same string as the button tooltip. Clicking
+   the button jumps to the vanilla panel; no inline condition/action detail.
 8. **Sort order:** tree nodes follow selection/mission order; trigger buttons follow
    `mission.trigrules` order (matches the vanilla panel's order, so the jump target's
    position is predictable).
