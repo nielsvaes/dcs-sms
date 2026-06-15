@@ -26,6 +26,37 @@
 
 local M = {}
 
+-- clone_item_skin / add_item — every DCS-SMS menu entry creates an item,
+-- clones the native menubar's sibling-item skin onto it (so fonts/spacing
+-- match the rest of the bar), wires a click handler, and logs on failure.
+-- These two helpers fold that otherwise-copy-pasted boilerplate into one
+-- place. The skin source is whichever stable native item the menubar
+-- exposes (missionOptions / mapOptions / setPosition / logbook).
+local function clone_item_skin(item, sibling_menu)
+    pcall(function()
+        local sibling_item = sibling_menu
+            and (sibling_menu.missionOptions or sibling_menu.mapOptions
+                 or sibling_menu.setPosition  or sibling_menu.logbook)
+        if sibling_item and sibling_item.getSkin and item and item.setSkin then
+            item:setSkin(sibling_item:getSkin())
+        end
+    end)
+end
+
+-- Create a skinned menu item with a click handler. Returns the item, or nil
+-- (after logging) if newItem failed on this DCS build.
+local function add_item(menu, sibling_menu, label, func)
+    local item
+    local ok, err = pcall(function() item = menu:newItem(label) end)
+    if not ok or not item then
+        log.write('sms.me', log.ERROR, label .. ' menu:newItem failed: ' .. tostring(err))
+        return nil
+    end
+    clone_item_skin(item, sibling_menu)
+    item.func = func
+    return item
+end
+
 -- Build a top-level "DCS-SMS" menu entry containing "Prefab Manager".
 -- Idempotent — guarded by a flag on the me_menubar module so dev-reload
 -- (Ctrl+Shift+R, which clears our package.loaded but not me_menubar) doesn't
@@ -76,106 +107,60 @@ local function add_top_level_menu()
         if item and item.func then item.func() end
     end
 
-    local item
-    local ok_new, err = pcall(function() item = menu:newItem('Prefab Manager') end)
-    if not ok_new or not item then
-        log.write('sms.me', log.ERROR, 'menu:newItem failed: ' .. tostring(err))
-        return false
-    end
-    pcall(function()
-        local sibling_item = sibling_menu
-            and (sibling_menu.missionOptions or sibling_menu.mapOptions
-                 or sibling_menu.setPosition  or sibling_menu.logbook)
-        if sibling_item and sibling_item.getSkin and item.setSkin then
-            item:setSkin(sibling_item:getSkin())
-        end
-    end)
-    item.func = function()
+    local item = add_item(menu, sibling_menu, 'Prefab Manager', function()
         log.write('sms.me', log.INFO, 'DCS-SMS > Prefab Manager menu clicked')
         local ok_t, terr = pcall(function()
-            local win = require('dcs_sms_me.prefab_manager')
-            win.toggle()
+            require('dcs_sms_me.prefab_manager').toggle()
         end)
         if not ok_t then
             log.write('sms.me', log.ERROR, 'Prefab Manager toggle failed: ' .. tostring(terr))
         end
-    end
+    end)
+    -- Prefab Manager is the anchor entry; if even its item can't be created
+    -- the menu is unusable, so bail (matches the pre-refactor behavior).
+    if not item then return false end
 
     -- "Mass Edit" entry — opens the Mass Edit window (lazy-required so a
     -- syntax error in mass_edit.lua degrades to a logged warning instead of
     -- breaking the menu).
-    local mass_edit_item
-    local ok_me, me_err = pcall(function() mass_edit_item = menu:newItem('Mass Edit') end)
-    if ok_me and mass_edit_item then
-        pcall(function()
-            local sibling_item = sibling_menu
-                and (sibling_menu.missionOptions or sibling_menu.mapOptions
-                     or sibling_menu.setPosition  or sibling_menu.logbook)
-            if sibling_item and sibling_item.getSkin and mass_edit_item.setSkin then
-                mass_edit_item:setSkin(sibling_item:getSkin())
-            end
-        end)
-        mass_edit_item.func = function()
-            local ok, mod_or_err = pcall(require, 'dcs_sms_me.mass_edit')
-            if ok and type(mod_or_err) == 'table' and mod_or_err.toggle then
-                local ok2, err = pcall(mod_or_err.toggle)
-                if not ok2 then
-                    pcall(function() _G.log.write('sms.me.menu', _G.log.ERROR or 1,
-                        'mass_edit.toggle threw: ' .. tostring(err)) end)
-                end
+    add_item(menu, sibling_menu, 'Mass Edit', function()
+        local ok, mod_or_err = pcall(require, 'dcs_sms_me.mass_edit')
+        if ok and type(mod_or_err) == 'table' and mod_or_err.toggle then
+            local ok2, err = pcall(mod_or_err.toggle)
+            if not ok2 then
+                pcall(function() _G.log.write('sms.me.menu', _G.log.ERROR or 1,
+                    'mass_edit.toggle threw: ' .. tostring(err)) end)
             end
         end
-    else
-        log.write('sms.me', log.ERROR, 'Mass Edit menu:newItem failed: ' .. tostring(me_err))
-    end
+    end)
 
     -- "Hotkey Manager" entry — opens the hotkey-binding window.
-    local hotkeys_item
-    local ok_hk, hk_err = pcall(function() hotkeys_item = menu:newItem('Hotkey Manager') end)
-    if ok_hk and hotkeys_item then
-        pcall(function()
-            local sibling_item = sibling_menu
-                and (sibling_menu.missionOptions or sibling_menu.mapOptions
-                     or sibling_menu.setPosition  or sibling_menu.logbook)
-            if sibling_item and sibling_item.getSkin and hotkeys_item.setSkin then
-                hotkeys_item:setSkin(sibling_item:getSkin())
-            end
-        end)
-        hotkeys_item.func = function()
-            local ok2, err = pcall(function() require('dcs_sms_me.me_hotkeys').toggle_window() end)
-            if not ok2 then
-                log.write('sms.me', log.ERROR, 'Hotkeys toggle failed: ' .. tostring(err))
-            end
+    add_item(menu, sibling_menu, 'Hotkey Manager', function()
+        local ok2, err = pcall(function() require('dcs_sms_me.me_hotkeys').toggle_window() end)
+        if not ok2 then
+            log.write('sms.me', log.ERROR, 'Hotkeys toggle failed: ' .. tostring(err))
         end
-    else
-        log.write('sms.me', log.ERROR, 'Hotkey Manager menu:newItem failed: ' .. tostring(hk_err))
-    end
+    end)
+
+    -- "Trigger Finder" entry — opens the reverse trigger-lookup window.
+    add_item(menu, sibling_menu, 'Trigger Finder', function()
+        local ok2, err = pcall(function() require('dcs_sms_me.trigger_finder').toggle() end)
+        if not ok2 then
+            log.write('sms.me', log.ERROR, 'Trigger Finder toggle failed: ' .. tostring(err))
+        end
+    end)
 
     -- Sibling "About" menu entry. Same skin-clone pattern as the Prefab
     -- Manager item; opens the about-dialog via require('dcs_sms_me.about').
-    local about_item
-    local ok_about, about_err = pcall(function() about_item = menu:newItem('About') end)
-    if ok_about and about_item then
-        pcall(function()
-            local sibling_item = sibling_menu
-                and (sibling_menu.missionOptions or sibling_menu.mapOptions
-                     or sibling_menu.setPosition  or sibling_menu.logbook)
-            if sibling_item and sibling_item.getSkin and about_item.setSkin then
-                about_item:setSkin(sibling_item:getSkin())
-            end
+    add_item(menu, sibling_menu, 'About', function()
+        log.write('sms.me', log.INFO, 'DCS-SMS > About menu clicked')
+        local ok_a, aerr = pcall(function()
+            require('dcs_sms_me.about').show()
         end)
-        about_item.func = function()
-            log.write('sms.me', log.INFO, 'DCS-SMS > About menu clicked')
-            local ok_a, aerr = pcall(function()
-                require('dcs_sms_me.about').show()
-            end)
-            if not ok_a then
-                log.write('sms.me', log.ERROR, 'About dialog failed: ' .. tostring(aerr))
-            end
+        if not ok_a then
+            log.write('sms.me', log.ERROR, 'About dialog failed: ' .. tostring(aerr))
         end
-    else
-        log.write('sms.me', log.ERROR, 'About menu:newItem failed: ' .. tostring(about_err))
-    end
+    end)
 
     -- Visual separator between the action items above (Prefab Manager,
     -- Mass Edit, About) and the External-execution toggle below — the
@@ -208,14 +193,7 @@ local function add_top_level_menu()
             or  'External execution: OFF')
     end)
     if ok_exec and exec_item then
-        pcall(function()
-            local sibling_item = sibling_menu
-                and (sibling_menu.missionOptions or sibling_menu.mapOptions
-                     or sibling_menu.setPosition  or sibling_menu.logbook)
-            if sibling_item and sibling_item.getSkin and exec_item.setSkin then
-                exec_item:setSkin(sibling_item:getSkin())
-            end
-        end)
+        clone_item_skin(exec_item, sibling_menu)
 
         -- Update the item label after a toggle. Menu items expose either
         -- :setText or a `text` field across DCS versions — try both.
@@ -307,15 +285,23 @@ local function patch_menubar_show()
     return true
 end
 
--- Monkey-patch me_menubar.hideME so our window auto-hides when the user
--- exits the ME (returns to the main menu). hideME is the canonical
+-- Monkey-patch me_menubar.hideME so our tool windows auto-hide when the
+-- user exits the ME (returns to the main menu). hideME is the canonical
 -- "we're leaving the ME" point; it's called by Exit() which is called
 -- from every ME exit path (menu Exit, alt-F4, etc.).
 --
--- Idempotent — only patches once. Pulls the window module via
--- package.loaded so a dev-reload that swaps the module is honored:
--- the patch closure stays put, but it always grabs the freshly-required
--- window module on each invocation.
+-- Idempotent — only patches once. Pulls each window module via
+-- package.loaded so a dev-reload that swaps the module is honored (the
+-- patch closure stays put but always grabs the freshly-required module),
+-- and so we only touch windows the user actually opened (no require here,
+-- which would needlessly construct an unopened window).
+local HIDE_ON_EXIT = {
+    'dcs_sms_me.prefab_manager',
+    'dcs_sms_me.trigger_finder',
+    'dcs_sms_me.mass_edit',
+    'dcs_sms_me.me_hotkey_window',
+}
+
 local function patch_menubar_hideME()
     local ok, mb = pcall(require, 'me_menubar')
     if not ok or not mb or type(mb.hideME) ~= 'function' then return false end
@@ -323,10 +309,12 @@ local function patch_menubar_hideME()
 
     local orig_hideME = mb.hideME
     mb.hideME = function(...)
-        pcall(function()
-            local w = package.loaded['dcs_sms_me.prefab_manager']
-            if w and w.hide then w.hide() end
-        end)
+        for _, name in ipairs(HIDE_ON_EXIT) do
+            pcall(function()
+                local w = package.loaded[name]
+                if w and w.hide then w.hide() end
+            end)
+        end
         return orig_hideME(...)
     end
     mb._dcs_sms_hideME_patched = true

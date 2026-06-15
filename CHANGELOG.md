@@ -107,8 +107,12 @@ This is the first tag after a long quiet period — `sms.version` had been froze
 
 ### [0.26.0] — 2026-06-14
 
+**Added**
+- **Trigger Finder** — a new DCS-SMS tool window (DCS-SMS → Trigger Finder). Follows the live map selection and shows, per selected group / unit / static / trigger-zone, which triggers reference it, as a tree with per-node trigger-count badges. Click a trigger to select it in the vanilla ME trigger panel. Answers "which triggers affect this unit?" without trawling the trigger list — the one-to-many reverse lookup. The tree also follows trigger add/delete, so the counts stay live while you edit triggers with the same units selected.
+
 **Changed**
 - Saving a prefab now **blocks on a confirmation** when a bundled trigger references a group, unit, or zone that isn't part of the prefab. Previously this was only a passive "also references …" line in the bundle dialog, so it was easy to save a prefab whose triggers point at entities that won't travel with it. After you choose which triggers to bundle, a dialog lists any that would dangle (resolved to names, e.g. `help-viper (group)` instead of `group 42`) and offers **Save anyway** / **Cancel** — Cancel aborts the save so you can widen your selection. The bundle dialog's existing "also references" line now shows names too. Standalone trigger-only prefabs are unaffected: their references are meant to be rebound at import.
+- All DCS-SMS tool windows (Prefab Manager, Mass Edit, Hotkey Manager, Trigger Finder) now auto-hide when you exit the Mission Editor — previously only the Prefab Manager did.
 
 ### [0.25.2] — 2026-06-13
 

@@ -67,8 +67,7 @@ local function convert_entry(entry, kind, env, resources, res_seen, flags, warni
                 fields[k] = v
             end
         else
-            local fd = schema.field_descr(descr, k)
-            local refkind = fd and schema:field_kind(fd)
+            local refkind = schema:field_kind_for(descr, k)
             if (refkind == 'group' or refkind == 'unit' or refkind == 'zone'
                     or refkind == 'airdrome') and type(v) == 'number' then
                 local name = env.entity_name and env.entity_name(refkind, v)
@@ -146,8 +145,7 @@ local function walk_refs(t, schema, fn)
             local _, _, descr = schema:resolve(schema.predicate_name(entry.predicate))
             for k, v in pairs(entry) do
                 if k ~= 'predicate' and type(v) == 'number' then
-                    local fd = schema.field_descr(descr, k)
-                    local refkind = fd and schema:field_kind(fd)
+                    local refkind = schema:field_kind_for(descr, k)
                     if refkind == 'group' or refkind == 'unit' or refkind == 'zone' then
                         fn(refkind, v, k)
                     end

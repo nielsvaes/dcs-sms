@@ -540,3 +540,15 @@ condition, one out-picture/out-sound action, one do-script.
 - [ ] Save a name that already exists in the chosen folder → Overwrite / Rename / Cancel prompt fires; the message names the chosen folder.
 - [ ] Save the same name into a *different* folder than an existing one → no overwrite prompt (the check is folder-scoped); both files coexist.
 - [ ] The `Community/` folder is absent from the dialog's picker (import-only).
+
+## Trigger Finder
+
+- [ ] DCS-SMS → Trigger Finder opens the window; the menu item toggles it closed/open.
+- [ ] Single-click a unit on the map → the tree shows its group (expanded) and units; right pane header reads `Triggers referencing unit "<name>"`.
+- [ ] Marquee-select several groups + a static → all appear; static is a leaf node; amber count badges on nodes with triggers, grey `0` otherwise.
+- [ ] Select a trigger zone → it appears as a leaf node; clicking it lists the triggers that reference that zone (e.g. "in zone" conditions); clicking one jumps to it.
+- [ ] Click a node with ≥1 trigger → one button per trigger (name + `type · source · predicate` sub-line).
+- [ ] Click a trigger button → the vanilla trigger panel opens (if closed) and selects that trigger with its conditions/actions shown.
+- [ ] Change the map selection while open → the tree auto-updates within a moment.
+- [ ] Double-click a group row → its units collapse/expand.
+- [ ] Drag the splitter → the tree pane resizes for long group names.

@@ -50,6 +50,11 @@ check(s:field_kind(fd) == 'zone', 'field_kind via injected fn')
 check(s.field_default(gz, 'zone') == 0, 'field_default zone = 0')
 check(s.field_default(gz, 'group') == nil, 'field_default group = nil')
 
+-- field_kind_for: descr + field id → kind in one call (the shared helper
+-- trigger_export / triggers_tab / trigger_finder route through).
+check(s:field_kind_for(gz, 'zone') == 'zone', 'field_kind_for resolves zone')
+check(s:field_kind_for(gz, 'no_such_field') == nil, 'field_kind_for unknown field → nil')
+
 print(string.format('test_trigger_schema: %d passed, %d failed', passed, failed))
 for _, e in ipairs(errors) do print('  FAIL ' .. e) end
 os.exit(failed == 0 and 0 or 1)

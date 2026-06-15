@@ -27,8 +27,7 @@ local function walk_badges(t, schema, fn)
                     if type(v) == 'string' and v:sub(1, 7) == 'ResKey_' then
                         fn('media')
                     elseif type(v) == 'number' then
-                        local fd = schema.field_descr(descr, k)
-                        local kind = fd and schema:field_kind(fd)
+                        local kind = schema:field_kind_for(descr, k)
                         if kind == 'group' or kind == 'unit' or kind == 'zone'
                                 or kind == 'airdrome' then
                             fn(kind)
@@ -78,8 +77,7 @@ function M.detail_text(t, schema, env)
             for k, v in pairs(entry) do
                 if k ~= 'predicate' and type(k) == 'string'
                         and k:sub(1, 8) ~= 'KeyDict_' then
-                    local fd = schema.field_descr(descr, k)
-                    local kind = fd and schema:field_kind(fd)
+                    local kind = schema:field_kind_for(descr, k)
                     local shown
                     if type(v) == 'string' and v:sub(1, 8) == 'DictKey_' then
                         shown = (env.dict_get and env.dict_get(v)) or v
