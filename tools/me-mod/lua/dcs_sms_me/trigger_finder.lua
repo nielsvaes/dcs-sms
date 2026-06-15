@@ -67,18 +67,33 @@ local function collect_static_ids()
     return ids
 end
 
+-- Cheap O(1) count of the mission's triggers. Folded into the selection
+-- fingerprint so adding/deleting a trigger in the vanilla panel (which
+-- doesn't touch the map selection) still bumps the signature and forces a
+-- rebuild — otherwise the badges/lists would silently go stale. Read every
+-- poll, so it stays cheap: the length operator only, never a walk.
+local function live_trigger_count()
+    local n = 0
+    pcall(function() n = #(require('me_mission').mission.trigrules or {}) end)
+    return n
+end
+
 -- A cheap fingerprint of the current selection, used by the tick to decide
 -- whether to rebuild. Intentionally keyed on the selected GROUPS only (not
 -- individual units): the tree always shows every unit of every selected
 -- group regardless of which unit was clicked, so a within-group unit change
--- can't make the displayed tree stale. Statics ride snap.groups too.
-local function selection_signature(snap)
+-- can't make the displayed tree stale. Statics ride snap.groups too. The
+-- trailing trigger COUNT catches add/delete done with the selection
+-- unchanged; an in-place edit that keeps the count (e.g. re-pointing a
+-- reference) still needs a reselect — a full per-trigger hash every poll
+-- would cost O(triggers) per frame, which this path can't afford.
+local function selection_signature(snap, trig_count)
     if not (snap and snap.ok) then return '' end
     local parts = {}
     for _, g in ipairs(snap.groups or {}) do parts[#parts + 1] = 'g' .. tostring(g.groupId or g.name) end
     for _, z in ipairs(snap.zones or {})  do parts[#parts + 1] = 'z' .. tostring(z.zoneId or z.name) end
     table.sort(parts)
-    return table.concat(parts, ',')
+    return table.concat(parts, ',') .. '|t' .. tostring(trig_count or 0)
 end
 
 local function build_model(snap)
@@ -314,7 +329,7 @@ end
 -- seeding last_sig so the tick only fires on subsequent changes.
 local function paint_now()
     local snap = selection.snapshot()
-    W.last_sig = selection_signature(snap)
+    W.last_sig = selection_signature(snap, live_trigger_count())
     rebuild(snap)
 end
 
@@ -327,7 +342,7 @@ local function tick()
     pcall(function() visible = W.sms_window:raw():isVisible() end)
     if not visible then return end
     local snap = selection.snapshot()
-    local sig = selection_signature(snap)
+    local sig = selection_signature(snap, live_trigger_count())
     -- Keep the last populated tree when the live selection goes empty — clicking
     -- a trigger button opens the vanilla panel, which clears the map's
     -- multi-selection. Only rebuild on a NEW, non-empty selection, so multi-select
