@@ -118,6 +118,12 @@ local function build_model(snap)
 
     -- Selected zone objects carry no id — only a name. Map name → zoneId via
     -- TriggerZoneData (same approach the Prefab Manager uses).
+    -- TODO(cleanup): this TriggerZoneData name→id walk is duplicated across
+    -- prefab_manager.lua (3×), verbs/zone_verbs.lua, verbs/trigger_verbs.lua,
+    -- and triggers_tab.lua. Fold every site onto one shared zone-lookup helper
+    -- in a dedicated cleanup PR on top of main — deliberately kept out of this
+    -- feature branch to avoid touching shipped files and overlapping main's
+    -- prefab_manager changes.
     local zones_in = {}
     if snap and snap.ok and type(snap.zones) == 'table' and #snap.zones > 0 then
         local zone_id_by_name = {}
