@@ -108,6 +108,16 @@ function Schema:field_kind(field_descr)
     return nil
 end
 
+-- field_kind_for(descr, field_id) → kind|nil. One-call form of the
+-- field_descr → field_kind dance that trigger_export, triggers_tab, and
+-- trigger_finder all repeat: look up the field descriptor by id within a
+-- predicate's `descr`, then classify it. nil when the field is absent or
+-- not a classified reference field.
+function Schema:field_kind_for(descr, field_id)
+    local fd = M.field_descr(descr, field_id)
+    return fd and self:field_kind(fd) or nil
+end
+
 -- Live-editor constructor. The classifier mirrors trigger_verbs'
 -- _trigger_field_combo_kind: tier 1 = shared selector-table identity
 -- (their comboFunc is module-local and unreachable), tier 2 = exported

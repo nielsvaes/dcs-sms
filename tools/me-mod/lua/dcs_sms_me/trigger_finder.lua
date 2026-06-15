@@ -125,11 +125,9 @@ local function build_model(snap)
 
     local field_kind = function(predicate, key)
         if not schema then return nil end
-        local pname = schema.predicate_name(predicate)
-        local _, _, descr = schema:resolve(pname)
+        local _, _, descr = schema:resolve(schema.predicate_name(predicate))
         if not descr then return nil end
-        local fd = schema.field_descr(descr, key)
-        return fd and schema:field_kind(fd) or nil
+        return schema:field_kind_for(descr, key)
     end
     local type_label = function(predicate)
         if not schema then return '' end
