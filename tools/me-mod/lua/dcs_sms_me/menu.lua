@@ -329,15 +329,23 @@ local function patch_menubar_show()
     return true
 end
 
--- Monkey-patch me_menubar.hideME so our window auto-hides when the user
--- exits the ME (returns to the main menu). hideME is the canonical
+-- Monkey-patch me_menubar.hideME so our tool windows auto-hide when the
+-- user exits the ME (returns to the main menu). hideME is the canonical
 -- "we're leaving the ME" point; it's called by Exit() which is called
 -- from every ME exit path (menu Exit, alt-F4, etc.).
 --
--- Idempotent — only patches once. Pulls the window module via
--- package.loaded so a dev-reload that swaps the module is honored:
--- the patch closure stays put, but it always grabs the freshly-required
--- window module on each invocation.
+-- Idempotent — only patches once. Pulls each window module via
+-- package.loaded so a dev-reload that swaps the module is honored (the
+-- patch closure stays put but always grabs the freshly-required module),
+-- and so we only touch windows the user actually opened (no require here,
+-- which would needlessly construct an unopened window).
+local HIDE_ON_EXIT = {
+    'dcs_sms_me.prefab_manager',
+    'dcs_sms_me.trigger_finder',
+    'dcs_sms_me.mass_edit',
+    'dcs_sms_me.me_hotkey_window',
+}
+
 local function patch_menubar_hideME()
     local ok, mb = pcall(require, 'me_menubar')
     if not ok or not mb or type(mb.hideME) ~= 'function' then return false end
@@ -345,10 +353,12 @@ local function patch_menubar_hideME()
 
     local orig_hideME = mb.hideME
     mb.hideME = function(...)
-        pcall(function()
-            local w = package.loaded['dcs_sms_me.prefab_manager']
-            if w and w.hide then w.hide() end
-        end)
+        for _, name in ipairs(HIDE_ON_EXIT) do
+            pcall(function()
+                local w = package.loaded[name]
+                if w and w.hide then w.hide() end
+            end)
+        end
         return orig_hideME(...)
     end
     mb._dcs_sms_hideME_patched = true
