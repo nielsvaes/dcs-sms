@@ -258,6 +258,20 @@ local function get_slot(i)
     return slot
 end
 
+-- Button skins keyed by trigger color hex ('0xRRGGBBAA'); '' = the default
+-- uncolored sms_button. Built once per distinct color and reused across
+-- renders/pooled slots rather than recloning a skin per button per paint.
+local btn_skin_cache = {}
+local function button_skin_for(hex)
+    local key = hex or ''
+    local cached = btn_skin_cache[key]
+    if cached == nil then
+        cached = (hex and sms_skins.button_colored(hex)) or sms_skins.button()
+        btn_skin_cache[key] = cached or false
+    end
+    return cached or nil
+end
+
 local function render_right(node)
     if W.right_header then pcall(function() W.right_header:setText(node_title(node)) end) end
     local trigs = (node and node.triggers) or {}
@@ -270,6 +284,11 @@ local function render_right(node)
     for i, tr in ipairs(trigs) do
         local slot = get_slot(i)
         slot._index = tr.index
+        -- Tint the button label to the trigger's vanilla-panel color, or reset
+        -- to the default skin when it has none (or this pooled slot showed a
+        -- colored trigger last render).
+        local bskin = button_skin_for(tr.color)
+        if bskin then pcall(function() slot.btn:setSkin(bskin) end) end
         local label = (tr.name ~= '' and tr.name) or ('Trigger #' .. tostring(tr.index))
         -- Visible sub-line is just the "why" (source · predicate) — short enough
         -- not to clip in a narrow pane. Full detail (incl. trigger type) on hover.

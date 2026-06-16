@@ -55,6 +55,7 @@ end
 -- text reads green / red across hover / pressed / released alike. Bkg image
 -- stays the same (btnmean2) — only the label tint changes.
 local function button_colored(hex)
+    if type(hex) ~= 'string' then return M.button() end
     local s = M.button()
     if not (s and s.skinData and s.skinData.states) then return s end
     for _, state_name in pairs({'released', 'hover', 'pressed', 'disabled', 'checked'}) do
@@ -72,6 +73,16 @@ end
 
 function M.button_on()  return button_colored('0x44dd44ff') end  -- green
 function M.button_off() return button_colored('0xff5555ff') end  -- red
+
+-- Public per-color variant: tint a button's label to an arbitrary
+-- '0xRRGGBBAA' hex. The Trigger Finder mirrors each trigger's vanilla
+-- trigger-list color onto its button. Invalid/missing hex → plain button.
+function M.button_colored(hex)
+    if type(hex) ~= 'string' or not hex:match('^0x%x%x%x%x%x%x%x%x$') then
+        return M.button()
+    end
+    return button_colored(hex)
+end
 
 -- Translucent button variant: clones M.button() and scales every
 -- 0xRRGGBBAA hex color in the skin tree by an alpha multiplier (default

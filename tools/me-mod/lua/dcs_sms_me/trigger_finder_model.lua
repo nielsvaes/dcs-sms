@@ -22,7 +22,8 @@
 -- Each node:
 --   { key, kind='group'|'static'|'unit'|'zone', name, depth (0|1),
 --     parent (unit only), group_id|unit_id|zone_id, expandable (group with units),
---     triggers = { { index, name, type, why }, ... } (index order), count }
+--     triggers = { { index, name, type, why, color }, ... } (index order), count }
+--       (color = the trigger's '0xRRGGBBAA' vanilla-list color, or nil)
 local M = {}
 
 local function gkey(id) return 'g' .. tostring(id) end
@@ -101,6 +102,10 @@ function M.build(opts)
         if type(t) == 'table' then
             local tname = t.comment or ''
             local ttype = type_label(t.predicate)
+            -- Trigger's vanilla trigger-list color, if any ('0xRRGGBBAA' string
+            -- on the trigrules entry; nil = default list color). Carried so the
+            -- UI can tint each button to match the ME panel.
+            local tcolor = (type(t.colorItem) == 'string') and t.colorItem or nil
             local seen = {}
             local function scan(list, source)
                 for _, entry in ipairs(list or {}) do
@@ -119,6 +124,7 @@ function M.build(opts)
                                         name  = tname,
                                         type  = ttype,
                                         why   = source .. ' · ' .. entry_label,
+                                        color = tcolor,
                                     }, seen)
                                 end
                             end

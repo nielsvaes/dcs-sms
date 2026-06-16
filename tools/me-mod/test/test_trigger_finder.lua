@@ -125,9 +125,25 @@ local function run_zones()
     assert_eq(r.by_key['g1'].count, 1, 'zones: same trigger also lands on the group')
 end
 
+local function run_color()
+    local r = model.build({
+        groups = { { id = 1, name = 'CAP-1', kind = 'group', units = { { id = 11, name = 'CAP-1-1' } } } },
+        trigrules = {
+            { comment = 'RED', predicate = 'triggerOnce', colorItem = '0xff0000ff',
+              rules = { { predicate = 'unit-dead', unit = 11 } }, actions = {} },
+            { comment = 'PLAIN', predicate = 'triggerOnce',
+              rules = { { predicate = 'unit-dead', unit = 11 } }, actions = {} },
+        },
+        field_kind = field_kind, type_label = type_label })
+    local trs = r.by_key['u11'].triggers
+    assert_eq(trs[1].color, '0xff0000ff', 'colored trigger carries colorItem')
+    assert_eq(trs[2].color, nil, 'uncolored trigger has nil color')
+end
+
 run()
 run_edges()
 run_zones()
+run_color()
 print(string.format('test_trigger_finder: %d passed, %d failed', passed, failed))
 for _, e in ipairs(errors) do print('  FAIL: ' .. e) end
 os.exit(failed == 0 and 0 or 1)
