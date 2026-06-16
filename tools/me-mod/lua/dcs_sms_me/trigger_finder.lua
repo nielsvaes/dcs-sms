@@ -183,7 +183,8 @@ local function jump_to_trigger(index)
             pcall(function() now = m.isVisible() end)
             if not now then pcall(function() m.show(true) end) end  -- fallback: show(true) opens + wires callbacks
         end
-        local tl = m.triggersWindow and m.triggersWindow.Box and m.triggersWindow.Box.triggersList
+        local box = m.triggersWindow and m.triggersWindow.Box
+        local tl = box and box.triggersList
         if not tl then error('trigger list not found') end
         local entry
         pcall(function() entry = require('me_mission').mission.trigrules[index] end)
@@ -198,6 +199,25 @@ local function jump_to_trigger(index)
         tl:selectItem(item)
         tl:setItemVisible(item)
         tl:onChange(item)
+        -- Selecting the trigger makes the ME synchronously repopulate the
+        -- Conditions (rulesList) and Actions (goalsList) columns. Auto-select
+        -- the first row of each so the click lands on a fully drilled-in view
+        -- instead of only the trigger row. Optional per list: a trigger with no
+        -- conditions or no actions leaves that list empty, so we skip it. Each
+        -- is self-guarded so a failure here never undoes the trigger selection.
+        local function select_first(list)
+            if type(list) ~= 'table' or type(list.getItem) ~= 'function' then return end
+            pcall(function()
+                local it0 = list:getItem(0)
+                if it0 then
+                    list:selectItem(it0)
+                    if list.setItemVisible then list:setItemVisible(it0) end
+                    list:onChange(it0)
+                end
+            end)
+        end
+        select_first(box.rulesList)   -- first condition
+        select_first(box.goalsList)   -- first action
     end)
     if not ok then
         log_warn('jump failed: ' .. tostring(err))
