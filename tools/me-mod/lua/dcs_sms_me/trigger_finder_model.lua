@@ -163,4 +163,77 @@ function M.selection_signature(snap, trig_count)
     return table.concat(parts, ',') .. '|t' .. tostring(trig_count or 0)
 end
 
+-- display_order(built, opts) -> { rows = {<nodes, display order>},
+--                                 expandable = { [key] = true } }
+-- Applies the Trigger Finder's view options to a built model WITHOUT mutating
+-- it. Top-level entries (groups, statics, zones) are filtered and sorted as a
+-- unit, each carrying its unit children, so the group->unit nesting is kept.
+--   opts.hide_empty : drop nodes with zero triggers. A group survives if it
+--                     still has a referenced unit (so units aren't orphaned);
+--                     its own empty units are dropped.
+--   opts.sort_key   : 'name' | 'count' | nil (nil = natural build order).
+--   opts.sort_dir   : 'asc' | 'desc' (default asc).
+-- expandable[key] is set for a group with >=1 visible unit child, so the tree
+-- glyph only appears when there is something to expand.
+function M.display_order(built, opts)
+    opts = opts or {}
+    local hide_empty = opts.hide_empty == true
+    local sort_key   = opts.sort_key
+    local dir_desc   = (opts.sort_dir == 'desc')
+    local nodes = (built and built.nodes) or {}
+
+    -- Reassemble depth-0 tops, each gathering the depth-1 units that follow it.
+    local tops, cur = {}, nil
+    for _, n in ipairs(nodes) do
+        if n.depth == 1 and cur then
+            cur.children[#cur.children + 1] = n
+        else
+            cur = { node = n, children = {} }
+            tops[#tops + 1] = cur
+        end
+    end
+
+    -- Filter.
+    local kept = {}
+    for _, top in ipairs(tops) do
+        local children = top.children
+        if hide_empty then
+            local vis = {}
+            for _, c in ipairs(children) do if (c.count or 0) > 0 then vis[#vis + 1] = c end end
+            children = vis
+        end
+        if (not hide_empty) or (top.node.count or 0) > 0 or #children > 0 then
+            kept[#kept + 1] = { node = top.node, children = children }
+        end
+    end
+
+    -- Sort (stable; decorate-sort-undecorate so model nodes are never mutated).
+    local function value_of(node)
+        if sort_key == 'count' then return tonumber(node.count) or 0 end
+        return tostring(node.name or ''):lower()
+    end
+    local function stable_sort(arr, node_of)
+        if not sort_key then return end
+        local dec = {}
+        for i, it in ipairs(arr) do dec[i] = { i = i, it = it } end
+        table.sort(dec, function(a, b)
+            local av, bv = value_of(node_of(a.it)), value_of(node_of(b.it))
+            if av == bv then return a.i < b.i end
+            if dir_desc then return av > bv else return av < bv end
+        end)
+        for i = 1, #dec do arr[i] = dec[i].it end
+    end
+    stable_sort(kept, function(it) return it.node end)
+    for _, top in ipairs(kept) do stable_sort(top.children, function(it) return it end) end
+
+    -- Emit rows + the expandable set.
+    local rows, expandable = {}, {}
+    for _, top in ipairs(kept) do
+        rows[#rows + 1] = top.node
+        if #top.children > 0 then expandable[top.node.key] = true end
+        for _, c in ipairs(top.children) do rows[#rows + 1] = c end
+    end
+    return { rows = rows, expandable = expandable }
+end
+
 return M

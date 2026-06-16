@@ -158,11 +158,53 @@ local function run_signature()
         'sig: empty selection ignores the trigger count')
 end
 
+local function run_display()
+    -- Bravo(g1): 0 refs but unit b1(u11) referenced twice; Alpha(g2): 1 ref;
+    -- Static-S(g9): 0 refs; ZoneZ(z7): 1 ref.
+    local r = model.build({
+        groups = {
+            { id = 1, name = 'Bravo', kind = 'group', units = { { id = 11, name = 'b1' }, { id = 12, name = 'b2' } } },
+            { id = 2, name = 'Alpha', kind = 'group', units = { { id = 21, name = 'a1' } } },
+            { id = 9, name = 'Static-S', kind = 'static' },
+        },
+        zones = { { id = 7, name = 'ZoneZ' } },
+        trigrules = {
+            { comment = 'T1', predicate = 'p', rules = { { predicate = 'p', group = 2 } }, actions = {} },
+            { comment = 'T2', predicate = 'p', rules = { { predicate = 'p', unit = 11 } }, actions = {} },
+            { comment = 'T3', predicate = 'p', rules = { { predicate = 'p', zone = 7 } }, actions = {} },
+            { comment = 'T4', predicate = 'p', rules = { { predicate = 'p', unit = 11 } }, actions = {} },
+        },
+        field_kind = field_kind, type_label = type_label })
+
+    local function keys(rows) local k = {} for _, n in ipairs(rows) do k[#k+1] = n.key end return table.concat(k, ',') end
+
+    -- Default: natural build order, all 7 nodes, nesting intact.
+    local d = model.display_order(r, {})
+    assert_eq(keys(d.rows), 'g1,u11,u12,g2,u21,g9,z7', 'display: default natural order')
+    assert_true(d.expandable['g1'] and not d.expandable['g9'], 'display: group expandable, static not')
+
+    -- Hide empty: drop b2/a1/static (0), keep Bravo (b1 referenced) + its b1,
+    -- keep Alpha & Zone (count 1). b1 not orphaned.
+    local h = model.display_order(r, { hide_empty = true })
+    assert_eq(keys(h.rows), 'g1,u11,g2,z7', 'display: hide_empty keeps group-with-ref-unit + nonzero nodes')
+    assert_true(h.expandable['g1'], 'display: Bravo still expandable after hide_empty (b1 kept)')
+
+    -- Sort by name asc: Alpha < Bravo < Static-S < ZoneZ; units stay nested.
+    local s = model.display_order(r, { sort_key = 'name', sort_dir = 'asc' })
+    assert_eq(keys(s.rows), 'g2,u21,g1,u11,u12,g9,z7', 'display: sort name asc, nesting preserved')
+
+    -- Sort by count desc: count-1 tops (Alpha, Zone) ahead of zero tops.
+    local c = model.display_order(r, { sort_key = 'count', sort_dir = 'desc' })
+    assert_eq(c.rows[1].key, 'g2', 'display: sort count desc -> highest-count top first')
+    assert_eq(c.rows[1].count, 1, 'display: that top has count 1')
+end
+
 run()
 run_edges()
 run_zones()
 run_color()
 run_signature()
+run_display()
 print(string.format('test_trigger_finder: %d passed, %d failed', passed, failed))
 for _, e in ipairs(errors) do print('  FAIL: ' .. e) end
 os.exit(failed == 0 and 0 or 1)

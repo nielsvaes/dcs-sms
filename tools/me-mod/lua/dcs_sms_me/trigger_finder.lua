@@ -17,6 +17,9 @@ local splitter_mod   = require('dcs_sms_me.splitter')
 local selection      = require('dcs_sms_me.selection')
 local trigger_schema = require('dcs_sms_me.trigger_schema')
 local model          = require('dcs_sms_me.trigger_finder_model')
+-- CheckBox is a registered ME widget (like Grid/Static); require it the same
+-- way mass_edit does so the "Hide empty" toggle degrades gracefully if absent.
+local CheckBox; do local ok, m = pcall(require, 'CheckBox'); if ok then CheckBox = m end end
 
 local TAG = 'sms.me.trigfinder'
 local function log_info(msg)  pcall(function() log.write(TAG, log.INFO,  tostring(msg)) end) end
@@ -41,6 +44,12 @@ local W = {
     selected_key = nil,
     last_sig     = nil,
     tick_installed = false,
+    grid_headers = {},     -- { { hc=, key='name'|'count', label= } } — for sort
+    hide_cb      = nil,    -- "Hide empty" checkbox
+    hide_label   = nil,
+    hide_empty   = false,  -- drop zero-trigger nodes from the tree when true
+    sort_key     = nil,    -- 'name' | 'count' | nil (natural tree order)
+    sort_dir     = 'asc',
 }
 
 -- Hot-reload guard: ticks from a previous load silence themselves.
@@ -310,18 +319,33 @@ local function make_badge(count)
     return s
 end
 
+-- Re-text the two column headers so the active sort column shows an arrow.
+local function update_header_labels()
+    local up, down = ' \226\150\178', ' \226\150\188'  -- ▲ asc / ▼ desc
+    for _, h in ipairs(W.grid_headers or {}) do
+        local label = h.label
+        if h.key == W.sort_key then label = label .. (W.sort_dir == 'desc' and down or up) end
+        pcall(function() if h.hc and h.hc.setText then h.hc:setText(label) end end)
+    end
+end
+
 local function render_tree()
     if not (W.grid and W.model) then return end
+    update_header_labels()
     local scroll
     pcall(function() scroll = W.grid:getVertScrollPosition() end)
     pcall(function() W.grid:removeAllRows() end)
     W.row_meta = {}
+    -- Filter (Hide empty) + sort (name/count) are pure and unit-tested.
+    local view = model.display_order(W.model, {
+        hide_empty = W.hide_empty, sort_key = W.sort_key, sort_dir = W.sort_dir,
+    })
     local r, sel_row = 0, nil
-    for _, n in ipairs(W.model.nodes) do
+    for _, n in ipairs(view.rows) do
         local hidden = (n.depth == 1) and n.parent and W.collapsed[n.parent]
         if not hidden then
             local glyph = ''
-            if n.expandable then glyph = (W.collapsed[n.key] and '\226\150\182 ' or '\226\150\188 ') end -- ▶ / ▼
+            if view.expandable[n.key] then glyph = (W.collapsed[n.key] and '\226\150\182 ' or '\226\150\188 ') end -- ▶ / ▼
             local indent = (n.depth == 1) and '       ' or ''
             pcall(function()
                 W.grid:insertRow(nil)
@@ -403,7 +427,8 @@ end
 -- ── layout ──────────────────────────────────────────────────────────────────
 
 local LAYOUT = { GAP = 6, HEADER_H = 20, SPLIT_W = 6, SPLIT_GUTTER = 14,
-                 BTN_H = 24, SUB_H = 16, ENTRY_GAP = 8, MIN_LEFT = 140, MIN_RIGHT = 200 }
+                 BTN_H = 24, SUB_H = 16, ENTRY_GAP = 8, MIN_LEFT = 140, MIN_RIGHT = 200,
+                 CHECK_H = 24 }
 
 local function relayout(x, y, w, h)
     if not (W.sms_window and W.grid) then return end
@@ -416,7 +441,14 @@ local function relayout(x, y, w, h)
     local right_x = x + left_w + L.SPLIT_GUTTER
     local right_w = (x + w) - right_x
 
-    pcall(function() W.grid:setBounds(x, y, left_w, h) end)
+    -- Reserve a strip at the bottom of the left pane for the "Hide empty" row.
+    local grid_h = h - L.CHECK_H
+    pcall(function() W.grid:setBounds(x, y, left_w, grid_h) end)
+    local check_y = y + grid_h + 2
+    -- Label box is 20px tall so the font's descenders (p/y) aren't clipped;
+    -- nudge the 16px checkbox down 2px to sit centered against the taller label.
+    if W.hide_cb    then pcall(function() W.hide_cb:setBounds(x + 2, check_y + 2, 16, 16) end) end
+    if W.hide_label then pcall(function() W.hide_label:setBounds(x + 27, check_y, left_w - 29, 20) end) end
 
     if W.splitter then
         W.splitter:set_bounds(x + left_w + math.floor((L.SPLIT_GUTTER - L.SPLIT_W) / 2), y, L.SPLIT_W, h)
@@ -465,14 +497,32 @@ local function build_body(raw)
         sms_scrollbars.apply(sk, { refine_horz = false })
         W.grid:setSkin(sk)
     end)
-    local function header(label)
+    -- Headers double as sort controls: click a header to sort by that column
+    -- (name / trigger count); click again toggles asc/desc. Mirrors the
+    -- Prefab Manager's GridHeaderCell.addChangeCallback pattern.
+    local HCOLS = { { key = 'name', label = 'Selection', width = 150 },
+                    { key = 'count', label = '#', width = 38 } }
+    W.grid_headers = {}
+    for _, hcol in ipairs(HCOLS) do
         local hc = GridHeaderCell.new()
         skin_helper.apply(hc, 'sms_grid_header')
-        pcall(function() hc:setText(label) end)
-        return hc
+        pcall(function() hc:setText(hcol.label) end)
+        if hc.addChangeCallback then
+            local key = hcol.key
+            pcall(function()
+                hc:addChangeCallback(function()
+                    if W.sort_key == key then
+                        W.sort_dir = (W.sort_dir == 'asc') and 'desc' or 'asc'
+                    else
+                        W.sort_key, W.sort_dir = key, 'asc'
+                    end
+                    render_tree()
+                end)
+            end)
+        end
+        W.grid_headers[#W.grid_headers + 1] = { hc = hc, key = hcol.key, label = hcol.label }
+        pcall(function() W.grid:insertColumn(hcol.width, hc) end)
     end
-    pcall(function() W.grid:insertColumn(150, header('Selection')) end)
-    pcall(function() W.grid:insertColumn(38, header('#')) end)
     pcall(function() raw:insertWidget(W.grid) end)
 
     W.grid.onMouseDown = function(self, mx, my, button)
@@ -529,6 +579,28 @@ local function build_body(raw)
     skin_helper.apply(W.right_empty, 'staticSkin_ME')
     pcall(function() raw:insertWidget(W.right_empty) end)
     pcall(function() W.right_empty:setVisible(false) end)
+
+    -- "Hide empty" checkbox under the tree — drops zero-trigger nodes.
+    if CheckBox and CheckBox.new then
+        local ok_cb, cb = pcall(CheckBox.new)
+        if ok_cb and cb then
+            skin_helper.apply(cb, 'checkBoxSkin_MENew')
+            pcall(function() cb:setState(W.hide_empty == true) end)
+            if cb.addChangeCallback then
+                pcall(function()
+                    cb:addChangeCallback(function(box)
+                        W.hide_empty = (box and box.getState and box:getState() == true) or false
+                        render_tree()
+                    end)
+                end)
+            end
+            pcall(function() raw:insertWidget(cb) end)
+            W.hide_cb = cb
+        end
+    end
+    W.hide_label = Static.new('Hide empty')
+    skin_helper.apply(W.hide_label, 'staticSkin_ME')
+    pcall(function() raw:insertWidget(W.hide_label) end)
 end
 
 -- ── public surface ──────────────────────────────────────────────────────────
