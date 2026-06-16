@@ -140,10 +140,29 @@ local function run_color()
     assert_eq(trs[2].color, nil, 'uncolored trigger has nil color')
 end
 
+local function run_signature()
+    local sig = model.selection_signature
+    assert_eq(sig(nil), '', 'sig: nil snap -> empty')
+    assert_eq(sig({ ok = false }), '', 'sig: not-ok snap -> empty')
+    -- Regression guard: an empty-but-ok selection must read as the empty
+    -- sentinel so the poll loop HOLDS the tree (a trigger-button jump clears
+    -- the marquee). The trigger count must NOT leak in and make it non-empty.
+    assert_eq(sig({ ok = true, groups = {}, zones = {} }, 39), '',
+        'sig: empty selection -> empty sentinel (holds)')
+    assert_eq(sig({ ok = true, groups = { { groupId = 5 } } }, 39), 'g5|t39',
+        'sig: one group folds in the trigger count')
+    assert_true(sig({ ok = true, groups = { { groupId = 5 } } }, 1)
+             ~= sig({ ok = true, groups = { { groupId = 5 } } }, 2),
+        'sig: count change with a selection -> different sig (auto-refresh)')
+    assert_eq(sig({ ok = true, groups = {} }, 1), sig({ ok = true, groups = {} }, 2),
+        'sig: empty selection ignores the trigger count')
+end
+
 run()
 run_edges()
 run_zones()
 run_color()
+run_signature()
 print(string.format('test_trigger_finder: %d passed, %d failed', passed, failed))
 for _, e in ipairs(errors) do print('  FAIL: ' .. e) end
 os.exit(failed == 0 and 0 or 1)

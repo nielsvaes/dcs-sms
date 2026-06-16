@@ -141,4 +141,26 @@ function M.build(opts)
     return { nodes = nodes, by_key = by_key }
 end
 
+-- selection_signature(snap, trig_count) -> string
+-- A cheap fingerprint of the live map selection, used by the Trigger Finder's
+-- poll loop to decide whether to rebuild. Pure (no DCS deps) so it is
+-- unit-tested. Keyed on the selected GROUPS (statics ride snap.groups) and
+-- ZONES only — never individual units, since the tree always shows every unit
+-- of a selected group, so a within-group unit change can't stale the tree.
+-- Returns '' when nothing is selected: that empty sentinel is what the tick
+-- uses to HOLD the current tree (a trigger-button jump clears the map's
+-- marquee selection, and the hold keeps that from blanking the window). The
+-- live trigger COUNT is folded in ONLY when something is selected, so adding/
+-- deleting a trigger with a live selection forces a rebuild, while an empty
+-- selection still reads as empty (never as a new, non-empty signature).
+function M.selection_signature(snap, trig_count)
+    if not (snap and snap.ok) then return '' end
+    local parts = {}
+    for _, g in ipairs(snap.groups or {}) do parts[#parts + 1] = 'g' .. tostring(g.groupId or g.name) end
+    for _, z in ipairs(snap.zones or {})  do parts[#parts + 1] = 'z' .. tostring(z.zoneId or z.name) end
+    if #parts == 0 then return '' end
+    table.sort(parts)
+    return table.concat(parts, ',') .. '|t' .. tostring(trig_count or 0)
+end
+
 return M
