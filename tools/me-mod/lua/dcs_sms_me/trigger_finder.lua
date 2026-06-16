@@ -34,7 +34,7 @@ local W = {
     right_empty  = nil,
     btn_pool     = {},     -- array of { btn=Button, sub=Static, _index=int, _wired=bool }
     right_count  = 0,
-    left_w       = 170,
+    left_w       = 364,
     collapsed    = {},     -- node key -> true when folded
     row_meta     = {},     -- grid row (0-based) -> node key
     model        = nil,
@@ -516,7 +516,7 @@ function M.show()
     end
     W.sms_window = sms_window.new({
         title    = 'Trigger Finder',
-        size     = { w = 540, h = 380 },
+        size     = { w = 820, h = 440 },
         min_size = { w = 420, h = 260 },
         disable_undo_hotkey = true,
         on_resize = function(_, x, y, w, h) relayout(x, y, w, h) end,
