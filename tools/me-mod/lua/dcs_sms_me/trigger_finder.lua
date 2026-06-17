@@ -12,7 +12,7 @@
 local sms_window     = require('dcs_sms_me.sms_window')
 local skin_helper    = require('dcs_sms_me.skin_helper')
 local sms_skins      = require('dcs_sms_me.sms_skins')
-local sms_scrollbars = require('dcs_sms_me.sms_scrollbars')
+local sms_grid       = require('dcs_sms_me.sms_grid')
 local splitter_mod   = require('dcs_sms_me.splitter')
 local selection      = require('dcs_sms_me.selection')
 local trigger_schema = require('dcs_sms_me.trigger_schema')
@@ -321,12 +321,7 @@ end
 
 -- Re-text the two column headers so the active sort column shows an arrow.
 local function update_header_labels()
-    local up, down = ' \226\150\178', ' \226\150\188'  -- ▲ asc / ▼ desc
-    for _, h in ipairs(W.grid_headers or {}) do
-        local label = h.label
-        if h.key == W.sort_key then label = label .. (W.sort_dir == 'desc' and down or up) end
-        pcall(function() if h.hc and h.hc.setText then h.hc:setText(label) end end)
-    end
+    sms_grid.update_header_labels(W.grid_headers, W.sort_key, W.sort_dir)
 end
 
 local function render_tree()
@@ -490,39 +485,17 @@ end
 -- ── build the window body ───────────────────────────────────────────────────
 
 local function build_body(raw)
-    -- Left: Grid tree with themed scrollbars.
-    W.grid = Grid.new()
-    pcall(function()
-        local sk = sms_skins.grid()
-        sms_scrollbars.apply(sk, { refine_horz = false })
-        W.grid:setSkin(sk)
-    end)
-    -- Headers double as sort controls: click a header to sort by that column
-    -- (name / trigger count); click again toggles asc/desc. Mirrors the
-    -- Prefab Manager's GridHeaderCell.addChangeCallback pattern.
+    -- Left: Grid tree with themed scrollbars. Headers double as sort controls:
+    -- click a header to sort by that column (name / trigger count); click again
+    -- toggles asc/desc. The grid/header/sort plumbing is shared via sms_grid;
+    -- this window keeps its own render_tree (group→unit nested) comparator.
+    W.grid = sms_grid.build_grid({ scrollbars = { refine_horz = false } })
     local HCOLS = { { key = 'name', label = 'Selection', width = 150 },
                     { key = 'count', label = '#', width = 38 } }
-    W.grid_headers = {}
-    for _, hcol in ipairs(HCOLS) do
-        local hc = GridHeaderCell.new()
-        skin_helper.apply(hc, 'sms_grid_header')
-        pcall(function() hc:setText(hcol.label) end)
-        if hc.addChangeCallback then
-            local key = hcol.key
-            pcall(function()
-                hc:addChangeCallback(function()
-                    if W.sort_key == key then
-                        W.sort_dir = (W.sort_dir == 'asc') and 'desc' or 'asc'
-                    else
-                        W.sort_key, W.sort_dir = key, 'asc'
-                    end
-                    render_tree()
-                end)
-            end)
-        end
-        W.grid_headers[#W.grid_headers + 1] = { hc = hc, key = hcol.key, label = hcol.label }
-        pcall(function() W.grid:insertColumn(hcol.width, hc) end)
-    end
+    W.grid_headers = sms_grid.wire_sortable_headers(W.grid, HCOLS, {
+        get_sort = function() return W.sort_key, W.sort_dir end,
+        on_sort  = function(key, dir) W.sort_key, W.sort_dir = key, dir; render_tree() end,
+    })
     pcall(function() raw:insertWidget(W.grid) end)
 
     W.grid.onMouseDown = function(self, mx, my, button)

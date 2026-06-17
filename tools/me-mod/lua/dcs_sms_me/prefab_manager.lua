@@ -67,6 +67,7 @@ local splitter_mod  = require('dcs_sms_me.splitter')
 local clearable_edit = require('dcs_sms_me.clearable_edit')
 local prefab_naming = require('dcs_sms_me.prefab_naming')
 local sms_scrollbars = require('dcs_sms_me.sms_scrollbars')
+local sms_grid       = require('dcs_sms_me.sms_grid')
 local community_config = require('dcs_sms_me.community_config')
 
 -- Apply a skin by name. Resolves in this order:
@@ -322,18 +323,7 @@ end
 -- Re-text every header so the active column gets an arrow glyph and the rest
 -- are reset back to their plain label.
 local function update_header_labels()
-    pcall(function()
-        for i, c in ipairs(COLS) do
-            local hc = W.grid_headers[i]
-            if hc and hc.setText then
-                local label = c.label
-                if c.key == W.sort_key then
-                    label = label .. (W.sort_dir == 'desc' and ' ▼' or ' ▲')
-                end
-                hc:setText(label)
-            end
-        end
-    end)
+    sms_grid.update_header_labels(W.grid_headers, W.sort_key, W.sort_dir)
 end
 
 -- Folder-aware filter composition (Task 12). Used by apply_filter and exposed
@@ -3291,36 +3281,17 @@ function M.show()
         end
 
         if Grid and GridHeaderCell then
-            W.grid = Grid.new()
-            try_skin(W.grid, 'sms_grid')
-
             -- Columns sized for the 420px content area (440 - 20px padding).
             -- Numeric counter columns are tight (35px); Name gets the lion's
-            -- share. Definitions live module-level in COLS so refresh_list
-            -- and the header-click handlers share key/numeric metadata.
-            W.grid_headers = {}
-            for i, c in ipairs(COLS) do
-                local hc = GridHeaderCell.new()
-                try_skin(hc, 'sms_grid_header')
-                if hc.setText then hc:setText(c.label) end
-                if hc.addChangeCallback then
-                    local idx = i
-                    pcall(function()
-                        hc:addChangeCallback(function()
-                            local key = COLS[idx].key
-                            if W.sort_key == key then
-                                W.sort_dir = (W.sort_dir == 'asc') and 'desc' or 'asc'
-                            else
-                                W.sort_key = key
-                                W.sort_dir = 'asc'
-                            end
-                            refresh_list()
-                        end)
-                    end)
-                end
-                W.grid_headers[i] = hc
-                W.grid:insertColumn(c.width, hc)
-            end
+            -- share. Definitions live module-level in COLS so refresh_list and
+            -- the comparator share key/numeric metadata. The grid/header/sort
+            -- plumbing is shared via sms_grid; this window keeps its own
+            -- sort_rows comparator (error rows sink to the bottom).
+            W.grid = sms_grid.build_grid()
+            W.grid_headers = sms_grid.wire_sortable_headers(W.grid, COLS, {
+                get_sort = function() return W.sort_key, W.sort_dir end,
+                on_sort  = function(key, dir) W.sort_key, W.sort_dir = key, dir; refresh_list() end,
+            })
 
             -- Mirror me_openfile.lua: Grid's default onMouseDown is empty, so
             -- mouse clicks don't change the selected row. Override it to call

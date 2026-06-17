@@ -20,6 +20,7 @@ local sms_window      = require('dcs_sms_me.sms_window')
 local selection       = require('dcs_sms_me.selection')
 local mass_forms      = require('dcs_sms_me.mass_edit_forms')
 local skin_helper     = require('dcs_sms_me.skin_helper')
+local sms_grid        = require('dcs_sms_me.sms_grid')
 local map_sync        = require('dcs_sms_me.mass_edit_map_sync')
 local me_camera        = require('dcs_sms_me.me_camera')
 local me_group_focus   = require('dcs_sms_me.me_group_focus')
@@ -610,18 +611,8 @@ local function passes_filters(scope, entity, group, filters)
 end
 
 local function update_sort_indicators()
-    local cols = SCOPE_COLUMNS[W.scope] or {}
     local ss = W.sort_state[W.scope] or {}
-    for i, c in ipairs(cols) do
-        local hc = W.widgets.tree_headers[i]
-        if hc and hc.setText then
-            local label = c.label
-            if ss.key == c.key and c.key ~= 'check' then
-                label = label .. (ss.dir == 'desc' and ' ▼' or ' ▲')
-            end
-            pcall(hc.setText, hc, label)
-        end
-    end
+    sms_grid.update_header_labels(W.widgets.tree_headers, ss.key, ss.dir)
 end
 
 local function sort_rows(rows)
@@ -660,31 +651,24 @@ local function build_tree_widget()
         W.widgets.tree = nil
     end
 
-    local ok_grid, grid = pcall(Grid.new)
-    if not (ok_grid and grid) then return end
-    skin_helper.apply(grid, 'sms_grid')
+    -- Grid + sortable headers via the shared sms_grid plumbing. Sort state is
+    -- per-scope (W.sort_state[scope]), and the 'check' column isn't sortable;
+    -- both are expressed through the wire_sortable_headers callbacks. This
+    -- window keeps its own sort_rows comparator and onMouseDown (shift-range
+    -- checkbox selection).
+    local grid = sms_grid.build_grid()
+    if not grid then return end
     if grid.setBounds then pcall(grid.setBounds, grid, 8, 72, 430, 460) end
 
-    W.widgets.tree_headers = {}
     local cols = SCOPE_COLUMNS[W.scope] or {}
-    for i, c in ipairs(cols) do
-        local ok_hc, hc = pcall(GridHeaderCell.new)
-        if ok_hc and hc then
-            skin_helper.apply(hc, 'sms_grid_header')
-            if hc.setText then pcall(hc.setText, hc, c.label) end
-            if c.key ~= 'check' and hc.addChangeCallback then
-                local key = c.key
-                pcall(hc.addChangeCallback, hc, function()
-                    local ss = W.sort_state[W.scope]
-                    if ss.key == key then ss.dir = (ss.dir == 'asc') and 'desc' or 'asc'
-                    else ss.key = key; ss.dir = 'asc' end
-                    M.rebuild_treeview()
-                end)
-            end
-            W.widgets.tree_headers[i] = hc
-            pcall(grid.insertColumn, grid, c.width, hc)
-        end
-    end
+    W.widgets.tree_headers = sms_grid.wire_sortable_headers(grid, cols, {
+        get_sort    = function() local ss = W.sort_state[W.scope] or {}; return ss.key, ss.dir end,
+        on_sort     = function(key, dir)
+            local ss = W.sort_state[W.scope]; ss.key, ss.dir = key, dir
+            M.rebuild_treeview()
+        end,
+        is_sortable = function(c) return c.key ~= 'check' end,
+    })
 
     grid.onMouseDown = function(self, x, y, button)
         if button ~= 1 then return end
