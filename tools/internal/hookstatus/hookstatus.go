@@ -39,7 +39,11 @@ func readOne(path string) (proto.HookState, error) {
 // that callers can use as a unified view of the bridge.
 //
 // Merge rules:
-//   - mission_loaded / mission_name: from hook.json (only the hook knows).
+//   - mission_loaded / mission_name: from the heartbeat that owns the current
+//     environment — hook.json while a sim runs ("in_mission"), me.json while
+//     in the Mission Editor. The ME-mod populates these from me_mission; the
+//     hook can't see the editor's open mission, and a stale hook.json left
+//     over from a prior sim would otherwise report mission_loaded=false.
 //   - gui_bridge_enabled: from me.json (only the ME-mod knows the toggle).
 //   - state: prefer "in_mission" if hook says so, otherwise me.json's value.
 //   - tick fields: whichever heartbeat is most recent.
@@ -63,8 +67,6 @@ func ReadMerged(stateDir string) (proto.HookState, error) {
 	}
 
 	merged := proto.HookState{
-		MissionLoaded:    hook.MissionLoaded,
-		MissionName:      hook.MissionName,
 		GuiBridgeEnabled: me.GuiBridgeEnabled,
 	}
 
@@ -74,6 +76,18 @@ func ReadMerged(stateDir string) (proto.HookState, error) {
 		merged.State = "in_mission"
 	} else {
 		merged.State = me.State
+	}
+
+	// Mission info follows the active environment. In a running sim the hook
+	// owns it; in the editor the ME-mod does (it reads me_mission, which the
+	// hook env can't see). Keying off merged.State avoids surfacing a stale
+	// hook.json's mission_loaded=false while the user is back in the ME.
+	if merged.State == "in_mission" {
+		merged.MissionLoaded = hook.MissionLoaded
+		merged.MissionName = hook.MissionName
+	} else {
+		merged.MissionLoaded = me.MissionLoaded
+		merged.MissionName = me.MissionName
 	}
 
 	// hook_version: ME-mod is the active ticker, surface its version first.

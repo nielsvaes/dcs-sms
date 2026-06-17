@@ -329,19 +329,43 @@ end
 -- ----------------------------------------------------------------------------
 -- heartbeat
 
+-- mission_state — best-effort read of the currently-open mission from the ME
+-- env. A mission table is always present while the editor is open (even a
+-- brand-new untitled mission), so `loaded` tracks whether `me_mission` and
+-- its `.mission` table are reachable. `name` is the basename of the saved
+-- .miz path; it's empty for a never-saved new mission (path is empty until
+-- the first Save-As). This is what `me group list` etc. read too — the hook
+-- env can't see it, so the ME heartbeat must carry it itself.
+local function mission_state()
+    local ok, mm = pcall(require, "me_mission")
+    if not ok or type(mm) ~= "table" or mm.mission == nil then
+        return false, ""
+    end
+    local path = mm.mission.path
+    if type(path) ~= "string" or path == "" then
+        return true, ""
+    end
+    -- basename: strip everything up to the last slash or backslash
+    local name = path:match("[^/\\]+$") or path
+    return true, name
+end
+
 local function write_heartbeat()
     -- Heartbeat schema mirrors proto.HookState. The ME-side heartbeat is the
-    -- source of truth for `state` and `gui_bridge_enabled` (the hook env can't
-    -- see those). The hook keeps writing `state/hook.json` with mission-side
-    -- info; the CLI reads both.
+    -- source of truth for `state`, `gui_bridge_enabled`, and (in the ME) the
+    -- loaded-mission info — the hook env can't see any of those. The hook
+    -- keeps writing `state/hook.json` with its own mission-side info; the CLI
+    -- reads both.
+    local loaded, name = mission_state()
     local payload = string.format(
-        '{"hook_version":"%s","state":"%s","mission_loaded":%s,"mission_name":"",' ..
+        '{"hook_version":"%s","state":"%s","mission_loaded":%s,"mission_name":"%s",' ..
         '"gui_bridge_enabled":%s,"tick_source":"%s",' ..
         '"last_tick":%d,"last_tick_at":"%s",' ..
         '"last_frame":%d,"last_frame_at":"%s"}',
         "me-bridge-" .. tostring(VERSION),
         "in_mission_editor",  -- best-effort: ME-mod runs in the ME env
-        "false",              -- ME-mod doesn't know mission state; hook.json carries that
+        tostring(loaded),
+        escape_json_string(name),
         tostring(_G.DCS_SMS_GUI_BRIDGE_ENABLED == true),
         "update_manager",
         STATE.tick, iso_now(),

@@ -26,6 +26,77 @@ func writeState(t *testing.T, dir string, st proto.HookState) string {
 	return path
 }
 
+// writeNamed marshals st into <dir>/<name> (e.g. "me.json").
+func writeNamed(t *testing.T, dir, name string, st proto.HookState) {
+	t.Helper()
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	data, err := json.Marshal(st)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, name), data, 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// In the Mission Editor the ME-mod heartbeat (me.json) owns mission info; a
+// stale hook.json left from a prior sim must not clobber it. Regression for
+// issue #74.
+func TestReadMergedMissionInfoFromMeWhenInEditor(t *testing.T) {
+	dir := t.TempDir()
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	// Stale hook from a prior sim: onSimulationStop cleared state to "" and
+	// mission_loaded to false, then the heartbeat froze (no more frames).
+	writeNamed(t, dir, "hook.json", proto.HookState{
+		State: "", MissionLoaded: false, MissionName: "",
+		LastFrameAt: time.Now().Add(-time.Hour).UTC().Format(time.RFC3339Nano),
+	})
+	// Fresh ME heartbeat with an open, saved mission.
+	writeNamed(t, dir, "me.json", proto.HookState{
+		State: "in_mission_editor", MissionLoaded: true, MissionName: "tester.miz",
+		GuiBridgeEnabled: true, LastFrameAt: now,
+	})
+
+	got, err := ReadMerged(dir)
+	if err != nil {
+		t.Fatalf("ReadMerged: %v", err)
+	}
+	if got.State != "in_mission_editor" {
+		t.Errorf("state: got %q want in_mission_editor", got.State)
+	}
+	if !got.MissionLoaded || got.MissionName != "tester.miz" {
+		t.Errorf("mission info: got loaded=%v name=%q want true/tester.miz", got.MissionLoaded, got.MissionName)
+	}
+}
+
+// While a sim runs, the hook owns mission info (it sees the live mission name
+// the ME-mod can't).
+func TestReadMergedMissionInfoFromHookWhenInMission(t *testing.T) {
+	dir := t.TempDir()
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	writeNamed(t, dir, "hook.json", proto.HookState{
+		State: "in_mission", MissionLoaded: true, MissionName: "live.miz",
+		LastFrameAt: now,
+	})
+	writeNamed(t, dir, "me.json", proto.HookState{
+		State: "in_mission_editor", MissionLoaded: false, MissionName: "",
+		GuiBridgeEnabled: true, LastFrameAt: time.Now().Add(-time.Minute).UTC().Format(time.RFC3339Nano),
+	})
+
+	got, err := ReadMerged(dir)
+	if err != nil {
+		t.Fatalf("ReadMerged: %v", err)
+	}
+	if got.State != "in_mission" {
+		t.Errorf("state: got %q want in_mission", got.State)
+	}
+	if !got.MissionLoaded || got.MissionName != "live.miz" {
+		t.Errorf("mission info: got loaded=%v name=%q want true/live.miz", got.MissionLoaded, got.MissionName)
+	}
+}
+
 func TestReadOK(t *testing.T) {
 	dir := t.TempDir()
 	want := proto.HookState{
