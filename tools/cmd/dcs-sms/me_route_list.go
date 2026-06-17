@@ -30,7 +30,7 @@ func init() {
 	registerMeInfo("route", "list", cmdInfo{
 		Run:		meRouteListCmd,
 		Flags:		flagsOnly(meRouteListFlags),
-		Synopsis:	"list waypoints on a group's route (compact summary per WP)",
+		Synopsis:	"list waypoints on a group's route (compact summary per WP). A WP's speed/ETA is the value on arrival at that WP (the inbound leg), not the departure leg; WP0 (takeoff) and the final (landing) WP carry a DCS placeholder speed, not a cruise speed.",
 	})
 }
 

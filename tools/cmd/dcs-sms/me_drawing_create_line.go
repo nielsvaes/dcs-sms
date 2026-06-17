@@ -28,7 +28,7 @@ func meDrawingCreateLineFlags() (*flag.FlagSet, *meDrawingCreateLineOpts) {
 	opts := &meDrawingCreateLineOpts{}
 	fs := flag.NewFlagSet("me drawing create-line", flag.ContinueOnError)
 	fs.StringVar(&opts.Vertices, "vertices", "",
-		"vertices as \"n1,e1;n2,e2;...\" (>= 2 absolute world-meter pairs)")
+		"vertices as \"n1,e1;n2,e2;...\" (>= 2 absolute world-meter pairs); use '.' decimals, not locale ',' (comma is the north,east separator)")
 	fs.StringVar(&opts.VerticesFile, "vertices-file", "",
 		"path to a file with one \"north,east\" per line (use for long polylines that hit Windows arg-length limits); mutually exclusive with --vertices")
 	fs.BoolVar(&opts.Closed, "closed", false, "close the polyline back to the first vertex")

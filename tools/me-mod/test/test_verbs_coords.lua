@@ -20,6 +20,13 @@ function _G.Terrain.convertLatLonToMeters(lat, lon)
     return lat * 111000, lon * 85000
 end
 
+-- magvar stub — get_mag_decl returns its lat argument verbatim (as pseudo-
+-- radians) so tests can verify both the radian→degree conversion and that the
+-- north/east path feeds the Terrain-converted lat through to magvar.
+package.preload['magvar'] = function()
+    return { get_mag_decl = function(lat, lon) return lat end }
+end
+
 -- Stubs for sibling verb modules pulled in by the aggregator. The aggregator
 -- requires every noun file at load time, so anything those files require has
 -- to be on the package.preload path before we require('dcs_sms_me.verbs').
@@ -202,6 +209,51 @@ local function test_to_local_no_terrain()
 end
 
 -- ============================================================
+-- coords_magvar (GH#73, request 1)
+-- ============================================================
+
+local function test_magvar_latlon()
+    -- Stub get_mag_decl returns lat as "radians"; verb converts to degrees.
+    local r = verbs.coords_magvar({ lat = 0.5, lon = 1.0 })
+    assert_true(r.ok, 'magvar latlon: ok')
+    assert_eq(r.decl_rad, 0.5, 'magvar: decl_rad is raw stub value')
+    assert_near(r.decl_deg, math.deg(0.5), 1e-9, 'magvar: decl_deg = math.deg(rad)')
+    assert_eq(r.lat, 0.5, 'magvar: lat echoed')
+    assert_eq(r.lon, 1.0, 'magvar: lon echoed')
+    assert_eq(r.north, nil, 'magvar latlon: no north field')
+end
+
+local function test_magvar_northeast()
+    -- north/east → Terrain stub (north/111000) → magvar(lat) → degrees.
+    local r = verbs.coords_magvar({ north = 111000, east = 85000 })
+    assert_true(r.ok, 'magvar ne: ok')
+    assert_near(r.lat, 1.0, 1e-9, 'magvar ne: lat from Terrain stub')
+    assert_near(r.decl_rad, 1.0, 1e-9, 'magvar ne: decl_rad = converted lat')
+    assert_near(r.decl_deg, math.deg(1.0), 1e-9, 'magvar ne: decl_deg in degrees')
+    assert_eq(r.north, 111000, 'magvar ne: north echoed')
+    assert_eq(r.east, 85000, 'magvar ne: east echoed')
+end
+
+local function test_magvar_both_pairs_refused()
+    local r = verbs.coords_magvar({ lat = 1, lon = 2, north = 3, east = 4 })
+    assert_false(r.ok, 'magvar both pairs: refused')
+end
+
+local function test_magvar_no_pair_refused()
+    local r = verbs.coords_magvar({})
+    assert_false(r.ok, 'magvar no pair: refused')
+end
+
+local function test_magvar_no_terrain()
+    local saved = _G.Terrain
+    _G.Terrain = nil
+    local r = verbs.coords_magvar({ north = 0, east = 0 })
+    _G.Terrain = saved
+    assert_false(r.ok, 'magvar ne no terrain: refused')
+    assert_contains(r.error, 'theatre not loaded', 'magvar: error mentions theatre')
+end
+
+-- ============================================================
 -- Test runner
 -- ============================================================
 
@@ -220,6 +272,11 @@ local tests = {
     test_to_local_missing_lat,
     test_to_local_missing_lon,
     test_to_local_no_terrain,
+    test_magvar_latlon,
+    test_magvar_northeast,
+    test_magvar_both_pairs_refused,
+    test_magvar_no_pair_refused,
+    test_magvar_no_terrain,
 }
 
 for _, t in ipairs(tests) do t() end

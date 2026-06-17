@@ -30,7 +30,7 @@ func init() {
 	registerMeInfo("route", "get", cmdInfo{
 		Run:		meRouteGetCmd,
 		Flags:		flagsOnly(meRouteGetFlags),
-		Synopsis:	"get a group's full route table (waypoints with all fields, task subtrees preserved)",
+		Synopsis:	"get a group's full route table (waypoints with all fields, task subtrees preserved). A WP's speed/ETA is the value on arrival at that WP (the inbound leg), not the departure leg; WP0 (takeoff) and the final (landing) WP carry a DCS placeholder speed, not a cruise speed.",
 	})
 }
 

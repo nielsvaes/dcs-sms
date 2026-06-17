@@ -10,7 +10,7 @@ Every command on the dcs-sms CLI, grouped by namespace.
 |---|---|
 | [`dev-reload`](dev-reload.md) | build the .exe, reinstall the ME mod, and hot-reload it in one shot (contributor workflow) |
 | [`doc`](doc.md) | regenerate docs/cli/ — per-command markdown reference + index |
-| [`exec`](exec.md) | execute a Lua snippet (use --target mission\|gui\|auto, default auto) |
+| [`exec`](exec.md) | execute a Lua snippet. --target gui runs it in the Mission Editor env (open the ME and toggle DCS-SMS → External execution ON first); --target mission runs it in a live mission; auto picks based on DCS state. Returns JSON with return_value (the snippet's return), output (captured print), and error. |
 | [`gen-units`](gen-units.md) | regenerate framework/constants/{units,statics}.lua from dcs-lua-datamine |
 | [`install-hook`](install-hook.md) | install/update the Lua hook + patch MissionScripting.lua to allow it |
 | [`install-me-mod`](install-me-mod.md) | install/update the Mission Editor mod into <DCS install>/MissionEditor/ |
@@ -42,6 +42,7 @@ Every command on the dcs-sms CLI, grouped by namespace.
 
 | Command | Description |
 |---|---|
+| [`me coords magvar`](me-coords-magvar.md) | magnetic declination (degrees, East +) at a point for the open mission's date |
 | [`me coords to-geo`](me-coords-to-geo.md) | convert DCS local meters (north/east) to geographic lat/lon for the current theatre |
 | [`me coords to-local`](me-coords-to-local.md) | convert geographic lat/lon to DCS local meters (north/east) for the current theatre |
 
@@ -118,8 +119,8 @@ Every command on the dcs-sms CLI, grouped by namespace.
 | Command | Description |
 |---|---|
 | [`me route clear`](me-route-clear.md) | remove all waypoints from a group's route (air groups refused) |
-| [`me route get`](me-route-get.md) | get a group's full route table (waypoints with all fields, task subtrees preserved) |
-| [`me route list`](me-route-list.md) | list waypoints on a group's route (compact summary per WP) |
+| [`me route get`](me-route-get.md) | get a group's full route table (waypoints with all fields, task subtrees preserved). A WP's speed/ETA is the value on arrival at that WP (the inbound leg), not the departure leg; WP0 (takeoff) and the final (landing) WP carry a DCS placeholder speed, not a cruise speed. |
+| [`me route list`](me-route-list.md) | list waypoints on a group's route (compact summary per WP). A WP's speed/ETA is the value on arrival at that WP (the inbound leg), not the departure leg; WP0 (takeoff) and the final (landing) WP carry a DCS placeholder speed, not a cruise speed. |
 
 ## me trigger
 
@@ -173,7 +174,7 @@ Every command on the dcs-sms CLI, grouped by namespace.
 | [`me waypoint clear-enroute-tasks`](me-waypoint-clear-enroute-tasks.md) | drop all enroute-kind tasks at a waypoint (waypoint kind kept) |
 | [`me waypoint clear-tasks`](me-waypoint-clear-tasks.md) | drop all waypoint-kind tasks at a waypoint (enroute kept) |
 | [`me waypoint describe-task`](me-waypoint-describe-task.md) | print the parameter schema (fields, defaults, allowed values) of one task id |
-| [`me waypoint get`](me-waypoint-get.md) | get a single waypoint's full field set |
+| [`me waypoint get`](me-waypoint-get.md) | get a single waypoint's full field set. A WP's speed/ETA is the value on arrival at that WP (the inbound leg), not the departure leg; WP0 (takeoff) and the final (landing) WP carry a DCS placeholder speed, not a cruise speed. |
 | [`me waypoint insert`](me-waypoint-insert.md) | insert a waypoint at index N (shifts subsequent WPs up; --before K appends) |
 | [`me waypoint link-airbase`](me-waypoint-link-airbase.md) | link a waypoint to a specific airbase (sets airdromeId + moves WP to airbase position) |
 | [`me waypoint list-tasks`](me-waypoint-list-tasks.md) | list legal task ids from ED's me_action_db, optionally filtered by group and/or --kind |

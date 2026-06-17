@@ -27,7 +27,7 @@ func meDrawingCreatePolygonFlags() (*flag.FlagSet, *meDrawingCreatePolygonOpts) 
 	opts := &meDrawingCreatePolygonOpts{}
 	fs := flag.NewFlagSet("me drawing create-polygon", flag.ContinueOnError)
 	fs.StringVar(&opts.Vertices, "vertices", "",
-		"vertices as \"n1,e1;n2,e2;...\" (>= 3 absolute world-meter pairs)")
+		"vertices as \"n1,e1;n2,e2;...\" (>= 3 absolute world-meter pairs); use '.' decimals, not locale ',' (comma is the north,east separator)")
 	fs.StringVar(&opts.VerticesFile, "vertices-file", "",
 		"path to a file with one \"north,east\" per line (use for large polygons that hit Windows arg-length limits); mutually exclusive with --vertices")
 	fs.StringVar(&opts.Name, "name", "", "drawing name (auto-allocated if empty)")

@@ -80,15 +80,31 @@ end
 -- zone with `zone.userObject == unit` (and `zone.userObject.zones[1] == zone`).
 -- The previous depth-32 fallback returned the live `v`, leaving the cycle in
 -- the clone and hanging the bridge's JSON encoder. See GH#66.
-function H.strip_back_refs(v, visited)
+-- Cap on the number of nodes a single strip_back_refs call will clone. The
+-- output is a tree (shared sub-tables are re-cloned per reference path), so a
+-- deeply *nested* shared structure expands exponentially — and the JSON encoder
+-- re-traverses it the same way, so bounding the clone count bounds both stripping
+-- and encoding. Normal data is tiny (a recon group's whole route is ~1.6k nodes);
+-- some red-side AI groups have task trees with deeply nested shared sub-tables
+-- that ballooned past the bridge's exec timeout (GH#73, `waypoint get` hangs).
+-- Past the cap we stop expanding and leave a marker instead of hanging. At the
+-- observed ~200k clones/sec this finishes in well under a second.
+H.STRIP_NODE_BUDGET = 150000
+
+function H.strip_back_refs(v, visited, budget)
     if type(v) ~= 'table' then return v end
     visited = visited or {}
+    budget = budget or { n = 0 }
     if visited[v] then return nil end
+    if budget.n >= H.STRIP_NODE_BUDGET then
+        return { __truncated__ = 'strip_back_refs node budget exceeded' }
+    end
+    budget.n = budget.n + 1
     visited[v] = true
     local out = {}
     for k, vv in pairs(v) do
         if k ~= 'boss' and k ~= 'mapObjects' and k ~= 'userObject' then
-            out[k] = H.strip_back_refs(vv, visited)
+            out[k] = H.strip_back_refs(vv, visited, budget)
         end
     end
     visited[v] = nil

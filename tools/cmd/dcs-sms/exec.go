@@ -39,7 +39,7 @@ func execFlags() (*flag.FlagSet, *execOpts) {
 	fs.BoolVar(&opts.Pretty, "pretty", false, "indent JSON output")
 	fs.StringVar(&opts.SavedGames, "saved-games", "", "override Saved Games path")
 	fs.BoolVar(&opts.Wait, "wait", false, "if hook isn't ready, poll until it is or --timeout elapses")
-	fs.StringVar(&opts.Target, "target", "auto", "execution target: mission | gui | auto")
+	fs.StringVar(&opts.Target, "target", "auto", "execution target: mission (live mission scripting env) | gui (Mission Editor env — full DCS modules like magvar/Terrain, reads/writes the open mission) | auto")
 	return fs, opts
 }
 
@@ -47,7 +47,13 @@ func init() {
 	registerInfo("exec", cmdInfo{
 		Run:      execCmd,
 		Flags:    flagsOnly(execFlags),
-		Synopsis: "execute a Lua snippet (use --target mission|gui|auto, default auto)",
+		Synopsis: "execute a Lua snippet. --target gui runs it in the Mission Editor env (open the ME and toggle DCS-SMS → External execution ON first); --target mission runs it in a live mission; auto picks based on DCS state. Returns JSON with return_value (the snippet's return), output (captured print), and error.",
+		Examples: []string{
+			`dcs-sms exec --target mission --code "return Unit.getByName('Alpha-1'):getCoalition()"`,
+			`# Mission Editor: any DCS module the ME has, e.g. magnetic declination at a lat/lon`,
+			`dcs-sms exec --target gui --code "return require('magvar').get_mag_decl(51.556, -0.419)"`,
+			`# (for magvar specifically, prefer the typed wrapper: dcs-sms me coords magvar --lat 51.556 --lon -0.419)`,
+		},
 	})
 }
 

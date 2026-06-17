@@ -258,6 +258,40 @@ local function test_waypoint_get_full_fields()
     assert_eq(r.waypoint.task.id, 'ComboTask', 'waypoint_get: task field present')
 end
 
+-- strip_back_refs (used by waypoint_get/route_get) re-clones shared sub-tables
+-- per reference path, so a deeply *nested* shared structure expands
+-- exponentially and used to blow past the bridge's exec timeout on some
+-- red-side AI groups (GH#73, request 6). A node budget caps the expansion.
+-- We lower the budget and feed a diamond DAG to prove it terminates with a
+-- truncation marker instead of running away.
+local function test_strip_back_refs_budget_caps_diamond()
+    local H = require('dcs_sms_me.verb_helpers')
+    local saved = H.STRIP_NODE_BUDGET
+    H.STRIP_NODE_BUDGET = 100
+    -- Each level shares one child between two keys → 2^depth expansion if
+    -- unbounded; depth 30 would be ~1e9 nodes without the cap.
+    local function build(d)
+        if d == 0 then return { leaf = true } end
+        local c = build(d - 1)
+        return { a = c, b = c }
+    end
+    local out = H.strip_back_refs(build(30))
+    H.STRIP_NODE_BUDGET = saved
+
+    local function has_truncation(t, seen)
+        seen = seen or {}
+        if type(t) ~= 'table' or seen[t] then return false end
+        seen[t] = true
+        if t.__truncated__ ~= nil then return true end
+        for _, v in pairs(t) do
+            if has_truncation(v, seen) then return true end
+        end
+        return false
+    end
+    assert_true(type(out) == 'table', 'strip budget: returns a table')
+    assert_true(has_truncation(out), 'strip budget: marks truncation instead of hanging')
+end
+
 local function test_refresh_called_on_clear()
     mock.new_mission()
     local g = mock.add_vehicle({ name = 'rf1' })
@@ -680,6 +714,7 @@ test_route_get_preserves_task()
 test_route_clear_ground()
 test_route_clear_air_refused()
 test_waypoint_get_full_fields()
+test_strip_back_refs_budget_caps_diamond()
 test_refresh_called_on_clear()
 test_waypoint_add_appends()
 test_waypoint_add_enum_validation()

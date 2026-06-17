@@ -11,17 +11,17 @@ import (
 )
 
 type meZoneCreateOpts struct {
-	Type		string
-	Name		string
-	North		float64
-	East		float64
-	Radius		float64
-	Vertices	string
-	Color		string
-	Hidden		bool
-	Timeout		time.Duration
-	Pretty		bool
-	SavedGames	string
+	Type       string
+	Name       string
+	North      float64
+	East       float64
+	Radius     float64
+	Vertices   string
+	Color      string
+	Hidden     bool
+	Timeout    time.Duration
+	Pretty     bool
+	SavedGames string
 }
 
 func meZoneCreateFlags() (*flag.FlagSet, *meZoneCreateOpts) {
@@ -46,9 +46,9 @@ func meZoneCreateFlags() (*flag.FlagSet, *meZoneCreateOpts) {
 
 func init() {
 	registerMeInfo("zone", "create", cmdInfo{
-		Run:		meZoneCreateCmd,
-		Flags:		flagsOnly(meZoneCreateFlags),
-		Synopsis:	"create a circular or quadrilateral zone in the open mission",
+		Run:      meZoneCreateCmd,
+		Flags:    flagsOnly(meZoneCreateFlags),
+		Synopsis: "create a circular or quadrilateral zone in the open mission",
 	})
 }
 
@@ -126,6 +126,21 @@ func meZoneCreateCmd(args []string, stdout, stderr io.Writer) int {
 	}
 }
 
+// localeCommaHint returns extra error context for a vertex that didn't split
+// into exactly two fields. The comma is the north/east separator, so a value
+// formatted with a locale comma-decimal (e.g. "230006,0" instead of
+// "230006.0") splits into the wrong number of fields. An even field count is
+// the classic symptom of every coordinate carrying a comma-decimal. We can't
+// safely auto-correct it (a real fractional comma is indistinguishable from a
+// legitimate small second coordinate), so we point the caller at the cause.
+func localeCommaHint(gotFields int) string {
+	if gotFields > 2 && gotFields%2 == 0 {
+		return "use '.' for decimals, not a locale ','. " +
+			"(a comma is the north,east separator, so \"230006,0\" parses as two fields)"
+	}
+	return "use a '.' decimal point and a single ',' between north and east"
+}
+
 // parseVerticesToLua converts "n1,e1;n2,e2;n3,e3;n4,e4" into a Lua table
 // expression "{ {north=n1,east=e1}, {north=n2,east=e2}, ... }".
 //
@@ -142,7 +157,8 @@ func parseVerticesToLua(s string) (string, error) {
 	for i, p := range parts {
 		coords := strings.Split(strings.TrimSpace(p), ",")
 		if len(coords) != 2 {
-			return "", fmt.Errorf("vertex %d: expected \"north,east\", got %q", i+1, p)
+			return "", fmt.Errorf("vertex %d: expected \"north,east\", got %q — %s",
+				i+1, p, localeCommaHint(len(coords)))
 		}
 		north, err := strconv.ParseFloat(strings.TrimSpace(coords[0]), 64)
 		if err != nil {
@@ -187,8 +203,8 @@ func parseVerticesFileToLua(path string) (string, error) {
 		}
 		coords := strings.Split(line, ",")
 		if len(coords) != 2 {
-			return "", fmt.Errorf("--vertices-file %q line %d: expected \"north,east\", got %q",
-				path, lineNo+1, line)
+			return "", fmt.Errorf("--vertices-file %q line %d: expected \"north,east\", got %q — %s",
+				path, lineNo+1, line, localeCommaHint(len(coords)))
 		}
 		north, err := strconv.ParseFloat(strings.TrimSpace(coords[0]), 64)
 		if err != nil {

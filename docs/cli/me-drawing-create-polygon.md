@@ -24,7 +24,7 @@ dcs-sms me drawing create-polygon [flags]
 | `--style` | string | `""` | line style (default solid) |
 | `--thickness` | float | `0` | outline thickness in pixels (default 2) |
 | `--timeout` | duration | `30s` | wall-clock timeout |
-| `--vertices` | string | `""` | vertices as "n1,e1;n2,e2;..." (>= 3 absolute world-meter pairs) |
+| `--vertices` | string | `""` | vertices as "n1,e1;n2,e2;..." (>= 3 absolute world-meter pairs); use '.' decimals, not locale ',' (comma is the north,east separator) |
 | `--vertices-file` | string | `""` | path to a file with one "north,east" per line (use for large polygons that hit Windows arg-length limits); mutually exclusive with --vertices |
 
 ---

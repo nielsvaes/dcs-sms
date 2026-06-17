@@ -34,7 +34,7 @@ func init() {
 	registerMeInfo("waypoint", "get", cmdInfo{
 		Run:		meWaypointGetCmd,
 		Flags:		flagsOnly(meWaypointGetFlags),
-		Synopsis:	"get a single waypoint's full field set",
+		Synopsis:	"get a single waypoint's full field set. A WP's speed/ETA is the value on arrival at that WP (the inbound leg), not the departure leg; WP0 (takeoff) and the final (landing) WP carry a DCS placeholder speed, not a cruise speed.",
 	})
 }
 

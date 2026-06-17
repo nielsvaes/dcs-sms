@@ -441,6 +441,21 @@ local function test_list_filter_name_substring()
     assert_eq(r.count, 1, 'list name=cas (case insensitive): count = 1')
 end
 
+-- Regression for GH#73, request 3: `--name "ROUTE_"` (uppercase, trailing
+-- underscore) must match every ROUTE_NNN drawing as a case-insensitive
+-- substring and exclude others. The reporter saw count:0; we couldn't
+-- reproduce — this locks the behavior so it can't regress. The underscore is
+-- not a Lua pattern magic char and the match uses plain find, so it's literal.
+local function test_list_filter_name_route_prefix()
+    reset()
+    verbs.drawing_create_circle({ name = 'ROUTE_001', north = 0, east = 0, radius = 100 })
+    verbs.drawing_create_circle({ name = 'ROUTE_002', north = 0, east = 0, radius = 100 })
+    verbs.drawing_create_circle({ name = 'WP_001',    north = 0, east = 0, radius = 100 })
+    assert_eq(verbs.drawing_list({ name = 'ROUTE_' }).count, 2, 'list name=ROUTE_ : count = 2')
+    assert_eq(verbs.drawing_list({ name = 'route_' }).count, 2, 'list name=route_ (lowercase): count = 2')
+    assert_eq(verbs.drawing_list({ name_prefix = 'ROUTE_' }).count, 2, 'list name_prefix=ROUTE_ : count = 2')
+end
+
 local function test_list_summary_fields()
     reset()
     verbs.drawing_create_circle({ name = 'S1', north = 100, east = 200, radius = 500,
@@ -860,6 +875,7 @@ local tests = {
     test_list_filter_type,
     test_list_filter_mode,
     test_list_filter_name_substring,
+    test_list_filter_name_route_prefix,
     test_list_summary_fields,
     test_get_happy,
     test_get_line_returns_absolute_points,
