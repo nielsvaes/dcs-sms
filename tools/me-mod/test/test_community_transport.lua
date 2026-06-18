@@ -20,12 +20,22 @@ local captured  = { wrap_params = nil, sni_host = nil, sent = nil }
 
 -- Mock raw TCP socket. connect() reports "still connecting" once (timeout),
 -- then "already connected" — both must be treated as pending, not errors.
+-- When sock_connect_script is set, connect() replays it instead: each entry is
+-- { ok, err } where ok=true means success (returns 1) and ok=false returns
+-- (nil, err). This lets a test drive Winsock-specific "still connecting" codes.
+local sock_connect_script
 local function new_sock()
     local connects = 0
     return {
         settimeout = function() end,
         connect = function(_, host, port)
             connects = connects + 1
+            if sock_connect_script then
+                captured.sock_connects = connects
+                local r = sock_connect_script[connects] or sock_connect_script[#sock_connect_script]
+                if r[1] then return 1 end
+                return nil, r[2]
+            end
             if connects == 1 then return nil, 'timeout' end
             return nil, 'already connected'
         end,
@@ -125,6 +135,32 @@ local req404 = transport.request(nil, 'https://raw.githubusercontent.com/owner/r
 local _, body404, err404 = drive(req404)
 check('404 yields no body', body404 == nil)
 check('404 surfaced as HTTP 404 error', type(err404) == 'string' and err404:find('404', 1, true) ~= nil, err404)
+
+-- ---- Winsock quirk: a non-blocking connect in progress can report itself as
+-- "Invalid argument" (WSAEINVAL — Microsoft reports WSAEALREADY this way for
+-- backward compatibility, and some LSPs do too). It must be treated as "still
+-- connecting", NOT a fatal error. Two real users hit this on the Community tab.
+sock_connect_script = {
+    { false, 'timeout' },           -- 1st call: would-block
+    { false, 'Invalid argument' },  -- 2nd call: in-progress, reported as EINVAL
+    { true },                       -- 3rd call: connected
+}
+scenario = {
+    chunk = 'HTTP/1.0 200 OK\r\nContent-Type: text/plain\r\n\r\nHEL',
+    part1 = 'LO-',
+    part2 = 'WORLD',
+}
+captured = {}
+local reqinval = transport.request(nil, 'https://raw.githubusercontent.com/owner/repo/main/index.json')
+local seqinval, bodyinval, errinval = drive(reqinval)
+check('connect "Invalid argument" treated as pending, not fatal',
+      bodyinval == 'HELLO-WORLD' and errinval == nil, errinval or table.concat(seqinval, ','))
+-- Pin the intent (not just the outcome): the EINVAL poll must RE-CALL connect,
+-- so connect runs 3 times (timeout → "Invalid argument" → connected). A
+-- regression that treats EINVAL as fatal would abort after the 2nd call.
+check('EINVAL connect was re-polled, not aborted (connect called 3x)',
+      captured.sock_connects == 3, captured.sock_connects)
+sock_connect_script = nil
 
 -- ---- Guard: a non-https URL fails immediately, without touching a socket ----
 local reqbad = transport.request(nil, 'http://insecure.example/x')

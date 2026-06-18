@@ -105,9 +105,15 @@ function M.request(_, url)
             end
             local r, e = sock:connect(host, port)
             if r then stage = 'wrap'; return 'pending' end
-            -- Non-blocking connect: these all mean "still connecting".
+            -- Non-blocking connect: these all mean "still connecting". We poll by
+            -- re-calling connect() each tick; on Windows the in-progress call
+            -- reports WSAEALREADY ("Operation already in progress"), but Winsock
+            -- remaps that to WSAEINVAL ("Invalid argument") for backward compat
+            -- (and some LSPs/VPN/AV shims do the same) — so treat that as
+            -- still-connecting too, or the refresh aborts on machines where it
+            -- surfaces. The bounded MAX_POLLS budget caps a genuinely stuck connect.
             if e == 'timeout' or e == 'Operation already in progress'
-               or e == 'Operation now in progress' then return 'pending' end
+               or e == 'Operation now in progress' or e == 'Invalid argument' then return 'pending' end
             if e == 'already connected' then stage = 'wrap'; return 'pending' end
             return 'error', 'connect: ' .. tostring(e)
 
