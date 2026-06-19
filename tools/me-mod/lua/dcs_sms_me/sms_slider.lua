@@ -124,6 +124,7 @@ function M.new(parent_raw, opts)
         _on_change = opts.on_change,
         _value     = 0,
         _dragging  = false,
+        _enabled   = true,
         _track_x   = nil, _track_w = nil, _row_y = nil, _row_h = nil,
         _suppress_box_cb = false,
     }
@@ -169,6 +170,7 @@ function M.new(parent_raw, opts)
 
     -- Drag state machine (exposed for tests; the dxgui callbacks below wrap it).
     function self:_begin_drag(mouse_x)
+        if not self._enabled then return end
         self._dragging = true
         self:_apply_mouse_x(mouse_x)   -- jump to the cursor (click-to-position)
     end
@@ -212,12 +214,14 @@ function M.new(parent_raw, opts)
 
     function self:set_enabled(v)
         local en = v and true or false
-        pcall(function() if self._box.setEnabled then self._box:setEnabled(en) end end)
+        self._enabled = en
+        pcall(function() if self._box.setEnabled    then self._box:setEnabled(en)    end end)
         pcall(function() if self._handle.setEnabled then self._handle:setEnabled(en) end end)
+        pcall(function() if self._track.setEnabled  then self._track:setEnabled(en)  end end)
     end
 
     function self:set_visible(v)
-        local vis = v == true
+        local vis = v and true or false
         pcall(function() if self._track.setVisible  then self._track:setVisible(vis)  end end)
         pcall(function() if self._handle.setVisible then self._handle:setVisible(vis) end end)
         pcall(function() if self._box.setVisible    then self._box:setVisible(vis)    end end)
@@ -262,6 +266,7 @@ function M.new(parent_raw, opts)
         if widget.addMouseDownCallback then
             pcall(widget.addMouseDownCallback, widget, function(ws, mx, my, button)
                 if button ~= 1 then return end
+                if not self._enabled then return end
                 self:_begin_drag(mx)
                 if ws.captureMouse then pcall(ws.captureMouse, ws) end
             end)

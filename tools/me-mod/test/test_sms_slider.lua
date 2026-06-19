@@ -227,6 +227,75 @@ do
     check('mouse-up not dragging', s:is_dragging() == false)
 end
 
+-- ---------------------------------------------------------------------------
+-- Disabled slider ignores track/handle clicks; re-enabling restores dragging
+-- ---------------------------------------------------------------------------
+do
+    fresh()
+    local calls = {}
+    local s = slider.new(new_parent(), {
+        initial = 0, min = 0, max = 100, step = 1, value_w = 52,
+        on_change = function(v) calls[#calls + 1] = v end,
+    })
+    local track = statics[1]
+    s:set_bounds(0, 0, 152, 22)
+    s:set_enabled(false)
+    check('set_enabled(false) disables the track', track._enabled == false)
+    for _, cb in ipairs(track._md) do cb(track, 47, 0, 1) end
+    check('disabled: track click does not change value', s:get_value() == 0)
+    check('disabled: track click did not capture', track._captured == false)
+    check('disabled: on_change not fired', #calls == 0)
+    s:set_enabled(true)
+    for _, cb in ipairs(track._md) do cb(track, 47, 0, 1) end
+    check('re-enabled: track click changes value', s:get_value() == 50)
+end
+
+-- ---------------------------------------------------------------------------
+-- set_visible / show / hide propagate to all three children (truthy semantics)
+-- ---------------------------------------------------------------------------
+do
+    fresh()
+    local s = slider.new(new_parent(), { initial = 0, min = 0, max = 100, step = 1 })
+    local track, handle = statics[1], statics[2]
+    s:hide()
+    check('hide: track hidden',  track._visible == false)
+    check('hide: handle hidden', handle._visible == false)
+    check('hide: box hidden',    last_box._visible == false)
+    s:show()
+    check('show: track visible', track._visible == true)
+    s:set_visible(1)  -- truthy non-boolean must still show (consistency with set_enabled)
+    check('set_visible(1) shows (truthy)', track._visible == true)
+end
+
+-- ---------------------------------------------------------------------------
+-- camelCase aliases delegate to the snake_case methods
+-- ---------------------------------------------------------------------------
+do
+    fresh()
+    local s = slider.new(new_parent(), { initial = 0, min = 0, max = 100, step = 1 })
+    s:setValue(40)
+    check('setValue/getValue aliases', s:getValue() == 40)
+    s:setBounds(0, 0, 152, 22)
+    check('setBounds alias laid out the track', statics[1]._bounds ~= nil)
+    s:setEnabled(false)
+    check('setEnabled alias disables', statics[1]._enabled == false)
+end
+
+-- ---------------------------------------------------------------------------
+-- dxgui wiring on the TRACK (click-on-track jumps + captures)
+-- ---------------------------------------------------------------------------
+do
+    fresh()
+    local s = slider.new(new_parent(), { initial = 0, min = 0, max = 100, step = 1, value_w = 52 })
+    local track = statics[1]
+    s:set_bounds(0, 0, 152, 22)
+    for _, cb in ipairs(track._md) do cb(track, 47, 0, 1) end
+    check('track mouse-down captures', track._captured == true)
+    check('track mouse-down jumps to ≈50', s:get_value() == 50)
+    for _, cb in ipairs(track._mu) do cb(track, 47, 0, 1) end
+    check('track mouse-up releases', track._released == true)
+end
+
 print('')
 if failures == 0 then
     print('All sms_slider tests passed.')
