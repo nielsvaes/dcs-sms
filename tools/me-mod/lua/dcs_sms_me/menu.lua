@@ -134,6 +134,19 @@ local function add_top_level_menu()
         end
     end)
 
+    -- "Paint Statics" entry — opens the static-painting brush window
+    -- (lazy-required so a syntax error degrades to a logged warning).
+    add_item(menu, sibling_menu, 'Paint Statics', function()
+        local ok, mod_or_err = pcall(require, 'dcs_sms_me.paint_statics')
+        if ok and type(mod_or_err) == 'table' and mod_or_err.toggle then
+            local ok2, err = pcall(mod_or_err.toggle)
+            if not ok2 then
+                pcall(function() _G.log.write('sms.me.menu', _G.log.ERROR or 1,
+                    'paint_statics.toggle threw: ' .. tostring(err)) end)
+            end
+        end
+    end)
+
     -- "Hotkey Manager" entry — opens the hotkey-binding window.
     add_item(menu, sibling_menu, 'Hotkey Manager', function()
         local ok2, err = pcall(function() require('dcs_sms_me.me_hotkeys').toggle_window() end)
