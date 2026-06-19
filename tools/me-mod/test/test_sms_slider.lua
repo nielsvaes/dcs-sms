@@ -109,10 +109,10 @@ do
     local s = slider.new(parent, { initial = 25, min = 1, max = 2000, step = 5 })
     check('new returns panel', type(s) == 'table')
     check('parent.insertWidget called 3x (track+handle+box)', parent._inserted == 3)
-    check('initial value quantized/clamped', s:get_value() == 26)  -- quantize(25,1,5)=26
+    check('initial value clamped, not step-snapped', s:get_value() == 25)
     check('is_dragging false initially', s:is_dragging() == false)
     check('widget() returns the value box', s:widget() == last_box)
-    check('value box initial text set', last_box._text == '26')
+    check('value box initial text set', last_box._text == '25')
 end
 
 -- ---------------------------------------------------------------------------

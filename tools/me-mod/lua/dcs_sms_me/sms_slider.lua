@@ -128,8 +128,10 @@ function M.new(parent_raw, opts)
         _track_x   = nil, _track_w = nil, _row_y = nil, _row_h = nil,
         _suppress_box_cb = false,
     }
-    self._value = clamp(quantize(tonumber(opts.initial) or self._min, self._min, self._step),
-                        self._min, self._max)
+    -- Initial default clamps to range but is NOT step-snapped, so configured
+    -- defaults (e.g. density 1.0, radius 25) display exactly as set — only
+    -- drag / track-click quantize to the step grid.
+    self._value = clamp(tonumber(opts.initial) or self._min, self._min, self._max)
 
     function self:_format()
         if self._decimals and self._decimals > 0 then
@@ -189,8 +191,9 @@ function M.new(parent_raw, opts)
     function self:is_dragging() return self._dragging end
 
     function self:set_value(v)
-        self._value = clamp(quantize(tonumber(v) or self._value, self._min, self._step),
-                            self._min, self._max)
+        -- Programmatic set clamps to range but is NOT step-snapped (matches
+        -- typed entry); does not fire on_change. Only drag/click quantize.
+        self._value = clamp(tonumber(v) or self._value, self._min, self._max)
         self:_reflect()
     end
 

@@ -62,8 +62,11 @@ Calls made autonomously (the user opted out of spec/plan review via
 4. **Field rename** — `W.{radius,density,spacing,heading}_spin` → `*_slider`;
    weight/seed keep `_spin`. Cosmetic churn accepted for readability.
 5. **Click-on-track jumps** the handle (standard slider feel) — included.
-6. **Typed values clamped, not step-snapped** — matches prior `SpinBox` typing;
-   canonical step-snap happens only on drag/track-click.
+6. **Typed and programmatic values clamped, not step-snapped** — typing, the
+   `initial` default, and `set_value` clamp to range but are NOT snapped to
+   `step`; only drag / track-click quantize to the step grid. Matches the prior
+   `SpinBox` (which displayed configured defaults exactly), so density opens at
+   `1.0` and radius at `25`, never `1.01` / `26`.
 7. **`set_value()` does not fire `on_change`** — matches `splitter:set_value`.
 8. **Defaults** — `value_w = 52` px, handle width ≈ 10 px; `decimals`: radius 0,
    density 2, spacing 0, heading 0.
@@ -149,8 +152,9 @@ Within the `(x, y, w, h)` box:
   **clamped to range but NOT step-snapped** (so `1.0` density survives even with
   step `0.1`) — matching today's `SpinBox` typing behavior. Canonical
   step-snapping only happens on drag/track-click.
-- **`set_value(v)`** (programmatic) → clamp + quantize + reposition + rewrite
-  text, but does **NOT** fire `on_change` (same contract as `splitter:set_value`).
+- **`set_value(v)`** (programmatic) → clamp + reposition + rewrite text (NOT
+  step-snapped — see Decision #6), but does **NOT** fire `on_change` (same
+  contract as `splitter:set_value`).
 
 ## Pure, testable math core
 

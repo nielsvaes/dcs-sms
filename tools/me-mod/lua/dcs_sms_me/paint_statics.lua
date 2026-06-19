@@ -1345,7 +1345,7 @@ local function build_window()
         local sl = sms_slider and sms_slider.new(W.window, {
             initial = value, min = min, max = max, step = step,
             decimals = decimals, tooltip = tooltip,
-            on_change = function(v) if on_change then on_change(v) end end,
+            on_change = on_change,
         })
         if sl then return sl end
         return mk_spin(value, min, max, step, (decimals or 0) > 0, tooltip, function(self)
