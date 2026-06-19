@@ -45,6 +45,34 @@ the template.
 > header comment ("deliberately hand-rolled rather than using dxgui's native
 > `Slider`, because …") so the choice is discoverable at the code, not only here.
 
+## Decisions
+
+Calls made autonomously (the user opted out of spec/plan review via
+`/write-it`). Open questions: **none**.
+
+1. **Hand-rolled, not native `Slider`** — see the Decision section above; the
+   rationale is also recorded in the `sms_slider.lua` module header.
+2. **Scope: four rows** — radius, density, min-spacing, heading. Weight and seed
+   stay typed `SpinBox`es.
+3. **Density precision** — preserve the existing `SpinBox` semantics exactly:
+   `min 0.01`, `max 50`, drag `step 0.1`, value box `decimals 2`. Dragging lands
+   on `0.01 + 0.1·k`; the handle endpoints map exactly to `min`/`max` (quantize
+   then clamp). Typing accepts any in-range value (e.g. `1.0`). *(Chosen over a
+   clean-tenths grid so no existing behavior or the sparse `0.01` floor is lost.)*
+4. **Field rename** — `W.{radius,density,spacing,heading}_spin` → `*_slider`;
+   weight/seed keep `_spin`. Cosmetic churn accepted for readability.
+5. **Click-on-track jumps** the handle (standard slider feel) — included.
+6. **Typed values clamped, not step-snapped** — matches prior `SpinBox` typing;
+   canonical step-snap happens only on drag/track-click.
+7. **`set_value()` does not fire `on_change`** — matches `splitter:set_value`.
+8. **Defaults** — `value_w = 52` px, handle width ≈ 10 px; `decimals`: radius 0,
+   density 2, spacing 0, heading 0.
+9. **Graceful fallback** — `mk_slider` falls back to `mk_spin` when
+   `sms_slider.new` returns `nil` (headless/stripped VM), so the readers always
+   see a `getValue`.
+10. **No new version** — part of the unreleased `0.27.0`; CHANGELOG line added
+    under the existing entry, not a new version header.
+
 ## The widget — `sms_slider.lua`
 
 Composite widget following the `clearable_edit` idiom: it parents **three
