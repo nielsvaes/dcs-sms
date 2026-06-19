@@ -241,6 +241,50 @@ function M.splitter()
     }
 end
 
+-- Slider track + handle skins for sms_slider.lua. The track is a thin
+-- recessed groove (a dark Static fill, like separator() but a few px tall);
+-- the handle is a lighter neutral knob (like splitter()'s grab bar). dxgui
+-- has no setCursor, so the visible handle is the only drag affordance.
+function M.slider_track()
+    return {
+        skinData = {
+            states = {
+                released = {
+                    [1] = {
+                        bkg = {
+                            center_center = '0x00000070',
+                            file          = '',
+                            insets = { bottom = 0, left = 0, right = 0, top = 0 },
+                        },
+                    },
+                },
+            },
+            type = 'Static',
+        },
+        version = 1,
+    }
+end
+
+function M.slider_handle()
+    return {
+        skinData = {
+            states = {
+                released = {
+                    [1] = {
+                        bkg = {
+                            center_center = '0x9aa0a6ff',
+                            file          = '',
+                            insets = { bottom = 0, left = 0, right = 0, top = 0 },
+                        },
+                    },
+                },
+            },
+            type = 'Static',
+        },
+        version = 1,
+    }
+end
+
 -- ToggleButton skin for the Mass Edit window's scope tab strip
 -- (Group/Unit/Waypoint/Zone/Drawing). Clones toggleButtonSkin_ME for the
 -- working 9-slice + chunky button image structure (a hand-rolled bkg with

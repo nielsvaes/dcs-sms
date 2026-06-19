@@ -15,6 +15,8 @@ package.preload['dcs_sms_me.sms_skins'] = function()
         coal_red     = function() sms_calls.coal_red     = sms_calls.coal_red     + 1; return { __skin = 'sms_coal_red' } end,
         coal_blue    = function() sms_calls.coal_blue    = sms_calls.coal_blue    + 1; return { __skin = 'sms_coal_blue' } end,
         coal_neutral = function() sms_calls.coal_neutral = sms_calls.coal_neutral + 1; return { __skin = 'sms_coal_neutral' } end,
+        slider_track  = function() return { __skin = 'sms_slider_track' } end,
+        slider_handle = function() return { __skin = 'sms_slider_handle' } end,
     }
 end
 
@@ -125,6 +127,22 @@ do
     skin_helper.apply(w, 'staticSkin_ME')
     check('stock skin: setSkin applied',
           w._applied and w._applied.__skin == 'staticSkin_ME')
+end
+
+-- Case 9: sms_slider_track routes to sms_skins.slider_track().
+do
+    local w = make_widget()
+    skin_helper.apply(w, 'sms_slider_track')
+    check('sms_slider_track: setSkin applied',
+          w._applied and w._applied.__skin == 'sms_slider_track')
+end
+
+-- Case 10: sms_slider_handle routes to sms_skins.slider_handle().
+do
+    local w = make_widget()
+    skin_helper.apply(w, 'sms_slider_handle')
+    check('sms_slider_handle: setSkin applied',
+          w._applied and w._applied.__skin == 'sms_slider_handle')
 end
 
 if failures > 0 then print(failures .. ' failure(s)'); os.exit(1) end
