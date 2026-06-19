@@ -407,6 +407,20 @@ local function purge_registry(group_set)
     W.registry = kept
 end
 
+-- A registry group is "live" only while the running mission still indexes THIS
+-- exact table by name. After a mission reload — flying then exiting a mission,
+-- File>New, File>Open — the ME rebuilds every mission table, so the references
+-- we stored at paint time are orphaned: Mission.group_by_name then holds a
+-- different table (or nil). Feeding a stale group to remove_group_map_objects
+-- reaches into freed C++ map objects and HARD-CRASHES DCS (a native fault that
+-- pcall cannot catch), so the removal path must detect staleness in pure Lua.
+local function group_is_live(Mission, g)
+    if g == nil or type(Mission) ~= 'table' then return false end
+    return type(Mission.group_by_name) == 'table'
+       and Mission.group_by_name[g.name] == g
+end
+M._group_is_live = group_is_live
+
 -- Fast batch removal for tool-placed statics. ED's Mission.remove_group
 -- costs ~100 ms per group — it rescans every other group's tasks and
 -- refreshes the Unit List on each call (measured: 147 statics in 16.3 s).
@@ -419,11 +433,22 @@ end
 -- Returns (removed_set, errors): set keyed by group table for the ones
 -- actually removed.
 local function batch_remove_groups(groups)
-    local removed, errors = {}, 0
+    local removed, errors, stale = {}, 0, {}
     local ok_m, Mission = pcall(require, 'me_mission')
-    if not ok_m then return removed, #(groups or {}) end
+    if not ok_m then return removed, #(groups or {}), stale end
     local MapWindow; pcall(function() MapWindow = require('me_map_window') end)
     for _, g in ipairs(groups or {}) do
+        if not group_is_live(Mission, g) then
+            -- Mission was reloaded since this static was painted (flew + exited
+            -- a mission, File>New/Open): the table is orphaned and its map
+            -- objects were freed. Touching the C++ map layer here HARD-CRASHES
+            -- DCS — pcall cannot catch a native fault — so skip removal entirely
+            -- and just forget it (returned in `stale` so the caller drops it
+            -- from the registry).
+            stale[g] = true
+            log_write(log.INFO, 'batch remove: skipping stale group "'
+                .. tostring(g and g.name) .. '" (mission reloaded since paint)')
+        else
         local ok = pcall(function()
             -- Selection hygiene (mirrors Mission.remove_group): if the
             -- group is part of the live selection / mounted panel, detach
@@ -474,16 +499,18 @@ local function batch_remove_groups(groups)
             end
         end)
         if ok then removed[g] = true else errors = errors + 1 end
+        end
     end
     pcall(function() _G.panel_units_list.update() end)
-    return removed, errors
+    return removed, errors, stale
 end
 
 undo.register_handler('paint_statics', function(payload)
     if type(payload) ~= 'table' then return nil, 'bad paint undo payload' end
     if payload.kind == 'paint' then
-        local removed, errors = batch_remove_groups(payload.groups)
+        local removed, errors, stale = batch_remove_groups(payload.groups)
         purge_registry(removed)
+        purge_registry(stale)
         return true, errors > 0 and (errors .. ' partial failures') or nil
     end
     if payload.kind == 'erase' then
@@ -934,7 +961,7 @@ local function erase_step(wx, wy)
     if #hits == 0 then return 0 end
     local groups = {}
     for _, e in ipairs(hits) do groups[#groups + 1] = e.group end
-    local removed = batch_remove_groups(groups)
+    local removed, _errors, stale = batch_remove_groups(groups)
     for _, e in ipairs(hits) do
         if removed[e.group] then
             W.erase_snapshots[#W.erase_snapshots + 1] = {
@@ -945,6 +972,7 @@ local function erase_step(wx, wy)
         end
     end
     purge_registry(removed)
+    purge_registry(stale)
     return #hits
 end
 
