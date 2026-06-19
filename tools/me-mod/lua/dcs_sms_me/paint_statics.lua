@@ -43,6 +43,7 @@ local Grid;           do local ok, m = pcall(require, 'Grid');           if ok t
 local GridHeaderCell; do local ok, m = pcall(require, 'GridHeaderCell'); if ok then GridHeaderCell = m end end
 
 local sms_window     = require('dcs_sms_me.sms_window')
+local sms_slider = require('dcs_sms_me.sms_slider')
 local sms_skins;     do local ok, m = pcall(require, 'dcs_sms_me.sms_skins'); if ok then sms_skins = m end end
 local skin_helper;   do local ok, m = pcall(require, 'dcs_sms_me.skin_helper'); if ok then skin_helper = m end end
 local clearable_edit; do local ok, m = pcall(require, 'dcs_sms_me.clearable_edit'); if ok then clearable_edit = m end end
@@ -91,9 +92,9 @@ local W = {
     sep2 = nil,
     country_label = nil, country_combo = nil, country_filter_btn = nil,
     name_label = nil, name_input = nil,
-    radius_label = nil, radius_spin = nil,
-    density_label = nil, density_spin = nil,
-    spacing_label = nil, spacing_spin = nil,
+    radius_label = nil, radius_slider = nil,
+    density_label = nil, density_slider = nil,
+    spacing_label = nil, spacing_slider = nil,
     paint_btn = nil,
 
     -- catalog state
@@ -122,7 +123,7 @@ local W = {
         seed        = 12345,
     },
     erase_toggle = nil,
-    heading_toggle = nil, heading_label = nil, heading_spin = nil,
+    heading_toggle = nil, heading_label = nil, heading_slider = nil,
     seed_check = nil, seed_spin = nil,
 
     -- paint state
@@ -190,9 +191,9 @@ local function get_mode()
     return on and 'erase' or 'paint'
 end
 
-local function get_radius()      return math.max(1, spin_value(W.radius_spin, W.cfg.radius)) end
-local function get_density()     return math.max(0.01, spin_value(W.density_spin, W.cfg.density)) end
-local function get_min_spacing() return math.max(0, spin_value(W.spacing_spin, W.cfg.min_spacing)) end
+local function get_radius()      return math.max(1, spin_value(W.radius_slider, W.cfg.radius)) end
+local function get_density()     return math.max(0.01, spin_value(W.density_slider, W.cfg.density)) end
+local function get_min_spacing() return math.max(0, spin_value(W.spacing_slider, W.cfg.min_spacing)) end
 local function get_name_pattern()
     return edit_text(W.name_input, W.cfg.name)
 end
@@ -207,7 +208,7 @@ local function get_heading_policy()
         end
     end)
     if random then return 'random' end
-    return spin_value(W.heading_spin, W.cfg.heading_deg) % 360
+    return spin_value(W.heading_slider, W.cfg.heading_deg) % 360
 end
 
 -- Optional reproducible-scatter seed; nil = unseeded (fresh each stroke).
@@ -1232,20 +1233,20 @@ local function relayout(x, y, w, h)
     cur_y = cur_y + ROW_PITCH
 
     set(W.radius_label, x, cur_y, label_w, ROW_H)
-    set(W.radius_spin, input_x, cur_y, 90, ROW_H)
+    set(W.radius_slider, input_x, cur_y, input_w, ROW_H)
     cur_y = cur_y + ROW_PITCH
 
     set(W.density_label, x, cur_y, label_w, ROW_H)
-    set(W.density_spin, input_x, cur_y, 90, ROW_H)
+    set(W.density_slider, input_x, cur_y, input_w, ROW_H)
     cur_y = cur_y + ROW_PITCH
 
     set(W.spacing_label, x, cur_y, label_w, ROW_H)
-    set(W.spacing_spin, input_x, cur_y, 90, ROW_H)
+    set(W.spacing_slider, input_x, cur_y, input_w, ROW_H)
     cur_y = cur_y + ROW_PITCH
 
     set(W.heading_toggle, x, cur_y, 130, ROW_H)
     set(W.heading_label, x + 140, cur_y, 70, ROW_H)
-    set(W.heading_spin, x + 214, cur_y, 90, ROW_H)
+    set(W.heading_slider, x + 214, cur_y, w - 214, ROW_H)
     cur_y = cur_y + ROW_PITCH
 
     set(W.seed_check, x, cur_y, 130, ROW_H)
@@ -1333,6 +1334,24 @@ local function build_window()
         end
         insert(s)
         return s
+    end
+
+    -- Build an sms_slider for a numeric setting, falling back to a native
+    -- SpinBox (via mk_spin) when the slider widget is unavailable (headless /
+    -- stripped VM). Either backend exposes getValue/setValue, so the readers
+    -- below don't care which one they got. on_change always receives the
+    -- numeric value.
+    local function mk_slider(value, min, max, step, decimals, tooltip, on_change)
+        local sl = sms_slider and sms_slider.new(W.window, {
+            initial = value, min = min, max = max, step = step,
+            decimals = decimals, tooltip = tooltip,
+            on_change = function(v) if on_change then on_change(v) end end,
+        })
+        if sl then return sl end
+        return mk_spin(value, min, max, step, (decimals or 0) > 0, tooltip, function(self)
+            local v = tonumber(self.getValue and self:getValue()) or value
+            if on_change then on_change(v) end
+        end)
     end
 
     -- A selectable 2-column grid (mirrors prefab_manager's pattern: Grid's
@@ -1542,19 +1561,19 @@ local function build_window()
     W.name_input = mk_edit('', 'Name for painted statics. {n} = running index (Barrel-{n} → Barrel-01). Empty = type name.')
 
     W.radius_label  = mk_label('Brush radius (m):')
-    W.radius_spin   = mk_spin(W.cfg.radius, 1, 2000, 5, false, 'Brush circle radius in meters', function(self)
-        pcall(function() W.cfg.radius = math.max(1, tonumber(self:getValue()) or W.cfg.radius) end)
+    W.radius_slider = mk_slider(W.cfg.radius, 1, 2000, 5, 0, 'Brush circle radius in meters', function(v)
+        W.cfg.radius = math.max(1, v)
         if W.armed then resize_brush_overlay() end
     end)
 
     W.density_label = mk_label('Density /100m²:')
-    W.density_spin  = mk_spin(W.cfg.density, 0.01, 50, 0.1, true, 'Target statics per 100 m² (a 10×10 m square)', function(self)
-        pcall(function() W.cfg.density = math.max(0.01, tonumber(self:getValue()) or W.cfg.density) end)
+    W.density_slider = mk_slider(W.cfg.density, 0.01, 50, 0.1, 2, 'Target statics per 100 m² (a 10×10 m square)', function(v)
+        W.cfg.density = math.max(0.01, v)
     end)
 
     W.spacing_label = mk_label('Min spacing (m):')
-    W.spacing_spin  = mk_spin(W.cfg.min_spacing, 0, 500, 1, false, 'Minimum distance between painted statics, meters', function(self)
-        pcall(function() W.cfg.min_spacing = tonumber(self:getValue()) or W.cfg.min_spacing end)
+    W.spacing_slider = mk_slider(W.cfg.min_spacing, 0, 500, 1, 0, 'Minimum distance between painted statics, meters', function(v)
+        W.cfg.min_spacing = v
     end)
 
     -- Heading row: random toggle (default ON) + fixed-degrees spin used
@@ -1576,8 +1595,8 @@ local function build_window()
         insert(W.heading_toggle)
     end
     W.heading_label = mk_label('Fixed (°):')
-    W.heading_spin  = mk_spin(W.cfg.heading_deg, 0, 359, 1, false, 'Fixed heading in degrees (used when Random heading is off)', function(self)
-        pcall(function() W.cfg.heading_deg = (tonumber(self:getValue()) or 0) % 360 end)
+    W.heading_slider = mk_slider(W.cfg.heading_deg, 0, 359, 1, 0, 'Fixed heading in degrees (used when Random heading is off)', function(v)
+        W.cfg.heading_deg = v % 360
     end)
 
     -- Seed row: opt-in reproducible scatter.
@@ -1772,15 +1791,15 @@ end
 function M._debug_set_brush(radius, density, spacing)
     if radius then
         W.cfg.radius = radius
-        pcall(function() if W.radius_spin and W.radius_spin.setValue then W.radius_spin:setValue(radius) end end)
+        pcall(function() if W.radius_slider and W.radius_slider.setValue then W.radius_slider:setValue(radius) end end)
     end
     if density then
         W.cfg.density = density
-        pcall(function() if W.density_spin and W.density_spin.setValue then W.density_spin:setValue(density) end end)
+        pcall(function() if W.density_slider and W.density_slider.setValue then W.density_slider:setValue(density) end end)
     end
     if spacing then
         W.cfg.min_spacing = spacing
-        pcall(function() if W.spacing_spin and W.spacing_spin.setValue then W.spacing_spin:setValue(spacing) end end)
+        pcall(function() if W.spacing_slider and W.spacing_slider.setValue then W.spacing_slider:setValue(spacing) end end)
     end
     return { ok = true, radius = get_radius(), density = get_density(), spacing = get_min_spacing() }
 end
@@ -1793,8 +1812,8 @@ function M._debug_set_cfg(tbl)
         if tbl.heading_random ~= nil and W.heading_toggle and W.heading_toggle.setState then
             W.heading_toggle:setState(tbl.heading_random == true)
         end
-        if tbl.heading_deg and W.heading_spin and W.heading_spin.setValue then
-            W.heading_spin:setValue(tbl.heading_deg)
+        if tbl.heading_deg and W.heading_slider and W.heading_slider.setValue then
+            W.heading_slider:setValue(tbl.heading_deg)
         end
         if tbl.seed_on ~= nil and W.seed_check and W.seed_check.setState then
             W.seed_check:setState(tbl.seed_on == true)
