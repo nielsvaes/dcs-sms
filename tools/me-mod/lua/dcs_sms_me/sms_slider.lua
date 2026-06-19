@@ -1,6 +1,6 @@
 -- sms_slider.lua — a horizontal slider for the DCS-SMS tool windows: a track
 -- + a draggable handle + an editable numeric value box, kept two-way in sync
--- (drag the handle / click the track, OR type a number — they stay equal).
+-- (drag the handle, OR type a number — they stay equal).
 --
 -- DELIBERATELY HAND-ROLLED rather than using dxgui's native `Slider`.
 -- Nothing else in this mod uses ED's Slider; every house widget (sms_window,
@@ -17,11 +17,14 @@
 --                 top); the dragged element, captures the mouse.
 --   * value box — an EditBox at the right edge showing/accepting the value.
 --
--- Coordinates: like splitter.lua, the x passed to addMouseMoveCallback is
--- ALREADY window-coords. We map it against the track's stored window-x to a
--- fraction along the track. captureMouse/releaseMouse keep the drag alive
--- when the cursor leaves the handle. dxgui has no setCursor, so the visible
--- handle is the only affordance (same as splitter).
+-- Coordinates: like splitter.lua, dragging is RELATIVE — on mouse-down we
+-- record the grab x and the value at that moment; each move adds
+-- (mouse_x - grab_x) / track_w of the value range. This is origin-independent,
+-- so it works wherever the tool window sits: the mouse-event x is in window
+-- space, which does NOT share an origin with the widget's parent-relative
+-- bounds, so an absolute map would pin the handle to an end. captureMouse/
+-- releaseMouse keep the drag alive when the cursor leaves the handle. dxgui
+-- has no setCursor, so the visible handle is the only affordance.
 --
 -- Public:
 --   M.new(parent_raw, opts) -> panel | nil   (nil if Static/EditBox absent)
@@ -29,7 +32,7 @@
 --   panel: set_bounds, get_value, set_value, set_range, set_enabled,
 --          set_visible/show/hide, widget, is_dragging
 --          + camelCase aliases setBounds/setVisible/setEnabled/getValue/setValue
---   M._math: clamp, quantize, value_to_frac, handle_x, x_to_value (pure; tested)
+--   M._math: clamp, quantize, value_to_frac, handle_x, drag_value (pure; tested)
 
 local skin_helper = require('dcs_sms_me.skin_helper')
 
@@ -73,18 +76,19 @@ local function handle_x(value, min, max, track_x, track_w, handle_w)
     return clamp(left, track_x, track_x + math.max(0, track_w - handle_w))
 end
 
--- Map a window mouse-x to a value: fraction along the track, scaled to
--- [min,max], quantized to step, clamped to range.
-local function x_to_value(mouse_x, min, max, track_x, track_w, step)
-    local w    = math.max(1, track_w)
-    local frac = clamp((mouse_x - track_x) / w, 0, 1)
-    local v    = min + frac * (max - min)
+-- Relative drag: from the value at drag-start and the pixel delta since the
+-- grab point, return the new value. delta_px / track_w is the fraction of the
+-- range moved. Origin-independent (no absolute coordinate alignment needed),
+-- then quantized to step and clamped to range.
+local function drag_value(start_value, delta_px, min, max, track_w, step)
+    local w = math.max(1, track_w)
+    local v = start_value + (delta_px / w) * (max - min)
     return clamp(quantize(v, min, step), min, max)
 end
 
 M._math = {
     clamp = clamp, quantize = quantize, value_to_frac = value_to_frac,
-    handle_x = handle_x, x_to_value = x_to_value,
+    handle_x = handle_x, drag_value = drag_value,
 }
 
 -- ---------------------------------------------------------------------------
@@ -125,6 +129,7 @@ function M.new(parent_raw, opts)
         _value     = 0,
         _dragging  = false,
         _enabled   = true,
+        _start_mx  = 0, _start_value = 0,
         _track_x   = nil, _track_w = nil, _row_y = nil, _row_h = nil,
         _suppress_box_cb = false,
     }
@@ -164,21 +169,21 @@ function M.new(parent_raw, opts)
         if changed and self._on_change then pcall(self._on_change, v) end
     end
 
-    function self:_apply_mouse_x(mouse_x)
-        if not self._track_w then return end
-        self:_set_from_interaction(
-            x_to_value(mouse_x, self._min, self._max, self._track_x, self._track_w, self._step))
-    end
-
-    -- Drag state machine (exposed for tests; the dxgui callbacks below wrap it).
+    -- Drag state machine (exposed for tests; the dxgui callbacks below wrap
+    -- it). Relative: begin records the grab point + value; each move applies
+    -- the pixel delta since the grab — no absolute coordinate mapping, so it
+    -- is immune to where the tool window sits on screen.
     function self:_begin_drag(mouse_x)
         if not self._enabled then return end
-        self._dragging = true
-        self:_apply_mouse_x(mouse_x)   -- jump to the cursor (click-to-position)
+        self._dragging    = true
+        self._start_mx    = mouse_x
+        self._start_value = self._value
     end
     function self:_drag_to(mouse_x)
-        if not self._dragging then return end
-        self:_apply_mouse_x(mouse_x)
+        if not self._dragging or not self._track_w then return end
+        self:_set_from_interaction(
+            drag_value(self._start_value, mouse_x - self._start_mx,
+                       self._min, self._max, self._track_w, self._step))
     end
     function self:_end_drag()
         if not self._dragging then return end
@@ -262,9 +267,9 @@ function M.new(parent_raw, opts)
         end)
     end
 
-    -- Drag wiring shared by the handle and the track (click-on-track jumps,
-    -- then continues as a drag). Each callback pcall'd so a stripped VM never
-    -- throws at construction.
+    -- Drag wiring shared by the handle and the track: a press starts a
+    -- relative drag from the current value; moving adjusts it. Each callback
+    -- pcall'd so a stripped VM never throws at construction.
     local function wire_drag(widget)
         if widget.addMouseDownCallback then
             pcall(widget.addMouseDownCallback, widget, function(ws, mx, my, button)

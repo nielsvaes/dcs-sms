@@ -92,12 +92,13 @@ do
     check('handle_x at max clamps inside', m.handle_x(100, 0, 100, 0, 100, 10) == 90)
     check('handle_x mid centers', m.handle_x(50, 0, 100, 0, 100, 10) == 45)
 
-    -- x_to_value: track_x=0 track_w=100 step=1
-    check('x_to_value left = min', m.x_to_value(0, 0, 100, 0, 100, 1) == 0)
-    check('x_to_value right = max', m.x_to_value(100, 0, 100, 0, 100, 1) == 100)
-    check('x_to_value mid = 50', m.x_to_value(50, 0, 100, 0, 100, 1) == 50)
-    check('x_to_value past right clamps', m.x_to_value(9999, 0, 100, 0, 100, 1) == 100)
-    check('x_to_value quantizes', m.x_to_value(53, 0, 100, 0, 100, 5) == 55)
+    -- drag_value: start_value, delta_px, min, max, track_w, step
+    check('drag_value no delta = start', m.drag_value(20, 0, 0, 100, 100, 1) == 20)
+    check('drag_value +50px over 100px = +50', m.drag_value(20, 50, 0, 100, 100, 1) == 70)
+    check('drag_value negative delta', m.drag_value(60, -40, 0, 100, 100, 1) == 20)
+    check('drag_value clamps to max', m.drag_value(90, 9999, 0, 100, 100, 1) == 100)
+    check('drag_value clamps to min', m.drag_value(10, -9999, 0, 100, 100, 1) == 0)
+    check('drag_value quantizes', m.drag_value(0, 53, 0, 100, 100, 5) == 55)
 end
 
 -- ---------------------------------------------------------------------------
@@ -135,7 +136,8 @@ do
 end
 
 -- ---------------------------------------------------------------------------
--- Drag maps mouse-x → value, fires on_change, rewrites the box
+-- Drag is RELATIVE: begin records the grab; moving applies the pixel delta.
+-- The absolute grab x is irrelevant (origin-independent) — that's the fix.
 -- ---------------------------------------------------------------------------
 do
     fresh()
@@ -147,15 +149,17 @@ do
     })
     -- w=152 → track_w = 152-52-6 = 94, track_x = 0
     s:set_bounds(0, 0, 152, 22)
-    s:_begin_drag(47)            -- ~middle of the 94px track
+    s:_begin_drag(500)           -- grab at an arbitrary window-x
     check('begin_drag sets dragging', s:is_dragging() == true)
-    check('drag to mid ≈ 50', s:get_value() == 50)
+    check('begin_drag does NOT jump the value', s:get_value() == 0)
+    s:_drag_to(500 + 47)         -- +47px over the 94px track = +0.5 range = +50
+    check('drag +47px ≈ +50', s:get_value() == 50)
     check('drag fired on_change with 50', calls[#calls] == 50)
     check('drag rewrote the value box', last_box._text == '50')
-    s:_drag_to(0)
-    check('drag to left = min', s:get_value() == 0)
-    s:_drag_to(9999)
-    check('drag past right = max', s:get_value() == 100)
+    s:_drag_to(500 - 9999)       -- far left
+    check('drag far left = min', s:get_value() == 0)
+    s:_drag_to(500 + 9999)       -- far right
+    check('drag far right = max', s:get_value() == 100)
     s:_end_drag()
     check('end_drag clears dragging', s:is_dragging() == false)
 end
@@ -212,17 +216,19 @@ do
 end
 
 -- ---------------------------------------------------------------------------
--- dxgui wiring: mouse-down on the handle captures + drags; up releases
+-- dxgui wiring: mouse-down on the handle captures, move drags, up releases
 -- ---------------------------------------------------------------------------
 do
     fresh()
     local s = slider.new(new_parent(), { initial = 0, min = 0, max = 100, step = 1, value_w = 52 })
     local handle = statics[2]
     s:set_bounds(0, 0, 152, 22)
-    for _, cb in ipairs(handle._md) do cb(handle, 47, 0, 1) end
+    for _, cb in ipairs(handle._md) do cb(handle, 300, 0, 1) end
     check('mouse-down captures', handle._captured == true)
-    check('mouse-down drags to ≈50', s:get_value() == 50)
-    for _, cb in ipairs(handle._mu) do cb(handle, 47, 0, 1) end
+    check('mouse-down does not jump', s:get_value() == 0)
+    for _, cb in ipairs(handle._mm) do cb(handle, 300 + 47, 0) end
+    check('mouse-move +47px drags to ≈50', s:get_value() == 50)
+    for _, cb in ipairs(handle._mu) do cb(handle, 347, 0, 1) end
     check('mouse-up releases', handle._released == true)
     check('mouse-up not dragging', s:is_dragging() == false)
 end
@@ -241,13 +247,16 @@ do
     s:set_bounds(0, 0, 152, 22)
     s:set_enabled(false)
     check('set_enabled(false) disables the track', track._enabled == false)
-    for _, cb in ipairs(track._md) do cb(track, 47, 0, 1) end
-    check('disabled: track click does not change value', s:get_value() == 0)
-    check('disabled: track click did not capture', track._captured == false)
+    for _, cb in ipairs(track._md) do cb(track, 300, 0, 1) end
+    for _, cb in ipairs(track._mm) do cb(track, 347, 0) end
+    check('disabled: drag does not change value', s:get_value() == 0)
+    check('disabled: drag did not capture', track._captured == false)
+    check('disabled: not dragging', s:is_dragging() == false)
     check('disabled: on_change not fired', #calls == 0)
     s:set_enabled(true)
-    for _, cb in ipairs(track._md) do cb(track, 47, 0, 1) end
-    check('re-enabled: track click changes value', s:get_value() == 50)
+    for _, cb in ipairs(track._md) do cb(track, 300, 0, 1) end
+    for _, cb in ipairs(track._mm) do cb(track, 347, 0) end
+    check('re-enabled: drag changes value', s:get_value() == 50)
 end
 
 -- ---------------------------------------------------------------------------
@@ -282,17 +291,19 @@ do
 end
 
 -- ---------------------------------------------------------------------------
--- dxgui wiring on the TRACK (click-on-track jumps + captures)
+-- dxgui wiring on the TRACK: press starts a relative drag, move adjusts
 -- ---------------------------------------------------------------------------
 do
     fresh()
     local s = slider.new(new_parent(), { initial = 0, min = 0, max = 100, step = 1, value_w = 52 })
     local track = statics[1]
     s:set_bounds(0, 0, 152, 22)
-    for _, cb in ipairs(track._md) do cb(track, 47, 0, 1) end
+    for _, cb in ipairs(track._md) do cb(track, 300, 0, 1) end
     check('track mouse-down captures', track._captured == true)
-    check('track mouse-down jumps to ≈50', s:get_value() == 50)
-    for _, cb in ipairs(track._mu) do cb(track, 47, 0, 1) end
+    check('track mouse-down does not jump', s:get_value() == 0)
+    for _, cb in ipairs(track._mm) do cb(track, 347, 0) end
+    check('track move +47px drags to ≈50', s:get_value() == 50)
+    for _, cb in ipairs(track._mu) do cb(track, 347, 0, 1) end
     check('track mouse-up releases', track._released == true)
 end
 

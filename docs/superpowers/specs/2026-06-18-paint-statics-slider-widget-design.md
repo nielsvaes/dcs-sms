@@ -61,7 +61,13 @@ Calls made autonomously (the user opted out of spec/plan review via
    clean-tenths grid so no existing behavior or the sparse `0.01` floor is lost.)*
 4. **Field rename** — `W.{radius,density,spacing,heading}_spin` → `*_slider`;
    weight/seed keep `_spin`. Cosmetic churn accepted for readability.
-5. **Click-on-track jumps** the handle (standard slider feel) — included.
+5. **Relative dragging (origin-independent)** — press the handle (or track) and
+   drag; the value moves by the pixel delta `(mouse_x − grab_x) / track_w ×
+   range`, exactly like `splitter.lua`. The ME mouse-event x is in window space
+   and does **not** share an origin with the widget's parent-relative bounds, so
+   an absolute map pins the handle to an end. (The original click-to-jump idea
+   was dropped for this reason — it needs absolute coords the ME doesn't give us
+   cleanly.)
 6. **Typed and programmatic values clamped, not step-snapped** — typing, the
    `initial` default, and `set_value` clamp to range but are NOT snapped to
    `step`; only drag / track-click quantize to the step grid. Matches the prior
@@ -141,12 +147,14 @@ Within the `(x, y, w, h)` box:
 
 ### Two-way sync semantics
 
-- **Drag handle** → `value = quantize(x_to_value(mouse_x), min, step)`; reposition
-  handle, rewrite value box (formatted to `decimals`), fire `on_change`. Uses
-  `captureMouse`/`releaseMouse` and treats the move-callback `x` as already in
-  window coords — the exact lesson documented in `splitter.lua`.
-- **Click on track** → jump the handle to that position (same path as a drag
-  step), then the user may continue dragging. Standard slider feel.
+- **Drag handle** → on press, record the grab x and current value; each move
+  sets `value = quantize(start_value + (mouse_x − grab_x)/track_w × (max−min),
+  step)`; reposition handle, rewrite value box (formatted to `decimals`), fire
+  `on_change`. **Relative deltas, not absolute mapping** — origin-independent,
+  the lesson `splitter.lua` documents. Uses `captureMouse`/`releaseMouse` so the
+  drag survives the cursor leaving the handle.
+- **Press on track** → starts a relative drag from the current value (no
+  jump-to-click); drag from there to adjust.
 - **Type in value box** → parse; if a valid number, clamp to `[min, max]`,
   set the value, reposition the handle, fire `on_change`. Typed values are
   **clamped to range but NOT step-snapped** (so `1.0` density survives even with
@@ -165,8 +173,9 @@ exposed on the module for tests (e.g. under `M._math`):
 ```lua
 clamp(v, lo, hi)                                   -> number
 quantize(v, min, step)                             -> number   -- snap to min + k*step, no range clamp
-value_to_x(value, min, max, track_x, track_w, handle_w) -> number  -- handle left px
-x_to_value(mouse_x, min, max, track_x, track_w, handle_w, step) -> number -- quantized value
+value_to_frac(value, min, max)                     -> number   -- 0..1 along the range
+handle_x(value, min, max, track_x, track_w, handle_w) -> number  -- handle left px
+drag_value(start_value, delta_px, min, max, track_w, step) -> number -- relative drag → quantized+clamped value
 ```
 
 Edge cases the math must handle: `min == max` (zero range → handle pinned, no
@@ -222,8 +231,8 @@ are untouched.
 
 ## Tests & docs
 
-- **`test_sms_slider.lua`** — pure-math unit tests (`quantize`, `value_to_x`,
-  `x_to_value`, `clamp`, and the edge cases above). Modeled on
+- **`test_sms_slider.lua`** — pure-math unit tests (`quantize`, `value_to_frac`,
+  `handle_x`, `drag_value`, `clamp`, and the edge cases above). Modeled on
   `test_splitter.lua`'s harness; runs in the headless Lua 5.1 VM with no DCS
   modules.
 - **Register it in `tools/me-mod/test/run-tests.ps1`** — the runner uses a
