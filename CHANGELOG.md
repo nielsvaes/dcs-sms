@@ -105,6 +105,75 @@ This is the first tag after a long quiet period — `sms.version` had been froze
 
 ## ME-mod
 
+### [Unreleased]
+
+**Added**
+- `me coords magvar` — new verb. Magnetic-declination query wrapping DCS's
+  own `magvar` module (the one the ME waypoint panel uses). Accepts
+  `--north/--east` (converted via Terrain) or `--lat/--lon` and returns
+  `decl_deg` (East +, West −) alongside `decl_rad`. The value is
+  date-dependent (IGRF against the open mission's date), so it removes the
+  need for an external IGRF implementation in calling scripts. gh #73
+  (request 1).
+
+**Changed**
+- `exec --target gui` help and docs clarified — `--target` now spells out
+  that `gui` runs arbitrary ME Lua, with worked examples (including the
+  magvar query). The DCS waypoint speed convention is now documented in the
+  `route get` / `route list` / `waypoint get` synopses: a waypoint's
+  speed/ETA is the on-arrival (inbound-leg) value, and WP0 / the last
+  waypoint carry placeholder speeds. Docs regenerated. gh #73 (request 4 +
+  addendum).
+
+**Fixed**
+- **`me waypoint get` / `me route get` no longer time out on deeply nested
+  shared AI task trees.** `strip_back_refs` re-cloned shared sub-tables once
+  per reference path, so a deeply nested shared structure (seen on some
+  red-side AI task trees) expanded exponentially and blew past the exec
+  timeout — a depth-22 diamond measured ~20 s. A node budget now caps
+  expansion and leaves a `__truncated__` marker instead of hanging; normal
+  routes (~1.6k nodes) are far under the cap and unaffected. gh #73
+  (request 6).
+- **`me drawing` `--vertices` now rejects locale comma-decimal
+  coordinates.** A vertex carrying a comma decimal (`230006,5,...`) split
+  into the wrong field count and could silently produce a wrong drawing. The
+  parser now rejects it with a hint naming the cause, and the flag help
+  calls out the `.`-decimal requirement. gh #73 (request 7).
+- **`status` now reports the real `mission_loaded` / `mission_name` while a
+  mission is open in the ME.** The ME-mod heartbeat hardcoded
+  `mission_loaded:false` / `mission_name:""`, and `ReadMerged` only sourced
+  those fields from `hook.json` — which the editor env never populates — so
+  `status` showed `mission_loaded:false` and an empty name even with a saved
+  mission open. `bridge.lua` now reads `me_mission` in `write_heartbeat`
+  (`mission_loaded` tracks whether a mission table is open; `mission_name`
+  is the basename of `mission.path`, empty only for a never-saved mission),
+  and `ReadMerged` sources mission info from the heartbeat that owns the
+  current environment — `hook.json` while in-mission, `me.json` in the
+  editor — so a stale `hook.json` left by `onSimulationStop` can't clobber
+  the editor's correct value. gh #74.
+- **Community tab refresh no longer aborts with "connect: Invalid argument".**
+  The non-blocking HTTPS transport polls by re-calling `sock:connect()` each
+  tick until it stops reporting "still connecting". On Windows the
+  in-progress call reports `WSAEALREADY`, but Winsock remaps it to
+  `WSAEINVAL` ("Invalid argument") for backward compat — and some
+  VPN/AV/LSP shims do the same. That string wasn't whitelisted, so Refresh
+  aborted instantly with "Refresh failed: connect: Invalid argument —
+  showing cached catalog" on affected machines. "Invalid argument" is now
+  whitelisted alongside the other in-progress codes; the existing
+  `MAX_POLLS` budget still caps a genuinely stuck connect.
+
+**Internal**
+- Extracted the shared sortable-grid plumbing into
+  `dcs_sms_me/sms_grid.lua`: `build_grid` (Grid + `sms_skins.grid()` +
+  optional `sms_scrollbars`), `wire_sortable_headers` (header cells + the
+  asc/desc toggle state machine, with state kept caller-side via
+  `get_sort`/`on_sort` callbacks and an `is_sortable` per-column opt-out),
+  and `update_header_labels` (the ▲/▼ re-text). Prefab Manager, Mass Edit,
+  and Trigger Finder all migrated onto it; each window keeps its own
+  comparator, row model, and `onMouseDown` since those genuinely diverge.
+  New `test_sms_grid.lua` covers construction, the toggle state machine, the
+  `is_sortable` opt-out, and the arrows. gh #75.
+
 ### [0.26.0] — 2026-06-16
 
 **Added**
