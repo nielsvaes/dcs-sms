@@ -344,6 +344,16 @@ end
 -- rate (from the DB, not hardcoded) and skip per-call country lookups.
 -- ---------------------------------------------------------------------------
 
+-- Persistent paint marker. Every static this tool paints gets this suffix on
+-- its name; the name is part of the real .miz schema, so it survives the save-
+-- regeneration that wipes custom unit/group/mission fields. The erase registry
+-- is rebuilt from the live mission's marked statics after any reload (see
+-- rebuild_registry_from_marked) — that is what makes erase-by-painting persist
+-- across fly->exit and save->reopen. A static is "ours" iff its name CONTAINS
+-- this marker (the ME's name-dedup can append " #2" after it).
+local MARKER = '_sms'
+M._MARKER = MARKER
+
 -- Build + inject one static group with an exact name. Shared by the paint
 -- commit (name from expand_name) and the erase-undo restore (original name).
 local function inject_static(group_name, p, country)
@@ -391,7 +401,7 @@ local function inject_static(group_name, p, country)
 end
 
 local function commit_placement(p, country, name_pattern)
-    return inject_static(expand_name(name_pattern, p.type), p, country)
+    return inject_static(expand_name(name_pattern, p.type) .. MARKER, p, country)
 end
 
 -- ---------------------------------------------------------------------------
@@ -941,11 +951,43 @@ local function end_stroke()
     return #groups, failed
 end
 
+-- Rebuild the erase registry from the live mission's marked statics. After
+-- flying+exiting a mission (or reopening a saved one) the ME rebuilds every
+-- mission table, orphaning the references stored at paint time. Re-scanning the
+-- live mission for statics whose name carries MARKER and rebuilding the registry
+-- to point at the LIVE tables restores erase-by-painting with no stale refs.
+-- Called at the start of every erase stroke. Returns the rebuilt registry.
+local function rebuild_registry_from_marked()
+    local reg = {}
+    H.walk_groups(function(g, country, _side, cat)
+        if cat == 'static' and type(g.name) == 'string'
+           and g.name:find(MARKER, 1, true) then
+            local u = (g.units and g.units[1]) or {}
+            reg[#reg + 1] = {
+                group       = g,
+                x           = g.x or u.x,
+                y           = g.y or u.y,
+                type        = u.type,
+                shape_name  = u.shape_name,
+                category    = u.category,
+                rate        = u.rate,
+                heading_deg = math.deg(u.heading or g.heading or 0),
+                name        = g.name,
+                country     = country and country.name,
+            }
+        end
+    end)
+    W.registry = reg
+    return reg
+end
+M._rebuild_registry_from_marked = rebuild_registry_from_marked
+
 -- ---------------------------------------------------------------------------
 -- Erase stroke: delete tool-placed statics under the brush. Only registry
 -- entries are candidates — hand-placed objects are never touched.
 -- ---------------------------------------------------------------------------
 local function begin_erase_stroke()
+    rebuild_registry_from_marked()
     W.erase_snapshots = {}
 end
 
