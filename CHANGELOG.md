@@ -113,7 +113,7 @@ This is the first tag after a long quiet period — `sms.version` had been froze
   - **Weighted palette**: add types from the catalog (button or double-click) or via the **eyedropper** ("Add selected from map"); each placement picks a type by weight.
   - Brush **radius**, **density** (statics per 100 m²), **min-spacing** (anti-overlap), **random or fixed heading**, and an optional **seed** for reproducible scatter.
   - **Country** selector and a **Name** field with `{n}` auto-indexing (`Barrel-{n}` → `Barrel-01`, `Barrel-02`, …).
-  - **Erase mode**: drag deletes statics this tool painted (never your hand-placed objects).
+  - **Erase mode**: drag deletes statics this tool painted (never your hand-placed objects) — and it persists, so you can still erase them by painting after flying + exiting a mission, or saving and reopening it later. Painted statics carry an `_sms` name suffix; each erase stroke re-finds them in the live mission. (Erasing painted statics after a test-fly previously crashed DCS; that path is also now safe.)
   - **One stroke = one undo** (Ctrl+Z): a paint stroke's undo removes everything it created; an erase stroke's undo restores what it deleted.
   - Editor-safe at scale: stroke commits are capped per drag event, and stroke removal uses a batched fast path (144 groups in 3 ms vs 16 s through per-group `Mission.remove_group`, measured).
   - **Slider controls**: Brush radius, density, min-spacing, and fixed heading are draggable sliders with an editable value box (drag to scrub, or type an exact value) instead of type-only spin boxes.
