@@ -105,7 +105,7 @@ This is the first tag after a long quiet period — `sms.version` had been froze
 
 ## ME-mod
 
-### [Unreleased]
+### [0.27.0] — 2026-06-20
 
 **Added**
 - `me coords magvar` — new verb. Magnetic-declination query wrapping DCS's
