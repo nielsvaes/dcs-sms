@@ -20,7 +20,7 @@ local cfg            = require('dcs_sms_me.community_config')
 -- never pass through distill). MUST match PREFAB_VERSION in
 -- prefab_distill.lua (both copies) — bumped together in the same
 -- change-set per AGENTS.md §4.
-local TRIGGERS_ONLY_PREFAB_VERSION = '0.5.0'
+local TRIGGERS_ONLY_PREFAB_VERSION = '0.6.0'
 
 local M = {}
 
@@ -645,6 +645,48 @@ function M._unrebase_mapData_geometry(mapData, ax, ay)
     end
 end
 
+-- Numeric ("0.5.0" < "0.6.0") dotted-version compare. Component-wise on the
+-- integer parts, so "0.10.0" is NOT < "0.6.0" (a lexical string compare would
+-- get that wrong). A missing/empty version sorts oldest. Used to gate legacy
+-- back-compat shims on strictly-older saves only — unlike a `~= "x"` check, it
+-- never mis-fires on a future format.
+function M._version_lt(a, b)
+    local function parse(s)
+        local out = {}
+        for n in tostring(s or ''):gmatch('%d+') do out[#out + 1] = tonumber(n) end
+        return out
+    end
+    local va, vb = parse(a), parse(b)
+    local n = math.max(#va, #vb)
+    for i = 1, n do
+        local ai, bi = va[i] or 0, vb[i] or 0
+        if ai ~= bi then return ai < bi end
+    end
+    return false
+end
+
+-- Pre-0.6.0 back-compat: distill's rebase_xy used to subtract the centroid
+-- from an Escort/Follow task's formation offset (params.pos {x,y,z}) as if it
+-- were a world coordinate, corrupting the saved Distance/Elevation. Reverse it
+-- on place by adding (ax, ay) (= meta.world_anchor) back onto every such pos,
+-- reconstructing the true relative offset. The z (Interval) was never rebased,
+-- so it's left alone. Mirrors _unrebase_mapData_geometry; no-op when the walked
+-- table has no qualifying pos. Gated by M._version_lt on the placing side.
+function M._unrebase_task_pos(t, ax, ay)
+    if type(t) ~= 'table' then return end
+    for k, v in pairs(t) do
+        if type(v) == 'table' then
+            if k == 'pos' and type(v.x) == 'number'
+                    and type(v.y) == 'number' and type(v.z) == 'number' then
+                v.x = v.x + ax
+                v.y = v.y + ay
+            else
+                M._unrebase_task_pos(v, ax, ay)
+            end
+        end
+    end
+end
+
 -- Rotate every {x,y} pair inside mapData's geometry sub-arrays (points,
 -- arc_points, etc.) by rotation_deg around the local origin. mapData.{x,y}
 -- itself is the polygon's anchor and is NOT touched here — it rotates
@@ -896,10 +938,22 @@ local function transform_coords(t, anchor, rotation_deg)
     if type(t.x) == 'number' and type(t.y) == 'number' then
         t.x, t.y = M._place_xy(t.x, t.y, anchor, rotation_deg)
     end
-    for _, v in pairs(t) do
-        if type(v) == 'table' then transform_coords(v, anchor, rotation_deg) end
+    for k, v in pairs(t) do
+        if type(v) == 'table' then
+            -- Skip a task-param formation offset (Escort/Follow etc.): a
+            -- relative {x,y,z} vector in the escorted group's frame (Distance/
+            -- Elevation/Interval), NOT a world coordinate. Anchoring it here
+            -- blows Distance/Elevation up to map scale on placement — the
+            -- mirror image of the rebase_xy skip in prefab_distill.lua. Real
+            -- map positions are pure 2D {x,y}; the numeric z is the tell.
+            if not (k == 'pos' and type(v.x) == 'number'
+                    and type(v.y) == 'number' and type(v.z) == 'number') then
+                transform_coords(v, anchor, rotation_deg)
+            end
+        end
     end
 end
+M._transform_coords = transform_coords
 
 -- Compose the prefab's stored heading (degrees, written by distill's
 -- rad→deg conversion) with the placement rotation (degrees), then convert
@@ -1452,6 +1506,20 @@ function M.place(prefab, opts)
     -- known-id-bearing field via _remap_ids, then inject_group runs without
     -- re-allocating ids or nilling links.
 
+    -- Pre-0.6.0 back-compat: reconstruct escort/follow formation offsets that
+    -- older distill corrupted by rebasing params.pos as if it were a world
+    -- coordinate (see M._unrebase_task_pos). We add meta.world_anchor back onto
+    -- each pos before transform_coords (which now leaves pos alone). Gated so
+    -- correctly-saved 0.6.0+ prefabs are never touched. wa_x/wa_y = 0 when the
+    -- prefab has no anchor, making the shim a no-op regardless.
+    local pfver = (prefab.meta and prefab.meta.sms_prefab_version) or ''
+    local needs_pos_unrebase = M._version_lt(pfver, '0.6.0')
+    local wa_x, wa_y = 0, 0
+    if prefab.meta and prefab.meta.world_anchor then
+        wa_x = prefab.meta.world_anchor.x or 0
+        wa_y = prefab.meta.world_anchor.y or 0
+    end
+
     -- Pass A: deep-copy + transform every group/static into "placeable"
     -- entries. Keeps the per-group injection loop below working off the same
     -- copies _remap_ids will walk.
@@ -1459,6 +1527,7 @@ function M.place(prefab, opts)
     local function add_placeable(template, kind)
         local g = deep_copy(template)
         override_country(g, opts.country_name)
+        if needs_pos_unrebase then M._unrebase_task_pos(g, wa_x, wa_y) end
         transform_coords(g, anchor, rotation)
         transform_headings(g, rotation)
         placeable[#placeable + 1] = { template = template, copy = g, kind = kind }

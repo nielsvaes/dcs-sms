@@ -169,6 +169,81 @@ do
           'got ' .. tostring(g4.heading))
 end
 
+-- Escort/Follow formation offset: transform_coords must NOT move a task's
+-- params.pos. It's a relative {x,y,z} vector in the escorted group's frame
+-- (Distance / Elevation / Interval), not a world coordinate. Rebasing it on
+-- save + re-anchoring it here made Distance/Elevation blow up to map scale on
+-- placement — interval survived only because it's pos.z, outside the {x,y}
+-- pair. See the Tanker+Escort prefab bug.
+do
+    local g = {
+        x = 100, y = 200,
+        units = { { x = 100, y = 200 } },
+        route = { points = { [1] = {
+            x = 100, y = 200,
+            task = { params = { tasks = { [1] = {
+                id = 'Escort',
+                params = { groupId = 5, pos = { x = -304.8, y = 45.72, z = 91.44 } },
+            } } } },
+        } } },
+    }
+    prefab_ops._transform_coords(g, { x = 1000, y = 2000 }, 0)
+    -- Real map coords ARE transformed (relative + anchor).
+    check('escort place: group xy transformed',
+          approx(g.x, 1100) and approx(g.y, 2200), 'got ' .. g.x .. ', ' .. g.y)
+    check('escort place: unit xy transformed',
+          approx(g.units[1].x, 1100) and approx(g.units[1].y, 2200),
+          'got ' .. g.units[1].x .. ', ' .. g.units[1].y)
+    check('escort place: waypoint xy transformed',
+          approx(g.route.points[1].x, 1100) and approx(g.route.points[1].y, 2200),
+          'got ' .. g.route.points[1].x .. ', ' .. g.route.points[1].y)
+    -- The formation offset is left exactly as-is.
+    local pos = g.route.points[1].task.params.tasks[1].params.pos
+    check('escort place: task pos.x untouched', approx(pos.x, -304.8), 'got ' .. pos.x)
+    check('escort place: task pos.y untouched', approx(pos.y, 45.72), 'got ' .. pos.y)
+    check('escort place: task pos.z untouched', approx(pos.z, 91.44), 'got ' .. pos.z)
+end
+
+-- Version gate for the legacy pos un-rebase: fires only on prefabs older than
+-- the fix (0.6.0). Unset/empty counts as oldest. Numeric (not lexical) compare
+-- so it never mis-fires on a future 0.10.0 — and never on the fixed format.
+do
+    check('version_lt: "0.5.0" < "0.6.0"', prefab_ops._version_lt('0.5.0', '0.6.0') == true)
+    check('version_lt: "" (unset) < "0.6.0"', prefab_ops._version_lt('', '0.6.0') == true)
+    check('version_lt: "0.1.0" < "0.6.0"', prefab_ops._version_lt('0.1.0', '0.6.0') == true)
+    check('version_lt: "0.6.0" not < "0.6.0"', prefab_ops._version_lt('0.6.0', '0.6.0') == false)
+    check('version_lt: "0.7.0" not < "0.6.0"', prefab_ops._version_lt('0.7.0', '0.6.0') == false)
+    check('version_lt: "0.10.0" not < "0.6.0" (numeric, not lexical)',
+          prefab_ops._version_lt('0.10.0', '0.6.0') == false)
+end
+
+-- Legacy migration: prefabs saved before the pos fix stored the escort/follow
+-- formation offset with the centroid already subtracted (the rebase_xy bug).
+-- On place, un-rebase adds meta.world_anchor back to reconstruct the true
+-- offset. Mirrors the 0.1.0 mapData un-rebase shim. Only a pos {x,y,z} is
+-- touched; real anchor-relative coords are left alone.
+do
+    local g = {
+        x = -50, y = -50,   -- a real anchor-relative coord; must NOT change
+        route = { points = { [1] = { task = { params = { tasks = { [1] = {
+            id = 'Escort',
+            params = { pos = { x = -37672.04, y = -10053.43, z = 91.44 } },
+        } } } } } } },
+    }
+    prefab_ops._unrebase_task_pos(g, 37367.24, 10099.15)
+    local pos = g.route.points[1].task.params.tasks[1].params.pos
+    check('unrebase pos.x: -37672.04 + 37367.24 ≈ -304.8', approx(pos.x, -304.8, 0.01), 'got ' .. pos.x)
+    check('unrebase pos.y: -10053.43 + 10099.15 ≈ 45.72', approx(pos.y, 45.72, 0.01), 'got ' .. pos.y)
+    check('unrebase pos.z untouched', approx(pos.z, 91.44), 'got ' .. pos.z)
+    check('unrebase: real coord g.x untouched', g.x == -50, 'got ' .. g.x)
+
+    -- No pos → no-op, no error.
+    local g2 = { x = 0, y = 0, units = { { x = 1, y = 2 } } }
+    prefab_ops._unrebase_task_pos(g2, 100, 200)
+    check('unrebase: group without pos is a no-op',
+          g2.units[1].x == 1 and g2.units[1].y == 2)
+end
+
 -- Bounding box: AABB over every entity's position, in the prefab's
 -- anchor-relative frame (the frame distill produces).
 do

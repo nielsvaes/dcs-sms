@@ -123,7 +123,7 @@ local tbl, berr = prefab_ops.build_trigger_prefab('My Triggers', payload)
 check(tbl ~= nil and berr == nil, 'build_trigger_prefab ok')
 check(tbl.meta.name == 'My Triggers' and tbl.meta.world_anchor == nil,
       'triggers-only meta has no world_anchor')
-check(tbl.meta.sms_prefab_version == '0.5.0', 'triggers-only stamps 0.5.0')
+check(tbl.meta.sms_prefab_version == '0.6.0', 'triggers-only stamps 0.6.0')
 check(#tbl.groups == 0 and #tbl.zones == 0 and #tbl.drawings == 0 and #tbl.statics == 0,
       'entity arrays empty')
 check(#tbl.triggers == 1, 'triggers present')

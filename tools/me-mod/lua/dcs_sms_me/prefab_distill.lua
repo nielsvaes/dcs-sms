@@ -30,7 +30,12 @@ local M = {}
 -- → { id, display_name, objects, count }), attached by the ME save path after
 -- distill. Loaders that pre-date 0.5.0 ignore it; 0.5.0 loads older files
 -- unchanged. See docs/superpowers/specs/2026-06-11-prefab-mod-dependencies-design.md.
-local PREFAB_VERSION = "0.5.0"
+-- 0.6.0: distill no longer rebases an Escort/Follow task's formation offset
+-- (`params.pos` {x,y,z}) — it's a relative vector, not a world coordinate, and
+-- subtracting the centroid corrupted the saved Distance/Elevation. Files saved
+-- at ≤0.5.0 have the corrupted offset; me-mod's place path keeps a compensating
+-- un-rebase shim for those (M._unrebase_task_pos), gated on this version field.
+local PREFAB_VERSION = "0.6.0"
 
 -- Shape-inference catalog. Currently empty; mirrors framework's
 -- sms.K.statics population (also currently empty). If the framework adds
@@ -157,6 +162,14 @@ local function rebase_xy(t, ax, ay)
                     v.x = v.x - ax
                     v.y = v.y - ay
                 end
+            elseif k == 'pos' and type(v.x) == 'number'
+                    and type(v.y) == 'number' and type(v.z) == 'number' then
+                -- Task-param formation offset (Escort/Follow etc.): a relative
+                -- {x,y,z} vector in the escorted group's frame (Distance/
+                -- Elevation/Interval), NOT a world coordinate. Rebasing its x/y
+                -- corrupts the saved Distance/Elevation (Interval/z was spared
+                -- only by sitting outside the {x,y} pair). Real map positions
+                -- are pure 2D {x,y}; the numeric z is the tell. Leave untouched.
             else
                 rebase_xy(v, ax, ay)
             end

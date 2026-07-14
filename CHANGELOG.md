@@ -105,6 +105,22 @@ This is the first tag after a long quiet period — `sms.version` had been froze
 
 ## ME-mod
 
+### [Unreleased]
+
+**Fixed**
+- **Escort/Follow formation offsets no longer blow up when a prefab is saved
+  and re-placed.** A group with an Escort task (Advanced waypoint action) stores
+  its Distance/Elevation/Interval as a relative `params.pos` `{x,y,z}` vector,
+  not a world coordinate. Prefab save (`distill`'s `rebase_xy`) subtracted the
+  centroid from it and place (`transform_coords`) added the new anchor back, so
+  dropping the prefab anywhere but its exact origin sent Distance/Elevation to
+  map scale (e.g. −1000 ft → 131234 ft); Interval survived only because it maps
+  to `pos.z`, outside the rebased `{x,y}` pair. Both walkers now skip a task's
+  formation `pos`. The prefab format is bumped to **0.6.0**; prefabs saved at
+  ≤0.5.0 carry the corrupted offset, so place reconstructs the true value by
+  adding `meta.world_anchor` back (version-gated shim, mirroring the 0.1.0
+  drawing-vertex fix) — existing escort prefabs self-heal on next placement.
+
 ### [0.27.0] — 2026-06-20
 
 **Added**

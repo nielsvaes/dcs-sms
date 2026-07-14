@@ -44,6 +44,10 @@ local function check(name, ok, msg)
     end
 end
 
+local function approx(a, b)
+    return type(a) == 'number' and math.abs(a - b) <= 1e-6
+end
+
 local function load_dump(path)
     local f = assert(loadfile(path))
     return f()
@@ -125,6 +129,63 @@ do
               and fw_out.groups[1].mapObjects == nil,
           'framework distill left mapObjects in the output')
     assert_parity('mapObjects parity', with_mo, {name='strip-mo'})
+end
+
+-- Case 8: escort/follow formation offset. distill's rebase_xy must NOT
+-- subtract the centroid from a task's params.pos — it's a relative {x,y,z}
+-- vector, not a world coordinate. Rebasing corrupted the saved Distance/
+-- Elevation (z Interval was spared only by sitting outside the {x,y} pair).
+-- The waypoint's own coords in the same task ARE rebased. Both copies must
+-- behave identically. See the Tanker+Escort prefab bug.
+do
+    local dump = {
+        groups = {
+            {
+                name = 'Escort-1', x = 1000, y = 2000,
+                units = { { name = 'E1', type = 'FA-18C_hornet', x = 1000, y = 2000, heading = 0 } },
+                route = { points = {
+                    [1] = { x = 1000, y = 2000, task = { id = 'ComboTask', params = { tasks = {} } } },
+                    [2] = { x = 1000, y = 2000, task = { id = 'ComboTask', params = { tasks = {
+                        [1] = { id = 'Escort', number = 1, enabled = true, auto = false,
+                                params = { groupId = 5, engagementDistMax = 60000,
+                                           pos = { x = -304.8, y = 45.72, z = 91.44 } } },
+                    } } } },
+                } },
+            },
+        },
+    }
+
+    local function escort_pos(out)
+        local ok, pos = pcall(function()
+            return out.groups[1].route.points[2].task.params.tasks[1].params.pos
+        end)
+        return ok and pos or nil
+    end
+    local function wp2(out)
+        local ok, p = pcall(function() return out.groups[1].route.points[2] end)
+        return ok and p or nil
+    end
+
+    local mem = memod_distill(dump, { name = 'escort' })
+    local fw  = fw_distill(dump,    { name = 'escort' })
+    local mpos, fpos = escort_pos(mem), escort_pos(fw)
+
+    check('escort distill: me-mod keeps pos.x (not rebased)',
+          mpos and approx(mpos.x, -304.8), 'got ' .. tostring(mpos and mpos.x))
+    check('escort distill: me-mod keeps pos.y (not rebased)',
+          mpos and approx(mpos.y, 45.72), 'got ' .. tostring(mpos and mpos.y))
+    check('escort distill: framework keeps pos.x (not rebased)',
+          fpos and approx(fpos.x, -304.8), 'got ' .. tostring(fpos and fpos.x))
+    check('escort distill: framework keeps pos.y (not rebased)',
+          fpos and approx(fpos.y, 45.72), 'got ' .. tostring(fpos and fpos.y))
+    -- Sanity: the waypoint's own coords WERE rebased (centroid 1000,2000 → 0,0),
+    -- proving the skip is targeted at pos, not a blanket no-op.
+    local w = wp2(mem)
+    check('escort distill: waypoint xy still rebased to origin',
+          w and approx(w.x, 0) and approx(w.y, 0),
+          'got ' .. tostring(w and w.x) .. ', ' .. tostring(w and w.y))
+
+    assert_parity('escort pos parity', dump, { name = 'escort' })
 end
 
 if failures > 0 then
