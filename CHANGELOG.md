@@ -105,7 +105,7 @@ This is the first tag after a long quiet period — `sms.version` had been froze
 
 ## ME-mod
 
-### [Unreleased]
+### [0.27.1] — 2026-07-14
 
 **Fixed**
 - **Escort/Follow formation offsets no longer blow up when a prefab is saved
