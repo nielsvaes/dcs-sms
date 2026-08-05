@@ -20,7 +20,7 @@ local cfg            = require('dcs_sms_me.community_config')
 -- never pass through distill). MUST match PREFAB_VERSION in
 -- prefab_distill.lua (both copies) — bumped together in the same
 -- change-set per AGENTS.md §4.
-local TRIGGERS_ONLY_PREFAB_VERSION = '0.6.0'
+local TRIGGERS_ONLY_PREFAB_VERSION = '0.7.0'
 
 local M = {}
 
@@ -687,6 +687,25 @@ function M._unrebase_task_pos(t, ax, ay)
     end
 end
 
+-- Pre-0.7.0 back-compat: distill's rebase_xy used to subtract the prefab
+-- centroid from a polygon ("quad") trigger zone's `points` as if they were
+-- world coordinates. They are vertices relative to the zone's own {x,y} centre,
+-- so the subtraction corrupted them. Reverse it on place by adding (ax, ay)
+-- (= meta.world_anchor) back onto every vertex, reconstructing the true
+-- relative offset. Mirrors _unrebase_task_pos / _unrebase_mapData_geometry;
+-- no-op for circle zones (no `points`). Gated by M._version_lt on the placing
+-- side. Deliberately NOT recursive: only a trigger zone's own top-level
+-- vertex list was ever corrupted this way.
+function M._unrebase_zone_points(zone, ax, ay)
+    if type(zone) ~= 'table' or type(zone.points) ~= 'table' then return end
+    for _, p in ipairs(zone.points) do
+        if type(p) == 'table' and type(p.x) == 'number' and type(p.y) == 'number' then
+            p.x = p.x + ax
+            p.y = p.y + ay
+        end
+    end
+end
+
 -- Rotate every {x,y} pair inside mapData's geometry sub-arrays (points,
 -- arc_points, etc.) by rotation_deg around the local origin. mapData.{x,y}
 -- itself is the polygon's anchor and is NOT touched here — it rotates
@@ -878,7 +897,12 @@ M._find_missing_types = find_missing_types  -- exposed for tests
 --
 --  groups   — group's own (x, y) plus each unit's (x, y).
 --  statics  — same shape as groups (statics inject as type='static' groups).
---  zones    — zone center expanded by its radius.
+--  zones    — polygon ("quad") zones: centre + each vertex in `points`, which
+--             is the shape actually drawn. Its `radius` is only an icon /
+--             hit-test hint for a polygon and can be far smaller than the
+--             quad itself, so measuring by radius under-reported the footprint.
+--             Circle zones (and degenerate polygons with no usable vertices)
+--             still expand the centre by radius.
 --  drawings — mapData.x/y plus every point inside mapData.points (deltas
 --             from the polygon anchor).
 function M.compute_bbox(prefab)
@@ -907,11 +931,32 @@ function M.compute_bbox(prefab)
     end
     for _, g in ipairs(prefab.groups   or {}) do walk_group(g) end
     for _, s in ipairs(prefab.statics  or {}) do walk_group(s) end
+    -- Legacy (≤0.6.0) saves stored polygon vertices with the prefab centroid
+    -- subtracted; place heals them via _unrebase_zone_points, and we must apply
+    -- the same correction here or the preview overlay balloons to map scale.
+    local zdx, zdy = 0, 0
+    if M._version_lt((prefab.meta and prefab.meta.sms_prefab_version) or '', '0.7.0')
+        and prefab.meta and prefab.meta.world_anchor
+    then
+        zdx = prefab.meta.world_anchor.x or 0
+        zdy = prefab.meta.world_anchor.y or 0
+    end
     for _, z in ipairs(prefab.zones    or {}) do
         if type(z.x) == 'number' and type(z.y) == 'number' then
-            local r = tonumber(z.radius) or 0
-            add(z.x - r, z.y - r)
-            add(z.x + r, z.y + r)
+            local verts = 0
+            if type(z.points) == 'table' then
+                for _, p in ipairs(z.points) do
+                    if type(p) == 'table' and type(p.x) == 'number' and type(p.y) == 'number' then
+                        add(z.x + p.x + zdx, z.y + p.y + zdy)
+                        verts = verts + 1
+                    end
+                end
+            end
+            if verts == 0 then
+                local r = tonumber(z.radius) or 0
+                add(z.x - r, z.y - r)
+                add(z.x + r, z.y + r)
+            end
         end
     end
     for _, d in ipairs(prefab.drawings or {}) do
@@ -954,6 +999,40 @@ local function transform_coords(t, anchor, rotation_deg)
     end
 end
 M._transform_coords = transform_coords
+
+-- Place a trigger zone. A polygon ("quad", type 2) zone stores its vertices in
+-- `points` RELATIVE to the zone's own {x,y} centre, exactly as a drawing stores
+-- mapData vertices relative to its anchor — the ME renders vertex i at
+-- zone.x + points[i].x. So the centre goes through the normal transform, while
+-- the vertices are only ROTATED (about the local origin, which rotates the
+-- polygon about its own centre) and never translated. Feeding the whole zone to
+-- transform_coords added the drop anchor to every vertex too, leaving the
+-- polygon offset from its centre by exactly the placement delta — the mirror
+-- image of the rebase_zone skip in prefab_distill.lua.
+--
+-- Circle zones have no `points`; this reduces to plain transform_coords.
+-- Handled here rather than by keying on `points` inside transform_coords,
+-- because other `points` arrays in a prefab DO hold world coordinates (route
+-- waypoints, the unit-level threat-ring render cache) and must keep moving.
+function M._transform_zone(zone, anchor, rotation_deg)
+    if type(zone) ~= 'table' then return end
+    local verts = zone.points
+    zone.points = nil
+    transform_coords(zone, anchor, rotation_deg)
+    zone.points = verts
+
+    local deg = rotation_deg or 0
+    if type(verts) ~= 'table' or deg == 0 then return end
+    local rad = deg * (math.pi / 180)
+    local cs, sn = math.cos(rad), math.sin(rad)
+    for _, p in ipairs(verts) do
+        if type(p) == 'table' and type(p.x) == 'number' and type(p.y) == 'number' then
+            local px, py = p.x, p.y
+            p.x = px * cs - py * sn
+            p.y = px * sn + py * cs
+        end
+    end
+end
 
 -- Compose the prefab's stored heading (degrees, written by distill's
 -- rad→deg conversion) with the placement rotation (degrees), then convert
@@ -1512,8 +1591,14 @@ function M.place(prefab, opts)
     -- each pos before transform_coords (which now leaves pos alone). Gated so
     -- correctly-saved 0.6.0+ prefabs are never touched. wa_x/wa_y = 0 when the
     -- prefab has no anchor, making the shim a no-op regardless.
+    --
+    -- Same story one version later for polygon ("quad") trigger-zone vertices:
+    -- distill rebased `zone.points` as if they were world coordinates right up
+    -- to and including 0.6.0, so ≤0.6.0 saves need meta.world_anchor added back
+    -- before _transform_zone (which now leaves the vertices unmoved).
     local pfver = (prefab.meta and prefab.meta.sms_prefab_version) or ''
     local needs_pos_unrebase = M._version_lt(pfver, '0.6.0')
+    local needs_zone_unrebase = M._version_lt(pfver, '0.7.0')
     local wa_x, wa_y = 0, 0
     if prefab.meta and prefab.meta.world_anchor then
         wa_x = prefab.meta.world_anchor.x or 0
@@ -1721,10 +1806,14 @@ function M.place(prefab, opts)
         end
     end
 
-    -- Zones.
+    -- Zones. A polygon zone's `points` are vertices relative to the zone's own
+    -- centre, so placement transforms the centre but only rotates the vertices
+    -- — see M._transform_zone. Pre-0.7.0 saves have those vertices corrupted by
+    -- the old rebase and get healed first.
     for _, z_template in ipairs(prefab.zones or {}) do
         local z = deep_copy(z_template)
-        transform_coords(z, anchor, rotation)
+        if needs_zone_unrebase then M._unrebase_zone_points(z, wa_x, wa_y) end
+        M._transform_zone(z, anchor, rotation)
         local id, err = inject_zone(z)
         if id then
             record.zones[#record.zones + 1] = { orig_name = z_template.name, runtime_id = id }

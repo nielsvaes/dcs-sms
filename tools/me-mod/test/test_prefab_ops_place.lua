@@ -244,6 +244,123 @@ do
           g2.units[1].x == 1 and g2.units[1].y == 2)
 end
 
+-- Polygon (quad) trigger zone vertices. A zone's `points` are stored RELATIVE
+-- to the zone's own {x,y} center — the same invariant drawings keep for
+-- mapData — so placement must rotate them about the local origin but must NOT
+-- add the drop anchor. Adding it left the polygon offset from its own centre
+-- by exactly the placement delta (anchor − world_anchor), while the zone's
+-- circle icon landed correctly. Circle zones have no `points` and were fine.
+do
+    -- Rotation 0: vertices unchanged, centre transformed.
+    local z = {
+        x = 100, y = 200, radius = 3000, type = 2,
+        points = { { x = -3000, y = -3000 }, { x = 3000, y = -3000 },
+                   { x = 3000, y = 3000 },   { x = -3000, y = 3000 } },
+    }
+    prefab_ops._transform_zone(z, { x = 1000, y = 2000 }, 0)
+    check('quad zone: centre transformed (100,200)+(1000,2000) → (1100,2200)',
+          approx(z.x, 1100) and approx(z.y, 2200), 'got ' .. z.x .. ', ' .. z.y)
+    check('quad zone rot 0: vertex 1 stays relative (-3000,-3000)',
+          approx(z.points[1].x, -3000) and approx(z.points[1].y, -3000),
+          'got ' .. z.points[1].x .. ', ' .. z.points[1].y)
+    check('quad zone rot 0: vertex 3 stays relative (3000,3000)',
+          approx(z.points[3].x, 3000) and approx(z.points[3].y, 3000),
+          'got ' .. z.points[3].x .. ', ' .. z.points[3].y)
+
+    -- Rotation 90: vertices rotate about the zone centre, not about the anchor.
+    local z2 = {
+        x = 0, y = 0, radius = 100, type = 2,
+        points = { { x = 100, y = 0 }, { x = 0, y = 100 } },
+    }
+    prefab_ops._transform_zone(z2, { x = 5000, y = 6000 }, 90)
+    check('quad zone rot 90: centre (0,0) → anchor (5000,6000)',
+          approx(z2.x, 5000) and approx(z2.y, 6000), 'got ' .. z2.x .. ', ' .. z2.y)
+    check('quad zone rot 90: vertex (100,0) → (0,100), still relative',
+          approx(z2.points[1].x, 0) and approx(z2.points[1].y, 100),
+          'got ' .. z2.points[1].x .. ', ' .. z2.points[1].y)
+    check('quad zone rot 90: vertex (0,100) → (-100,0), still relative',
+          approx(z2.points[2].x, -100) and approx(z2.points[2].y, 0),
+          'got ' .. z2.points[2].x .. ', ' .. z2.points[2].y)
+
+    -- Circle zone: no points, behaves exactly as before.
+    local z3 = { x = -50, y = 25, radius = 500, type = 0 }
+    prefab_ops._transform_zone(z3, { x = 1000, y = 1000 }, 0)
+    check('circle zone: centre transformed, no points key introduced',
+          approx(z3.x, 950) and approx(z3.y, 1025) and z3.points == nil,
+          'got ' .. z3.x .. ', ' .. z3.y)
+end
+
+-- Legacy migration: prefabs saved before this fix (<= 0.6.0) had the prefab
+-- centroid subtracted from every polygon-zone vertex by distill's rebase_xy.
+-- On place, un-rebase adds meta.world_anchor back to reconstruct the true
+-- relative vertex. Mirrors the pos / mapData shims. Values below are the real
+-- ones from the quad_zone_test repro prefab.
+do
+    local z = {
+        x = 78.985142857127, y = 3560.5106285714,   -- centre: correct, must NOT change
+        radius = 3000, type = 2,
+        points = {
+            { x = 287332.71954286, y = -645502.61714286 },
+            { x = 287431.37005714, y = -633254.03017143 },
+            { x = 293332.71954286, y = -639502.61714286 },
+            { x = 293298.0288,     y = -650482.09142857 },
+        },
+    }
+    prefab_ops._unrebase_zone_points(z, -290348.70948571, 642185.33897143)
+    check('unrebase zone: vertex 1 → (-3015.99, -3317.28)',
+          approx(z.points[1].x, -3015.99, 0.01) and approx(z.points[1].y, -3317.28, 0.01),
+          'got ' .. z.points[1].x .. ', ' .. z.points[1].y)
+    check('unrebase zone: vertex 4 → (2949.32, -8296.75)',
+          approx(z.points[4].x, 2949.32, 0.01) and approx(z.points[4].y, -8296.75, 0.01),
+          'got ' .. z.points[4].x .. ', ' .. z.points[4].y)
+    -- Recovered vertices must sum to ~0 — that is what "relative to the zone
+    -- centre" means, and it is how the bug was originally identified.
+    local sx, sy = 0, 0
+    for _, p in ipairs(z.points) do sx, sy = sx + p.x, sy + p.y end
+    check('unrebase zone: recovered vertices sum to (0,0)',
+          approx(sx, 0, 0.01) and approx(sy, 0, 0.01), 'got ' .. sx .. ', ' .. sy)
+    check('unrebase zone: centre untouched',
+          approx(z.x, 78.985142857127) and approx(z.y, 3560.5106285714),
+          'got ' .. z.x .. ', ' .. z.y)
+
+    -- Circle zone (no points) → no-op, no error.
+    local z2 = { x = 10, y = 20, radius = 500 }
+    prefab_ops._unrebase_zone_points(z2, 1000, 2000)
+    check('unrebase zone: circle zone is a no-op', z2.x == 10 and z2.y == 20)
+end
+
+-- Version gate for the zone-vertex un-rebase: fires on everything up to and
+-- including 0.6.0 (the whole history carried the bug), never on 0.7.0+.
+do
+    check('version_lt: "0.6.0" < "0.7.0"', prefab_ops._version_lt('0.6.0', '0.7.0') == true)
+    check('version_lt: "" (unset) < "0.7.0"', prefab_ops._version_lt('', '0.7.0') == true)
+    check('version_lt: "0.7.0" not < "0.7.0"', prefab_ops._version_lt('0.7.0', '0.7.0') == false)
+    check('version_lt: "0.10.0" not < "0.7.0" (numeric, not lexical)',
+          prefab_ops._version_lt('0.10.0', '0.7.0') == false)
+end
+
+-- End-to-end vertex math: the whole point of the fix. The ME renders a
+-- polygon vertex at zone.x + points[i].x, so after placing a prefab at an
+-- anchor the rendered vertex must sit at (original world vertex) + (anchor −
+-- world_anchor) — displaced by the placement delta exactly once, not twice.
+do
+    local K = { x = -290348.70948571, y = 642185.33897143 }  -- world_anchor
+    local A = { x = -200000, y = 700000 }                    -- drop anchor
+    -- Correctly-saved (0.7.0) zone: centre anchor-relative, vertices relative.
+    local z = { x = 78.985142857127, y = 3560.5106285714, radius = 3000, type = 2,
+                points = { { x = -3015.99, y = -3317.28 } } }
+    prefab_ops._transform_zone(z, A, 0)
+    local rendered_x = z.x + z.points[1].x
+    local rendered_y = z.y + z.points[1].y
+    -- Original world vertex = K + centre_rel + vertex_rel.
+    local orig_x = K.x + 78.985142857127 + (-3015.99)
+    local orig_y = K.y + 3560.5106285714 + (-3317.28)
+    check('e2e: rendered vertex = original + (anchor − world_anchor), once',
+          approx(rendered_x, orig_x + (A.x - K.x), 0.01)
+          and approx(rendered_y, orig_y + (A.y - K.y), 0.01),
+          'got ' .. rendered_x .. ', ' .. rendered_y)
+end
+
 -- Bounding box: AABB over every entity's position, in the prefab's
 -- anchor-relative frame (the frame distill produces).
 do
@@ -269,6 +386,75 @@ do
     check('empty prefab: bbox is nil', empty == nil)
 
     check('non-table prefab: bbox is nil', prefab_ops.compute_bbox('nope') == nil)
+end
+
+-- Bounding box, polygon zones: a quad zone's real footprint is its vertices,
+-- not its `radius` (which for a quad is only an icon/hit-test hint and can be
+-- far smaller than the polygon — 3000 vs ~8900 m in the quad_zone_test repro).
+-- Vertices are relative to the zone centre, so the extent is centre + vertex.
+do
+    local prefab = {
+        meta  = { name = 'quad', sms_prefab_version = '0.7.0' },
+        zones = {
+            { x = 100, y = 200, radius = 50, type = 2,   -- radius deliberately tiny
+              points = { { x = -1000, y = -2000 }, { x = 3000, y = -2000 },
+                         { x = 3000, y = 4000 },   { x = -1000, y = 4000 } } },
+        },
+    }
+    local bb = prefab_ops.compute_bbox(prefab)
+    check('bbox quad: min_x = 100 + (-1000)', bb and bb.min_x == -900, 'got ' .. tostring(bb and bb.min_x))
+    check('bbox quad: max_x = 100 + 3000',    bb and bb.max_x == 3100, 'got ' .. tostring(bb and bb.max_x))
+    check('bbox quad: min_y = 200 + (-2000)', bb and bb.min_y == -1800, 'got ' .. tostring(bb and bb.min_y))
+    check('bbox quad: max_y = 200 + 4000',    bb and bb.max_y == 4200, 'got ' .. tostring(bb and bb.max_y))
+
+    -- Circle zones keep the radius-expansion behaviour.
+    local circ = prefab_ops.compute_bbox({ meta = {}, zones = { { x = 0, y = 0, radius = 80 } } })
+    check('bbox circle: still radius-expanded to ±80',
+          circ and circ.min_x == -80 and circ.max_x == 80
+          and circ.min_y == -80 and circ.max_y == 80,
+          'got ' .. tostring(circ and circ.min_x) .. '..' .. tostring(circ and circ.max_x))
+
+    -- A polygon zone with an empty/degenerate points list falls back to radius
+    -- rather than contributing nothing.
+    local degen = prefab_ops.compute_bbox({ meta = {}, zones = { { x = 0, y = 0, radius = 25, type = 2, points = {} } } })
+    check('bbox quad: empty points falls back to radius',
+          degen and degen.min_x == -25 and degen.max_x == 25,
+          'got ' .. tostring(degen and degen.min_x))
+end
+
+-- Bounding box on a legacy (≤0.6.0) prefab: the stored vertices are corrupted
+-- by the old rebase, so compute_bbox must un-rebase them the same way place
+-- does before measuring — otherwise the place-at-click preview overlay would
+-- balloon to hundreds of km. Numbers are the real quad_zone_test values.
+do
+    local K = { x = -290348.70948571, y = 642185.33897143 }
+    local prefab = {
+        meta  = { name = 'legacy', sms_prefab_version = '0.6.0', world_anchor = K },
+        zones = {
+            { x = 78.985142857127, y = 3560.5106285714, radius = 3000, type = 2,
+              points = {
+                  { x = 287332.71954286, y = -645502.61714286 },
+                  { x = 287431.37005714, y = -633254.03017143 },
+                  { x = 293332.71954286, y = -639502.61714286 },
+                  { x = 293298.0288,     y = -650482.09142857 },
+              } },
+        },
+    }
+    local bb = prefab_ops.compute_bbox(prefab)
+    -- True relative vertices span x −3015.99..2984.01, y −8296.75..8931.31,
+    -- around centre (78.99, 3560.51).
+    check('bbox legacy quad: min_x ≈ 78.99 - 3015.99', bb and approx(bb.min_x, -2937.00, 0.01),
+          'got ' .. tostring(bb and bb.min_x))
+    check('bbox legacy quad: max_x ≈ 78.99 + 2984.01', bb and approx(bb.max_x, 3063.00, 0.01),
+          'got ' .. tostring(bb and bb.max_x))
+    check('bbox legacy quad: min_y ≈ 3560.51 - 8296.75', bb and approx(bb.min_y, -4736.24, 0.01),
+          'got ' .. tostring(bb and bb.min_y))
+    check('bbox legacy quad: max_y ≈ 3560.51 + 8931.31', bb and approx(bb.max_y, 12491.82, 0.01),
+          'got ' .. tostring(bb and bb.max_y))
+    -- Sanity: nowhere near the corrupted-vertex scale (hundreds of km).
+    check('bbox legacy quad: stays at prefab scale, not map scale',
+          bb and math.abs(bb.min_x) < 100000 and math.abs(bb.max_y) < 100000,
+          'got ' .. tostring(bb and bb.min_x) .. ', ' .. tostring(bb and bb.max_y))
 end
 
 -- Country override: stamps country_name + clears numeric country on the

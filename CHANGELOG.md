@@ -11,6 +11,17 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com). Both trac
 
 ## Framework
 
+### [Unreleased]
+
+**Fixed**
+- Quad-point trigger zones in prefabs are no longer double-translated. A
+  polygon zone's `points` are vertices relative to the zone's own `{x,y}`
+  centre, so `sms.prefab.distill` no longer rebases them and `sms.prefab.spawn`
+  only rotates them (about the zone centre) instead of anchoring each one. The
+  zone data returned by `sms.prefab.get_zones` / `get_zone` is now correct for
+  polygon zones placed away from their original position. Prefab format → 0.7.0;
+  see the ME-mod entry for the full write-up and the back-compat shim.
+
 ### [0.11.0] — 2026-05-07
 
 **Changed**
@@ -104,6 +115,34 @@ This is the first tag after a long quiet period — `sms.version` had been froze
 ---
 
 ## ME-mod
+
+### [Unreleased]
+
+**Fixed**
+- **Quad-point trigger zones no longer land offset when a prefab is placed.**
+  A polygon (type 2) zone stores its vertices in `points` *relative to the
+  zone's own `{x,y}` centre* — the ME renders vertex *i* at
+  `zone.x + points[i].x` — but prefab save (`distill`'s `rebase_xy`) subtracted
+  the prefab centroid from every vertex as if it were a world coordinate, and
+  place (`transform_coords`) added the drop anchor back. Dropping a prefab
+  anywhere but its exact origin therefore displaced the polygon from its own
+  centre by the placement delta, applied twice: the zone's circle icon landed
+  correctly while the quad rendered somewhere else. Circle zones carry no
+  `points` and were never affected. Save now leaves a zone's vertices alone
+  (`rebase_zone`), and place rotates them about the zone centre without
+  translating them (`_transform_zone`) — so a rotated prefab keeps its zone
+  aligned with the units inside it. The prefab format is bumped to **0.7.0**;
+  prefabs saved at ≤0.6.0 carry corrupted vertices, so place reconstructs them
+  by adding `meta.world_anchor` back (version-gated shim, mirroring the 0.6.0
+  escort-offset and 0.1.0 drawing-vertex fixes) — existing quad-zone prefabs
+  self-heal on next placement.
+- **The place-at-click preview overlay now covers a quad zone's real
+  footprint.** `compute_bbox` measured every zone as its centre expanded by
+  `radius`, but for a polygon zone `radius` is only an icon / hit-test hint and
+  can be much smaller than the shape itself (3000 m against a ~8900 m quad in
+  the repro prefab), so the preview under-reported the prefab's extent. Polygon
+  zones are now measured by their vertices; circle zones — and polygons with no
+  usable vertex list — keep the radius expansion.
 
 ### [0.27.1] — 2026-07-14
 

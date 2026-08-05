@@ -464,9 +464,27 @@ function sms.prefab.spawn(name, opts)
     end
 
     -- Zones: data-only. Transform coords; attach to handle.
+    --
+    -- A polygon ("quad") zone's `points` are vertices stored RELATIVE to the
+    -- zone's own {x,y} centre (consumers read a vertex as zone.x + points[i].x),
+    -- so only the centre is anchored; the vertices are rotated about the local
+    -- origin and never translated. Running apply_transform over the whole zone
+    -- added the anchor to every vertex too, displacing the polygon from its own
+    -- centre by the placement delta. Mirrors rebase_zone in prefab_distill.lua.
+    -- Circle zones have no `points` and take the plain path.
     for _, z in ipairs(template.zones or {}) do
         local copy = deep_copy(z)
+        local verts = copy.points
+        copy.points = nil
         apply_transform(copy, anchor_x, anchor_z, rotation)
+        copy.points = verts
+        if type(verts) == 'table' and rotation and rotation ~= 0 then
+            for _, p in ipairs(verts) do
+                if type(p) == 'table' and type(p.x) == 'number' and type(p.y) == 'number' then
+                    p.x, p.y = sms.prefab._rotate_xy(p.x, p.y, rotation)
+                end
+            end
+        end
         zones[#zones + 1] = copy
     end
 

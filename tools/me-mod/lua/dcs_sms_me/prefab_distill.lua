@@ -35,7 +35,14 @@ local M = {}
 -- subtracting the centroid corrupted the saved Distance/Elevation. Files saved
 -- at ≤0.5.0 have the corrupted offset; me-mod's place path keeps a compensating
 -- un-rebase shim for those (M._unrebase_task_pos), gated on this version field.
-local PREFAB_VERSION = "0.6.0"
+-- 0.7.0: distill no longer rebases a polygon ("quad") trigger zone's `points`
+-- — they are vertices stored relative to the zone's own {x,y} centre, not world
+-- coordinates, so subtracting the centroid corrupted them and place re-added
+-- the drop anchor, leaving the polygon offset from its own centre by exactly
+-- the placement delta. Files saved at ≤0.6.0 carry the corrupted vertices;
+-- me-mod's place path keeps a compensating un-rebase shim for those
+-- (M._unrebase_zone_points), gated on this version field.
+local PREFAB_VERSION = "0.7.0"
 
 -- Shape-inference catalog. Currently empty; mirrors framework's
 -- sms.K.statics population (also currently empty). If the framework adds
@@ -177,6 +184,25 @@ local function rebase_xy(t, ax, ay)
     end
 end
 
+-- Trigger-zone rebase. A polygon ("quad", type 2) zone stores its vertices in
+-- `points` RELATIVE to the zone's own {x,y} centre — the same invariant
+-- drawings keep for mapData — so only the centre may be rebased. Handing the
+-- whole zone to rebase_xy subtracted the centroid from every vertex too, and
+-- place then re-added the drop anchor, leaving the polygon offset from its own
+-- centre by exactly the placement delta (the zone's circle icon, driven by
+-- {x,y} alone, still landed correctly). Circle zones have no `points` and were
+-- never affected. Handled here at the call site rather than by keying on
+-- `points` inside rebase_xy, because other `points` arrays in a prefab DO hold
+-- world coordinates (route waypoints, the unit-level threat-ring render cache)
+-- and must keep being rebased.
+local function rebase_zone(z, ax, ay)
+    if type(z) ~= 'table' then return end
+    local verts = z.points
+    z.points = nil
+    rebase_xy(z, ax, ay)
+    z.points = verts
+end
+
 local function noop_log(...) end
 
 function M.distill(dump_or_path, opts)
@@ -284,7 +310,7 @@ function M.distill(dump_or_path, opts)
 
     for _, g in ipairs(clean_groups)   do rebase_xy(g, cx, cy) end
     for _, s in ipairs(clean_statics)  do rebase_xy(s, cx, cy) end
-    for _, z in ipairs(clean_zones)    do rebase_xy(z, cx, cy) end
+    for _, z in ipairs(clean_zones)    do rebase_zone(z, cx, cy) end
     for _, d in ipairs(clean_drawings) do rebase_xy(d, cx, cy) end
 
     for _, g in ipairs(clean_groups)   do convert_headings(g) end

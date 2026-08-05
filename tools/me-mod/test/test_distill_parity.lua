@@ -188,6 +188,70 @@ do
     assert_parity('escort pos parity', dump, { name = 'escort' })
 end
 
+-- Case 9: polygon (quad) trigger-zone vertices. distill's rebase_xy must NOT
+-- subtract the centroid from a zone's `points` — they are vertices stored
+-- relative to the zone's own {x,y} centre, not world coordinates. Rebasing
+-- them on save + re-anchoring on place left the polygon offset from its centre
+-- by the placement delta. The zone's own centre IS rebased. The unit-level
+-- `zones` render cache (threat rings) holds real world coords and must still
+-- be rebased. Both copies must behave identically. See quad_zone_test prefab.
+do
+    local dump = {
+        groups = {
+            {
+                name = 'G1', x = 1000, y = 2000,
+                units = { { name = 'U1', type = 'AAV7', x = 1000, y = 2000, heading = 0,
+                            -- Render-side threat ring: ABSOLUTE world coords.
+                            zones = { { classKey = 'ThreatRangeBorder', radius = 1200,
+                                        points = { { x = 1000, y = 3200 } } } } } },
+            },
+        },
+        zones = {
+            -- Centre (1000, 2000); vertices relative to it, summing to zero.
+            { name = 'Z1', x = 1000, y = 2000, radius = 3000, type = 2, properties = {},
+              points = { { x = -3000, y = -3000 }, { x = 3000, y = -3000 },
+                         { x = 3000, y = 3000 },   { x = -3000, y = 3000 } } },
+        },
+    }
+
+    local mem = memod_distill(dump, { name = 'quad' })
+    local fw  = fw_distill(dump,    { name = 'quad' })
+
+    for label, out in pairs({ ['me-mod'] = mem, ['framework'] = fw }) do
+        local z = out and out.zones and out.zones[1]
+        -- Centroid of the two positionable entities (group + zone) is (1000,2000),
+        -- so the zone centre rebases to the origin.
+        check('quad distill (' .. label .. '): zone centre rebased to origin',
+              z and approx(z.x, 0) and approx(z.y, 0),
+              'got ' .. tostring(z and z.x) .. ', ' .. tostring(z and z.y))
+        check('quad distill (' .. label .. '): vertex 1 kept relative (-3000,-3000)',
+              z and z.points and approx(z.points[1].x, -3000) and approx(z.points[1].y, -3000),
+              'got ' .. tostring(z and z.points and z.points[1].x))
+        check('quad distill (' .. label .. '): vertex 3 kept relative (3000,3000)',
+              z and z.points and approx(z.points[3].x, 3000) and approx(z.points[3].y, 3000),
+              'got ' .. tostring(z and z.points and z.points[3].x))
+        -- Vertices still sum to zero — the relative-to-centre invariant.
+        local sx, sy = 0, 0
+        if z and z.points then
+            for _, p in ipairs(z.points) do sx, sy = sx + p.x, sy + p.y end
+        end
+        check('quad distill (' .. label .. '): vertices still sum to (0,0)',
+              approx(sx, 0) and approx(sy, 0), 'got ' .. sx .. ', ' .. sy)
+        -- The unit-level threat-ring cache holds world coords and MUST rebase,
+        -- proving the skip is targeted at trigger zones, not any `points` key.
+        local ring = out and out.groups and out.groups[1] and out.groups[1].units
+                     and out.groups[1].units[1] and out.groups[1].units[1].zones
+                     and out.groups[1].units[1].zones[1]
+        check('quad distill (' .. label .. '): unit threat-ring points still rebased',
+              ring and ring.points and approx(ring.points[1].x, 0)
+              and approx(ring.points[1].y, 1200),
+              'got ' .. tostring(ring and ring.points and ring.points[1].x)
+              .. ', ' .. tostring(ring and ring.points and ring.points[1].y))
+    end
+
+    assert_parity('quad zone points parity', dump, { name = 'quad' })
+end
+
 if failures > 0 then
     print(string.format('%d failure(s)', failures))
     os.exit(1)
