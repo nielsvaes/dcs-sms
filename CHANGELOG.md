@@ -116,7 +116,7 @@ This is the first tag after a long quiet period — `sms.version` had been froze
 
 ## ME-mod
 
-### [Unreleased]
+### [0.27.2] — 2026-08-05
 
 **Fixed**
 - **Quad-point trigger zones no longer land offset when a prefab is placed.**
