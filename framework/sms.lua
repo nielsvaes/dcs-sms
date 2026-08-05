@@ -20,7 +20,7 @@
 ---@field group_spawn      sms.group_spawn
 ---@field K                sms.constants
 sms = sms or {}
-sms.version = "0.11.0"
+sms.version = "0.11.1"
 
 -- Build an entity handle for `name` without verifying the entity exists.
 -- Used by sms._make_callable_handle (which adds the existence check) and by

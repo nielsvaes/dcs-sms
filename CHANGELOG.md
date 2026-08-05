@@ -11,7 +11,7 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com). Both trac
 
 ## Framework
 
-### [Unreleased]
+### [0.11.1] — 2026-08-05
 
 **Fixed**
 - Quad-point trigger zones in prefabs are no longer double-translated. A
