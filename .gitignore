@@ -18,6 +18,7 @@ docs/superpowers/plans/
 # Go build artifacts
 tools/dcs-sms
 tools/dcs-sms.exe
+tools/dcs-sms.exe~
 tools/**/*.test
 tools/**/*.out
 
