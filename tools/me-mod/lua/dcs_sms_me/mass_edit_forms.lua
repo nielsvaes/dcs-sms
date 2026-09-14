@@ -32,6 +32,7 @@ local set_livery_unit           = require('dcs_sms_me.mass_edit_forms.set_livery
 local set_heading_unit          = require('dcs_sms_me.mass_edit_forms.set_heading_unit')
 local set_fuel_pct_unit         = require('dcs_sms_me.mass_edit_forms.set_fuel_pct_unit')
 local toggle_unit_flags         = require('dcs_sms_me.mass_edit_forms.toggle_unit_flags')
+local randomize_unit_positions = require('dcs_sms_me.mass_edit_forms.randomize_unit_positions')
 
 M.by_scope = {
     -- Name-mutating forms first. rename_group + auto_name_units sit next
@@ -66,6 +67,7 @@ M.by_scope = {
         set_heading_unit,
         set_fuel_pct_unit,
         toggle_unit_flags,
+        randomize_unit_positions,
     },
     -- Static scope mirrors the group scope's name-mutating + set_country
     -- forms (statics are single-unit groups so all of those reuse the
