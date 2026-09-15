@@ -116,7 +116,7 @@ This is the first tag after a long quiet period — `sms.version` had been froze
 
 ## ME-mod
 
-### [Unreleased]
+### [0.28.0] — 2026-09-15
 
 **Added**
 - **`dcs-sms set-saved-games` — pin which Saved Games folder dcs-sms uses.**
@@ -160,9 +160,10 @@ This is the first tag after a long quiet period — `sms.version` had been froze
 - **`status` now says which Saved Games folder it looked in.** On both the
   "hook not found" (exit 3) and "heartbeat stale" (exit 4) paths it prints the
   folder it used and, when more than one exists, what else is there and how
-  each one looks. It suggests switching only when another folder has a fresher
-  heartbeat, or when the current folder has no hook while another does — so a
-  correct setup is never told to move.
+  each one looks. It suggests switching only when another folder is *live* (DCS
+  wrote a heartbeat there seconds ago) while the current one is not, or when
+  the current folder has no hook while another does — so a correct setup, and
+  one DCS simply has not been launched in yet, is never told to move.
 
 ### [0.27.4] — 2026-09-13
 
