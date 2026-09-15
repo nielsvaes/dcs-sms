@@ -282,19 +282,20 @@ func promptAndSaveDCSPath(reader *bufio.Reader, stdout, stderr io.Writer, config
 			fmt.Fprintln(stdout, "Empty path — try again.")
 			continue
 		}
+		// Validate here rather than inside persistDCSInstall so a typo can be
+		// retried without leaving the prompt.
 		if err := validateDCSInstallRoot(path); err != nil {
-			fmt.Fprintf(stdout, "%v\n", err)
+			fmt.Fprintln(stdout, ui.For(stdout).Err(err.Error()))
 			continue
 		}
 		if configPath == "" {
-			fmt.Fprintln(stderr, "dcs-sms: cannot determine config file location; not saving")
+			configPath, _ = configPathFn()
+		}
+		if configPath == "" {
+			fmt.Fprintln(stderr, ui.For(stderr).Err("dcs-sms: cannot determine config file location; not saving"))
 			return
 		}
-		if err := dcspath.SaveInstallConfig(configPath, filepath.ToSlash(path)); err != nil {
-			fmt.Fprintf(stderr, "dcs-sms: failed to save config: %v\n", err)
-			return
-		}
-		fmt.Fprintln(stdout, "Saved.")
+		persistDCSInstall(path, configPath, stdout, stderr)
 		return
 	}
 	fmt.Fprintln(stdout, "Returning to menu without saving.")

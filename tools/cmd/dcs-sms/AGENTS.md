@@ -12,7 +12,7 @@ Contributor doc for the Go source under `tools/cmd/dcs-sms/`. The build produces
 
 You're adding, modifying, or fixing one of:
 
-- A **top-level subcommand** (`dcs-sms exec`, `dcs-sms status`, `dcs-sms install-hook`, `dcs-sms install-me-mod`, `dcs-sms update`, `dcs-sms screenshot`, `dcs-sms doc`, `dcs-sms gen-units`, `dcs-sms install-ai-skill` / `uninstall-ai-skill`, `dcs-sms tail-log`, `dcs-sms set-saved-games`).
+- A **top-level subcommand** (`dcs-sms exec`, `dcs-sms status`, `dcs-sms install-hook`, `dcs-sms install-me-mod`, `dcs-sms update`, `dcs-sms screenshot`, `dcs-sms doc`, `dcs-sms gen-units`, `dcs-sms install-ai-skill` / `uninstall-ai-skill`, `dcs-sms tail-log`, `dcs-sms set-saved-games`, `dcs-sms set-dcs-path`).
 - A **`me <noun> <verb>`** verb (the Go half). The Lua half lives in `tools/me-mod/lua/dcs_sms_me/verbs/<noun>_verbs.lua` (aggregated through `verbs.lua`) and is documented in [`../me-mod/AGENTS.md`](../me-mod/AGENTS.md).
 - The **mailbox / bridge protocol** (`tools/internal/mailbox`, `tools/internal/proto`, `tools/internal/hookstatus`).
 - The **installer logic** (`install_me_mod.go`, `installhook.go`, `install_ai_skill.go`, `update.go`).
@@ -33,6 +33,7 @@ The CLI is one Go package (`package main`). Each subcommand lives in its own `.g
 | `exec.go`, `status.go`, `taillog.go` | Bridge subcommands (talk to the running mission via the mailbox). |
 | `installhook.go` | `install-hook` — copies `tools/lua/dcs-sms-hook.lua` into `<Saved Games>/DCS*/Scripts/Hooks/`. |
 | `set_saved_games.go` | `set-saved-games` — pins `saved_games` in config, or lists the DCS folders found when run bare. |
+| `set_dcs_path.go` | `set-dcs-path` — pins `dcs_install` in config, or shows the current one when run bare. `persistDCSInstall` is shared with menu option 5. |
 | `savedgames.go`, `savedgames_paths_*.go` | Shared Saved Games helpers: `inspectVariant` / `variantLines` / `betterCandidate`, used by the menu, `status` and `set-saved-games`. |
 | `install_me_mod.go`, `uninstall_me_mod.go` | Mission Editor mod install/uninstall (patches `MissionEditor.lua`, copies the embedded `dcs_sms_me/` tree). |
 | `install_ai_skill.go`, `uninstall_ai_skill.go` | Write/remove the embedded `dcs-sms` skill into `~/.claude` / `~/.agents` / `~/.gemini`. |
@@ -80,7 +81,16 @@ leaves `dcs-sms/state` behind.
 
 Note that `DCS_SMS_SAVED_GAMES` is resolved *before* the config file
 (`dcspath.Discover`), so pinning a folder while that variable is set has no
-effect. `set-saved-games` says so rather than reporting a silent success.
+effect. `set-saved-games` says so rather than reporting a silent success. The
+same holds for `DCS_SMS_DCS_INSTALL` and `set-dcs-path`.
+
+**The DCS install path is never auto-discovered.** `dcspath.DiscoverInstall`
+reads `--dcs-path`, then `DCS_SMS_DCS_INSTALL`, then `dcs_install` in config —
+there is no filesystem scan, because install locations vary too much to guess.
+A deleted `config.toml` therefore leaves the install path unrecoverable until
+someone sets it again, which is what `set-dcs-path` is for. Write it through
+`persistDCSInstall` (shared with menu option 5) so both routes validate the
+same way and store the same forward-slash form.
 
 **The menu loops.** `runActionWithElevation` and `runActionAndPause` return
 `(code, exit bool)`. The menu keeps looping until the user quits, so someone can

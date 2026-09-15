@@ -109,6 +109,7 @@ func printUsage(w io.Writer) {
 	fmt.Fprintln(w, "  me            Mission Editor commands (run `dcs-sms me --help` for the verb list)")
 	fmt.Fprintln(w, "  status        report whether the hook is alive and a mission is loaded")
 	fmt.Fprintln(w, "  set-saved-games  pin which Saved Games folder to use (bare: list the ones found)")
+	fmt.Fprintln(w, "  set-dcs-path     pin the DCS install folder (bare: show the current one)")
 	fmt.Fprintln(w, "  screenshot    capture the DCS window to a PNG (Windows only)")
 	fmt.Fprintln(w, "  setup         update dcs-sms.exe, then install the ME mod and the hook in one shot")
 	fmt.Fprintln(w, "  dev-reload    contributor: build the .exe, reinstall the ME mod, hot-reload it in one shot")

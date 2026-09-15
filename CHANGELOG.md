@@ -130,6 +130,13 @@ This is the first tag after a long quiet period — `sms.version` had been froze
   `DCS_SMS_SAVED_GAMES` is set it is resolved ahead of the config file, so the
   command now says the pin will be ignored instead of reporting a bare
   “Saved.”
+- **`dcs-sms set-dcs-path` — pin the DCS install folder.** Unlike the Saved
+  Games folder this one is never auto-discovered (install locations vary too
+  much to guess), so it only ever comes from `--dcs-path`, the
+  `DCS_SMS_DCS_INSTALL` env var, or config — and a lost `config.toml` left it
+  unrecoverable from the CLI, settable only through the interactive menu. Run
+  bare it reports the configured folder and where that value came from. Menu
+  option 5 now shares the same writer, so both routes validate identically.
 - **Menu option 6, "Set Saved Games folder manually."** Offers the folders
   found on disk as a numbered list with the same annotations, or takes a
   pasted path. The banner now shows the Saved Games folder in use next to the
