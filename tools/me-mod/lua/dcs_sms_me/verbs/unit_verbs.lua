@@ -88,8 +88,8 @@ function M.unit_set_livery(args)
     return { ok = true, id = u.unitId, name = u.name, livery = u.livery_id }
 end
 
--- unit_set_pos — move a single unit to (north, east). Refreshes the group's
--- map objects so the ME view updates immediately.
+-- unit_set_pos — move a single unit to (north, east). Recreates the group's
+-- rendered map objects so the ME view updates immediately.
 --
 -- AIR-GROUP CAVEAT: for plane / helicopter units this only affects the
 -- ME view and the saved .miz — at mission load DCS overrides every
@@ -115,7 +115,18 @@ function M.unit_set_pos(args)
     -- mission-table fields: x = north, y = east
     u.x = args.north
     u.y = args.east
-    refresh_group_view(g)
+    -- update_group_map_objects() only refreshes the data cache; it does not
+    -- move the already-rendered unit symbol. Recreate the group's map view so
+    -- the new position is visible immediately, without requiring the user to
+    -- touch another ME field first.
+    local ok_refresh, refresh = pcall(require, 'dcs_sms_me.me_refresh')
+    if ok_refresh and refresh and type(refresh.recreate_group_view) == 'function' then
+        pcall(refresh.recreate_group_view, g)
+    else
+        -- Defensive fallback for environments where the refresh helper is not
+        -- available (e.g. isolated/unit-test VMs).
+        refresh_group_view(g)
+    end
     return { ok = true, id = u.unitId, name = u.name, north = u.x, east = u.y }
 end
 
