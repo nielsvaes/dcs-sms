@@ -51,10 +51,10 @@ end
 
 do
     local list = forms.forms_for('unit')
-    check('unit: 10 forms', #list == 10, 'got ' .. tostring(#list))
+    check('unit: 11 forms', #list == 11, 'got ' .. tostring(#list))
     -- Order: auto_name → find/replace → add_prefix → add_suffix → set_skill
     --        → set_onboard_num → set_livery → set_heading → set_fuel_pct
-    --        → toggle_unit_flags.
+    --        → toggle_unit_flags → randomize_unit_positions.
     local expected_titles = {
         'Auto-name units',
         'Find & replace in unit names',
@@ -66,6 +66,7 @@ do
         'Set heading',
         'Set fuel %',
         'Driver & start state',
+        'Randomize positions',
     }
     for i, expected in ipairs(expected_titles) do
         check('unit: form[' .. i .. '].title = ' .. expected,
