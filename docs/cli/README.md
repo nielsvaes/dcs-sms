@@ -15,6 +15,7 @@ Every command on the dcs-sms CLI, grouped by namespace.
 | [`install-hook`](install-hook.md) | install/update the Lua hook + patch MissionScripting.lua to allow it |
 | [`install-me-mod`](install-me-mod.md) | install/update the Mission Editor mod into <DCS install>/MissionEditor/ |
 | [`reload-me-mod`](reload-me-mod.md) | hot-reload the installed ME mod via the gui bridge (no DCS restart) |
+| [`set-saved-games`](set-saved-games.md) | pin the DCS Saved Games folder in config (run bare to list the folders found) |
 | [`setup`](setup.md) | update dcs-sms.exe, then install the ME mod and the hook in one shot |
 | [`status`](status.md) | report whether the hook is alive and a mission is loaded |
 | [`tail-log`](tail-log.md) | read recent lines from dcs.log |

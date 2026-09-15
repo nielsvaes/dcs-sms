@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/nielsvaes/dcs-sms/tools/internal/dcspath"
+	"github.com/nielsvaes/dcs-sms/tools/internal/ui"
 	hookpkg "github.com/nielsvaes/dcs-sms/tools/lua"
 )
 
@@ -45,25 +46,26 @@ func installHookCmd(args []string, stdout, stderr io.Writer) int {
 
 	root, err := resolveRoot(opts.SavedGames)
 	if err != nil {
-		fmt.Fprintln(stderr, "dcs-sms install-hook:", err)
+		fmt.Fprintln(stderr, ui.For(stderr).Err("dcs-sms install-hook:"), err)
 		return 3
 	}
 	hooksDir := filepath.Join(root, "Scripts", "Hooks")
 	if err := os.MkdirAll(hooksDir, 0o755); err != nil {
-		fmt.Fprintln(stderr, "dcs-sms install-hook: mkdir:", err)
+		fmt.Fprintln(stderr, ui.For(stderr).Err("dcs-sms install-hook: mkdir:"), err)
 		return 3
 	}
 	dst := filepath.Join(hooksDir, "dcs-sms-hook.lua")
 	if err := os.WriteFile(dst, hookpkg.Source, 0o644); err != nil {
-		fmt.Fprintln(stderr, "dcs-sms install-hook: write:", err)
+		fmt.Fprintln(stderr, ui.For(stderr).Err("dcs-sms install-hook: write:"), err)
 		return 3
 	}
-	fmt.Fprintf(stdout, "installed hook to %s (%d bytes)\n", dst, len(hookpkg.Source))
+	style := ui.For(stdout)
+	fmt.Fprintf(stdout, "%s %s (%d bytes)\n", style.OK("installed hook to"), dst, len(hookpkg.Source))
 
 	if !opts.NoSave {
 		if cfg, _ := dcspath.DefaultConfigPath(); cfg != "" {
 			if err := dcspath.SaveConfig(cfg, root); err != nil {
-				fmt.Fprintln(stderr, "dcs-sms install-hook: warning: could not save config:", err)
+				fmt.Fprintln(stderr, ui.For(stderr).Warn("dcs-sms install-hook: warning: could not save config:"), err)
 			} else {
 				fmt.Fprintf(stdout, "saved saved_games = %q to %s\n", root, cfg)
 			}
@@ -75,7 +77,7 @@ func installHookCmd(args []string, stdout, stderr io.Writer) int {
 		sanitized = tryPatchMissionScripting(opts.DCSPath, stdout, stderr)
 	} else {
 		fmt.Fprintln(stdout, "")
-		fmt.Fprintln(stdout, "Skipping MissionScripting.lua patch: --dcs-path not set.")
+		fmt.Fprintln(stdout, style.Warn("Skipping MissionScripting.lua patch: --dcs-path not set."))
 		fmt.Fprintln(stdout, "  Use `dcs-sms setup` (or pass --dcs-path here) to patch it automatically.")
 	}
 

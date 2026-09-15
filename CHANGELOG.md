@@ -116,6 +116,44 @@ This is the first tag after a long quiet period — `sms.version` had been froze
 
 ## ME-mod
 
+### [Unreleased]
+
+**Added**
+- **`dcs-sms set-saved-games` — pin which Saved Games folder dcs-sms uses.**
+  Auto-discovery picks the first of `DCS`, `DCS.openbeta`, `DCS.server` that
+  exists, so a leftover `DCS` folder from a stable install shadows the
+  `DCS.openbeta` people actually fly: the hook writes its heartbeat to one
+  folder while the CLI reads the other, and every command fails with a bare
+  `hook not found`. Run the command with a path to record it in
+  `config.toml`, or bare to list every DCS folder found, annotated with
+  whether a hook is installed and when DCS last wrote to it.
+- **Menu option 6, "Set Saved Games folder manually."** Offers the folders
+  found on disk as a numbered list with the same annotations, or takes a
+  pasted path. The banner now shows the Saved Games folder in use next to the
+  DCS install path, and flags when other DCS folders exist beside it.
+- **Colored output** on the human-facing commands (menu, `status`, the
+  installers): green for success, yellow for warnings, red for failures.
+  Color is emitted only to an interactive terminal, so piped output, `--json`
+  and captured output stay plain. `NO_COLOR` / `DCS_SMS_NO_COLOR` opt out;
+  `DCS_SMS_FORCE_COLOR` forces it on for pipelines that render it (`| less -R`).
+
+**Changed**
+- **The installer menu returns to the menu instead of exiting.** Running one
+  option used to end the session, so installing the mod and then installing
+  the AI skill meant starting `dcs-sms.exe` twice. Actions now loop back until
+  you quit with `q`. The only exception is a successful elevated re-launch,
+  where a new admin window takes over. The process still exits with the last
+  non-zero code an action returned, so a failed install is not hidden by the
+  loop.
+
+**Fixed**
+- **`status` now says which Saved Games folder it looked in.** On both the
+  "hook not found" (exit 3) and "heartbeat stale" (exit 4) paths it prints the
+  folder it used and, when more than one exists, what else is there and how
+  each one looks. It suggests switching only when another folder has a fresher
+  heartbeat, or when the current folder has no hook while another does — so a
+  correct setup is never told to move.
+
 ### [0.27.4] — 2026-09-13
 
 **Fixed**

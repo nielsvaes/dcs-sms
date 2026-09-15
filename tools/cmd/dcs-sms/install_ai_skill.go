@@ -7,6 +7,7 @@ import (
 	"os"
 
 	"github.com/nielsvaes/dcs-sms/tools/internal/aiskill"
+	"github.com/nielsvaes/dcs-sms/tools/internal/ui"
 )
 
 func init() {
@@ -52,7 +53,7 @@ func printAISkillResults(stdout, stderr io.Writer, verb string, results []aiskil
 	for _, r := range results {
 		errPaths := map[string]bool{}
 		for _, e := range r.Errors {
-			fmt.Fprintln(stderr, "error:", e)
+			fmt.Fprintln(stderr, ui.For(stderr).Err("error:"), e)
 			hadError = true
 			errPaths[errorPath(e)] = true
 		}

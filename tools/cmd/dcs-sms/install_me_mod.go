@@ -13,6 +13,7 @@ import (
 
 	"github.com/nielsvaes/dcs-sms/tools/internal/dcspath"
 	"github.com/nielsvaes/dcs-sms/tools/internal/elevate"
+	"github.com/nielsvaes/dcs-sms/tools/internal/ui"
 	memod "github.com/nielsvaes/dcs-sms/tools/me-mod/lua"
 	luasec "github.com/nielsvaes/dcs-sms/tools/me-mod/luasec"
 )
@@ -55,7 +56,7 @@ func installMeModCmd(args []string, stdout, stderr io.Writer) int {
 	cfg, _ := dcspath.DefaultConfigPath()
 	install, err := dcspath.DiscoverInstall(opts.DCSPath, cfg)
 	if err != nil {
-		fmt.Fprintln(stderr, "dcs-sms install-me-mod:", err)
+		fmt.Fprintln(stderr, ui.For(stderr).Err("dcs-sms install-me-mod:"), err)
 		return 3
 	}
 
@@ -63,7 +64,7 @@ func installMeModCmd(args []string, stdout, stderr io.Writer) int {
 	meDir := filepath.Join(install, "MissionEditor")
 	meFile := filepath.Join(meDir, "MissionEditor.lua")
 	if _, err := os.Stat(meFile); err != nil {
-		fmt.Fprintf(stderr, "dcs-sms install-me-mod: %s not found (is --dcs-path correct?)\n", meFile)
+		fmt.Fprintln(stderr, ui.For(stderr).Err(fmt.Sprintf("dcs-sms install-me-mod: %s not found (is --dcs-path correct?)", meFile)))
 		return 3
 	}
 
@@ -76,7 +77,7 @@ func installMeModCmd(args []string, stdout, stderr io.Writer) int {
 			fmt.Fprintf(stderr, "dcs-sms install-me-mod: cannot write to %s even with admin privileges (file locks? antivirus?)\n", meDir)
 			return 3
 		}
-		fmt.Fprintf(stderr, "dcs-sms install-me-mod: %s is not writable.\n", meDir)
+		fmt.Fprintln(stderr, ui.For(stderr).Err(fmt.Sprintf("dcs-sms install-me-mod: %s is not writable.", meDir)))
 		fmt.Fprintln(stderr, "  This usually means DCS is installed under Program Files and admin permission is needed.")
 		fmt.Fprintln(stderr, "  Re-run dcs-sms.exe from an admin terminal, or use the interactive menu (double-click) to be prompted.")
 		return elevate.ExitCodeNeedsElevation
@@ -137,7 +138,7 @@ func installMeModCmd(args []string, stdout, stderr io.Writer) int {
 			fmt.Fprintf(stdout, "copied LuaSec lib payload (%d files) → %s\n", n, libDst)
 		}
 	} else {
-		fmt.Fprintln(stderr, "dcs-sms install-me-mod: WARNING: could not resolve your DCS Saved Games folder")
+		fmt.Fprintln(stderr, ui.For(stderr).Warn("dcs-sms install-me-mod: WARNING: could not resolve your DCS Saved Games folder"))
 		fmt.Fprintf(stderr, "  (%v)\n", derr)
 		fmt.Fprintln(stderr, "  The LuaSec HTTPS payload was NOT installed, so the Community prefab library will")
 		fmt.Fprintln(stderr, "  report \"Secure networking unavailable.\" Set DCS_SMS_SAVED_GAMES to your")

@@ -155,3 +155,81 @@ func TestStatusStaleHeartbeat(t *testing.T) {
 		t.Errorf("expected 'stale' in stderr, got %q", stderr.String())
 	}
 }
+
+// The bug this diagnostic exists for: a leftover `DCS` folder sits next to
+// the `DCS.openbeta` the user actually flies, auto-discovery picks `DCS`, and
+// every command fails with a bare "hook not found". The failure has to name
+// the folder it looked in and point at the one that is alive.
+func TestStatusMissingHookNamesFolderAndAlternatives(t *testing.T) {
+	base := t.TempDir()
+	picked := makeVariant(t, base, "DCS", false, time.Time{})
+	live := makeVariant(t, base, "DCS.openbeta", true, time.Now())
+	withConfigSeam(t, filepath.Join(base, "config.toml"), []string{picked, live})
+	t.Setenv("DCS_SMS_SAVED_GAMES", picked)
+
+	var stdout, stderr bytes.Buffer
+	if code := statusCmd(nil, &stdout, &stderr); code != 3 {
+		t.Fatalf("exit %d, want 3", code)
+	}
+	out := stderr.String()
+	for _, want := range []string{"looked in", picked, "DCS.openbeta", "running now", "set-saved-games"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("diagnostic missing %q, got:\n%s", want, out)
+		}
+	}
+}
+
+// With only one folder there is no ambiguity to explain — don't pad the
+// error with a pick-list of one.
+func TestStatusMissingHookSingleFolderStaysQuiet(t *testing.T) {
+	base := t.TempDir()
+	only := makeVariant(t, base, "DCS", false, time.Time{})
+	withConfigSeam(t, filepath.Join(base, "config.toml"), []string{only})
+	t.Setenv("DCS_SMS_SAVED_GAMES", only)
+
+	var stdout, stderr bytes.Buffer
+	if code := statusCmd(nil, &stdout, &stderr); code != 3 {
+		t.Fatalf("exit %d, want 3", code)
+	}
+	out := stderr.String()
+	if !strings.Contains(out, "looked in") {
+		t.Errorf("should still name the folder it looked in, got:\n%s", out)
+	}
+	if strings.Contains(out, "set-saved-games") {
+		t.Errorf("should not suggest switching folders when there is only one, got:\n%s", out)
+	}
+}
+
+// A stale heartbeat is the same ambiguity wearing a different hat: DCS may be
+// writing to the other folder.
+func TestStatusStaleHeartbeatSuggestsOtherFolder(t *testing.T) {
+	base := t.TempDir()
+	picked := makeVariant(t, base, "DCS", true, time.Now().Add(-2*time.Hour))
+	live := makeVariant(t, base, "DCS.openbeta", true, time.Now())
+	withConfigSeam(t, filepath.Join(base, "config.toml"), []string{picked, live})
+	t.Setenv("DCS_SMS_SAVED_GAMES", picked)
+
+	var stdout, stderr bytes.Buffer
+	if code := statusCmd(nil, &stdout, &stderr); code != 4 {
+		t.Fatalf("exit %d, want 4", code)
+	}
+	if !strings.Contains(stderr.String(), "set-saved-games") {
+		t.Errorf("stale heartbeat should point at the live folder, got:\n%s", stderr.String())
+	}
+}
+
+// --json is consumed by scripts and agents: the diagnostic prose goes to
+// stderr, and stdout must stay parseable.
+func TestStatusJSONStaysCleanWhenStale(t *testing.T) {
+	base := t.TempDir()
+	picked := makeVariant(t, base, "DCS", true, time.Now().Add(-2*time.Hour))
+	withConfigSeam(t, filepath.Join(base, "config.toml"), []string{picked})
+	t.Setenv("DCS_SMS_SAVED_GAMES", picked)
+
+	var stdout, stderr bytes.Buffer
+	statusCmd([]string{"--json"}, &stdout, &stderr)
+	var parsed map[string]any
+	if err := json.Unmarshal([]byte(strings.TrimSpace(stdout.String())), &parsed); err != nil {
+		t.Fatalf("stdout is not valid JSON (%v): %q", err, stdout.String())
+	}
+}

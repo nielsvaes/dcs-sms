@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/nielsvaes/dcs-sms/tools/internal/elevate"
 )
@@ -80,7 +81,7 @@ func TestMenuOption1RoutesToSetup(t *testing.T) {
 	if called != "setup" {
 		t.Errorf("called = %q, want setup", called)
 	}
-	if !strings.Contains(stdout.String(), "Press Enter to exit") {
+	if !strings.Contains(stdout.String(), "Press Enter to return to the menu") {
 		t.Errorf("expected pause prompt, got %q", stdout.String())
 	}
 }
@@ -465,4 +466,196 @@ func stringSliceEqual(a, b []string) bool {
 		}
 	}
 	return true
+}
+
+// stubDeps builds menuDeps whose four actions all record into calls.
+func stubDeps(t *testing.T, calls *[]string, code int) menuDeps {
+	t.Helper()
+	mk := func(name string) commandFunc {
+		return func(_ []string, stdout, _ io.Writer) int {
+			*calls = append(*calls, name)
+			fmt.Fprintln(stdout, "stub "+name+" ran")
+			return code
+		}
+	}
+	return menuDeps{actions: menuActions{
+		setup:            mk("setup"),
+		teardown:         mk("teardown"),
+		installAISkill:   mk("installAISkill"),
+		uninstallAISkill: mk("uninstallAISkill"),
+	}}
+}
+
+// The dead-end bug: running one option used to return straight out of the
+// menu, so installing the mod and then installing the AI skill meant starting
+// dcs-sms.exe twice. Actions must fall back to the menu until the user quits.
+func TestMenuRunsSeveralActionsBeforeQuit(t *testing.T) {
+	var calls []string
+	deps := stubDeps(t, &calls, 0)
+
+	var stdout, stderr bytes.Buffer
+	// option 1, Enter, option 3, Enter, then quit.
+	code := runInteractiveMenuWith(strings.NewReader("1\n\n3\n\nq\n"), &stdout, &stderr, deps)
+	if code != 0 {
+		t.Errorf("exit code %d, want 0", code)
+	}
+	want := []string{"setup", "installAISkill"}
+	if !stringSliceEqual(calls, want) {
+		t.Errorf("calls = %v, want %v", calls, want)
+	}
+	// Banner once per pass: before action 1, before action 3, before the quit.
+	if got := strings.Count(stdout.String(), "Choose ["); got != 3 {
+		t.Errorf("expected 3 menu prompts, got %d in:\n%s", got, stdout.String())
+	}
+	if !strings.Contains(stdout.String(), "return to the menu") {
+		t.Errorf("pause prompt should offer a return to the menu, got %q", stdout.String())
+	}
+}
+
+// Looping must not swallow a failure: the last non-zero action code is what
+// the process exits with, so scripts and CI still see the problem.
+func TestMenuRemembersFailureCodeAcrossLoop(t *testing.T) {
+	var calls []string
+	deps := stubDeps(t, &calls, 7)
+
+	var stdout, stderr bytes.Buffer
+	code := runInteractiveMenuWith(strings.NewReader("1\n\nq\n"), &stdout, &stderr, deps)
+	if code != 7 {
+		t.Errorf("exit code %d, want 7", code)
+	}
+}
+
+// Closing stdin after an action has run is a normal end of session, not the
+// broken-pipe case that exit code 2 guards against.
+func TestMenuEOFAfterActionReturnsActionCode(t *testing.T) {
+	var calls []string
+	deps := stubDeps(t, &calls, 0)
+
+	var stdout, stderr bytes.Buffer
+	if code := runInteractiveMenuWith(strings.NewReader("1\n\n"), &stdout, &stderr, deps); code != 0 {
+		t.Errorf("exit code %d, want 0", code)
+	}
+}
+
+func TestMenuBannerShowsSavedGamesLine(t *testing.T) {
+	dir := t.TempDir()
+	live := makeVariant(t, dir, "DCS.openbeta", true, time.Now())
+	stale := makeVariant(t, dir, "DCS", false, time.Time{})
+	t.Setenv("DCS_SMS_SAVED_GAMES", live)
+	withConfigSeam(t, filepath.Join(dir, "config.toml"), []string{stale, live})
+
+	var calls []string
+	deps := stubDeps(t, &calls, 0)
+	var stdout, stderr bytes.Buffer
+	runInteractiveMenuWith(strings.NewReader("q\n"), &stdout, &stderr, deps)
+
+	out := stdout.String()
+	if !strings.Contains(out, "Saved Games:") || !strings.Contains(out, live) {
+		t.Errorf("banner should name the Saved Games folder in use, got:\n%s", out)
+	}
+	if !strings.Contains(out, "1 other") {
+		t.Errorf("banner should flag that other DCS folders exist, got:\n%s", out)
+	}
+	if !strings.Contains(out, "6. Set Saved Games folder") {
+		t.Errorf("menu should offer option 6, got:\n%s", out)
+	}
+}
+
+func TestMenuOption6PicksByNumber(t *testing.T) {
+	dir := t.TempDir()
+	cfg := filepath.Join(dir, "config.toml")
+	first := makeVariant(t, dir, "DCS", false, time.Time{})
+	second := makeVariant(t, dir, "DCS.openbeta", true, time.Now())
+	t.Setenv("DCS_SMS_SAVED_GAMES", first)
+	withConfigSeam(t, cfg, []string{first, second})
+
+	var calls []string
+	deps := stubDeps(t, &calls, 0)
+	deps.configPath = cfg
+
+	var stdout, stderr bytes.Buffer
+	// Option 6, pick entry 2, then quit.
+	code := runInteractiveMenuWith(strings.NewReader("6\n2\nq\n"), &stdout, &stderr, deps)
+	if code != 0 {
+		t.Errorf("exit code %d, want 0 (stderr=%q)", code, stderr.String())
+	}
+	body, err := os.ReadFile(cfg)
+	if err != nil {
+		t.Fatalf("config not written: %v", err)
+	}
+	if !strings.Contains(string(body), "DCS.openbeta") {
+		t.Errorf("expected DCS.openbeta to be saved, got %q", body)
+	}
+}
+
+func TestMenuOption6AcceptsPastedPath(t *testing.T) {
+	dir := t.TempDir()
+	cfg := filepath.Join(dir, "config.toml")
+	listed := makeVariant(t, dir, "DCS", false, time.Time{})
+	elsewhere := makeVariant(t, dir, "DCS.openbeta", true, time.Time{})
+	t.Setenv("DCS_SMS_SAVED_GAMES", listed)
+	withConfigSeam(t, cfg, []string{listed})
+
+	var calls []string
+	deps := stubDeps(t, &calls, 0)
+	deps.configPath = cfg
+
+	var stdout, stderr bytes.Buffer
+	in := "6\n\"" + elsewhere + "\"\nq\n"
+	if code := runInteractiveMenuWith(strings.NewReader(in), &stdout, &stderr, deps); code != 0 {
+		t.Errorf("exit code %d, want 0 (stderr=%q)", code, stderr.String())
+	}
+	body, err := os.ReadFile(cfg)
+	if err != nil {
+		t.Fatalf("config not written: %v", err)
+	}
+	if !strings.Contains(string(body), "DCS.openbeta") {
+		t.Errorf("expected the pasted path to be saved, got %q", body)
+	}
+}
+
+// An empty line at the picker means "changed my mind" — back to the menu
+// with nothing written.
+func TestMenuOption6EmptyInputCancels(t *testing.T) {
+	dir := t.TempDir()
+	cfg := filepath.Join(dir, "config.toml")
+	only := makeVariant(t, dir, "DCS", false, time.Time{})
+	t.Setenv("DCS_SMS_SAVED_GAMES", only)
+	withConfigSeam(t, cfg, []string{only})
+
+	var calls []string
+	deps := stubDeps(t, &calls, 0)
+	deps.configPath = cfg
+
+	var stdout, stderr bytes.Buffer
+	runInteractiveMenuWith(strings.NewReader("6\n\nq\n"), &stdout, &stderr, deps)
+	if _, err := os.Stat(cfg); err == nil {
+		t.Error("cancelling the picker must not write config")
+	}
+}
+
+// Option 6 must write to the config path the menu was given, not to the
+// process-wide default. Without this the parameter was silently ignored and
+// the menu wrote wherever configPathFn happened to point.
+func TestMenuOption6HonoursInjectedConfigPath(t *testing.T) {
+	dir := t.TempDir()
+	wanted := filepath.Join(dir, "wanted.toml")
+	decoy := filepath.Join(dir, "decoy.toml")
+	only := makeVariant(t, dir, "DCS.openbeta", true, time.Now())
+	t.Setenv("DCS_SMS_SAVED_GAMES", only)
+	withConfigSeam(t, decoy, []string{only})
+
+	var calls []string
+	deps := stubDeps(t, &calls, 0)
+	deps.configPath = wanted
+
+	var stdout, stderr bytes.Buffer
+	runInteractiveMenuWith(strings.NewReader("6\n1\nq\n"), &stdout, &stderr, deps)
+
+	if _, err := os.Stat(wanted); err != nil {
+		t.Errorf("expected config at the injected path %s: %v", wanted, err)
+	}
+	if _, err := os.Stat(decoy); err == nil {
+		t.Errorf("menu wrote to the seam path %s instead of the injected one", decoy)
+	}
 }

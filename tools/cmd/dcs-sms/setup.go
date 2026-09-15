@@ -8,6 +8,7 @@ import (
 	"os/exec"
 
 	"github.com/nielsvaes/dcs-sms/tools/internal/dcspath"
+	"github.com/nielsvaes/dcs-sms/tools/internal/ui"
 )
 
 type setupOpts struct {
@@ -66,7 +67,7 @@ func (realSetupHooks) discoverDCSPath() string {
 func (realSetupHooks) reExecSelf(args []string, stdout, stderr io.Writer) int {
 	exe, err := os.Executable()
 	if err != nil {
-		fmt.Fprintf(stderr, "dcs-sms setup: locate running binary: %v\n", err)
+		fmt.Fprintln(stderr, ui.For(stderr).Err(fmt.Sprintf("dcs-sms setup: locate running binary: %v", err)))
 		return 3
 	}
 	cmd := exec.Command(exe, args...)
@@ -76,7 +77,7 @@ func (realSetupHooks) reExecSelf(args []string, stdout, stderr io.Writer) int {
 		if ee, ok := err.(*exec.ExitError); ok {
 			return ee.ExitCode()
 		}
-		fmt.Fprintf(stderr, "dcs-sms setup: re-exec: %v\n", err)
+		fmt.Fprintln(stderr, ui.For(stderr).Err(fmt.Sprintf("dcs-sms setup: re-exec: %v", err)))
 		return 3
 	}
 	return 0
@@ -128,7 +129,7 @@ func setupCmdWith(args []string, stdout, stderr io.Writer, hooks setupHooks) int
 			// Update reported a failure (e.g. network) but didn't swap.
 			// Continue with the existing binary's embedded content per
 			// the spec's degraded-mode behavior.
-			fmt.Fprintln(stderr, "dcs-sms setup: update step failed; continuing with the currently-installed embedded content.")
+			fmt.Fprintln(stderr, ui.For(stderr).Warn("dcs-sms setup: update step failed; continuing with the currently-installed embedded content."))
 		}
 	}
 
@@ -162,7 +163,7 @@ func setupCmdWith(args []string, stdout, stderr io.Writer, hooks setupHooks) int
 	}
 
 	fmt.Fprintln(stdout, "")
-	fmt.Fprintln(stdout, "Setup complete. Restart DCS, then open the Mission Editor.")
+	fmt.Fprintln(stdout, ui.For(stdout).OK("Setup complete.")+" Restart DCS, then open the Mission Editor.")
 	return 0
 }
 

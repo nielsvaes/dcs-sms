@@ -49,3 +49,13 @@ func TestDispatchNoArgsInteractiveShowsMenu(t *testing.T) {
 		t.Errorf("expected menu banner in stdout, got %q", stdout.String())
 	}
 }
+
+// Every user-facing command has to be reachable from `dcs-sms --help`; the
+// list in printUsage is hand-maintained and easy to forget.
+func TestUsageListsSetSavedGames(t *testing.T) {
+	var buf bytes.Buffer
+	printUsage(&buf)
+	if !strings.Contains(buf.String(), "set-saved-games") {
+		t.Errorf("printUsage should list set-saved-games, got:\n%s", buf.String())
+	}
+}

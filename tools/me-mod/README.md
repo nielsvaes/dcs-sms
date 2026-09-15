@@ -60,7 +60,7 @@ You design DCS missions in the Mission Editor and want to reuse pieces of one mi
 Save `dcs-sms.exe` anywhere convenient (Downloads, Desktop, `C:\Tools`, wherever — the .exe doesn't write anything to that folder; it just needs to be where you can run it from). Then **double-click it**. A console window opens with a small menu — type `1` and press Enter to install:
 
 <p align="center">
-  <img src="../../assets/dcs-sms-doubleclick.png" alt="dcs-sms.exe interactive menu — 'DCS install: ...' line plus four numbered options (Install / Uninstall / Update / Set DCS install path) and 'q. Quit'" width="780">
+  <img src="../../assets/dcs-sms-doubleclick.png" alt="dcs-sms.exe interactive menu — 'DCS install: ...' and 'Saved Games: ...' lines plus six numbered options (Install / Uninstall / Install AI skill / Uninstall AI skill / Set DCS install path / Set Saved Games folder) and 'q. Quit'" width="780">
 </p>
 
 The menu shows the auto-detected DCS install path at the top. If it says **"not detected"**, type `4` first to paste the full path to your DCS install folder (the menu will strip surrounding quotes for you, so `"D:\Program Files\Eagle Dynamics\DCS World"` from Explorer's address-bar copy works as-is).
@@ -168,7 +168,7 @@ If your environment refuses to let you bypass this at all (locked-down corporate
 
 Two possibilities:
 
-- **The terminal window closed before you read it.** If you double-clicked and the menu flashed by, it's because something inside the menu (an error, or you typed something it didn't expect) returned and the window closed before you could see it. Run it again — the menu prints "Press Enter to exit..." after every action so you can read what happened.
+- **The terminal window closed before you read it.** If you double-clicked and the menu flashed by, run it again — the menu pauses with "Press Enter to return to the menu..." after every action, then comes back to the menu so you can run another one. It only closes when you press `q`.
 - **Windows blocked the .exe entirely.** SmartScreen may have killed the process before the menu could open. See [Windows SmartScreen says "Windows protected your PC"](#windows-smartscreen-says-windows-protected-your-pc) above.
 
 If you'd rather avoid the menu altogether: open a terminal *in the folder where you saved the .exe* (File Explorer → click the address bar → type `cmd` → Enter), then run `dcs-sms.exe install-me-mod` from there. Output stays visible until you close the terminal.

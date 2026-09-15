@@ -269,3 +269,62 @@ func TestSanitizeUserPath(t *testing.T) {
 		})
 	}
 }
+
+// ListVariants powers the "which folder did we pick, and what else is there"
+// diagnostics. Unlike pickVariantDir it is deliberately open-ended about
+// names: a user with DCS.dev or DCS.openbeta_backup should still see those
+// listed, even though auto-discovery will never select them.
+func TestListVariants(t *testing.T) {
+	base := t.TempDir()
+	if got := ListVariants(base); len(got) != 0 {
+		t.Fatalf("expected no variants in an empty base, got %v", got)
+	}
+	for _, name := range []string{"DCS.server", "DCS", "DCS.dev", "DCS.openbeta"} {
+		if err := os.MkdirAll(filepath.Join(base, name), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// Decoys: an unrelated folder and a *file* that happens to be named like
+	// a variant.
+	if err := os.MkdirAll(filepath.Join(base, "Other Game"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(base, "DCS.txt"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	want := []string{
+		filepath.Join(base, "DCS"),
+		filepath.Join(base, "DCS.openbeta"),
+		filepath.Join(base, "DCS.server"),
+		filepath.Join(base, "DCS.dev"),
+	}
+	got := ListVariants(base)
+	if len(got) != len(want) {
+		t.Fatalf("ListVariants() = %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("ListVariants()[%d] = %q, want %q", i, got[i], want[i])
+		}
+	}
+}
+
+// A name like "DCSomething" shares the prefix but is not a variant — only an
+// exact "DCS" or a "DCS."-prefixed name counts.
+func TestListVariantsIgnoresPrefixLookalikes(t *testing.T) {
+	base := t.TempDir()
+	for _, name := range []string{"DCSomething", "DCS_backup", "dcsworld"} {
+		if err := os.MkdirAll(filepath.Join(base, name), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if got := ListVariants(base); len(got) != 0 {
+		t.Errorf("expected no variants, got %v", got)
+	}
+}
+
+func TestListVariantsMissingBase(t *testing.T) {
+	if got := ListVariants(filepath.Join(t.TempDir(), "nope")); len(got) != 0 {
+		t.Errorf("expected no variants for a missing base, got %v", got)
+	}
+}

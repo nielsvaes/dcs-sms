@@ -18,6 +18,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 )
 
@@ -206,6 +207,83 @@ func pickVariantDir(base string) (string, bool) {
 		}
 	}
 	return "", false
+}
+
+// canonicalVariants is the fixed auto-discovery order used by
+// pickVariantDir. ListVariants surfaces these first so the listing reads in
+// the same order the picker actually searches.
+var canonicalVariants = []string{"DCS", "DCS.openbeta", "DCS.server"}
+
+// ListVariants returns every DCS variant folder under base, as full paths.
+//
+// It is deliberately broader than pickVariantDir: any directory named "DCS"
+// or beginning with "DCS." qualifies, so a user's DCS.dev or
+// DCS.openbeta_backup shows up in diagnostics and in the menu picker even
+// though auto-discovery would never select it. The canonical three come
+// first, in discovery order; anything else follows alphabetically.
+//
+// Auto-discovery order is NOT affected by this function — pickVariantDir
+// remains the single source of truth for what gets picked automatically.
+func ListVariants(base string) []string {
+	entries, err := os.ReadDir(base)
+	if err != nil {
+		return nil
+	}
+	var extra []string
+	found := map[string]string{}
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
+		}
+		name := e.Name()
+		if !isVariantName(name) {
+			continue
+		}
+		full := filepath.Join(base, name)
+		if i := canonicalIndex(name); i >= 0 {
+			found[canonicalVariants[i]] = full
+			continue
+		}
+		extra = append(extra, full)
+	}
+	sort.Strings(extra)
+
+	out := make([]string, 0, len(found)+len(extra))
+	for _, name := range canonicalVariants {
+		if p, ok := found[name]; ok {
+			out = append(out, p)
+		}
+	}
+	return append(out, extra...)
+}
+
+// isVariantName matches "DCS" exactly or anything under the "DCS." prefix.
+// Comparison is case-insensitive because Windows paths are, so a folder
+// stored as "dcs" is the same directory DCS itself would use. "DCSomething"
+// and "DCS_backup" share a prefix but are not variants.
+func isVariantName(name string) bool {
+	return strings.EqualFold(name, "DCS") ||
+		strings.HasPrefix(strings.ToUpper(name), "DCS.")
+}
+
+func canonicalIndex(name string) int {
+	for i, c := range canonicalVariants {
+		if strings.EqualFold(name, c) {
+			return i
+		}
+	}
+	return -1
+}
+
+// ListVariantsDefault lists the variant folders under the user's real
+// "Saved Games" location. Returns (nil, false) when that base can't be
+// resolved at all — which is always the case off Windows.
+func ListVariantsDefault() ([]string, bool) {
+	base, ok := savedGamesBase()
+	if !ok {
+		return nil, false
+	}
+	return ListVariants(base), true
 }
 
 // Discover applies the full priority order. The override argument lets a

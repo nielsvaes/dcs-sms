@@ -12,7 +12,7 @@ Contributor doc for the Go source under `tools/cmd/dcs-sms/`. The build produces
 
 You're adding, modifying, or fixing one of:
 
-- A **top-level subcommand** (`dcs-sms exec`, `dcs-sms status`, `dcs-sms install-hook`, `dcs-sms install-me-mod`, `dcs-sms update`, `dcs-sms screenshot`, `dcs-sms doc`, `dcs-sms gen-units`, `dcs-sms install-ai-skill` / `uninstall-ai-skill`, `dcs-sms tail-log`).
+- A **top-level subcommand** (`dcs-sms exec`, `dcs-sms status`, `dcs-sms install-hook`, `dcs-sms install-me-mod`, `dcs-sms update`, `dcs-sms screenshot`, `dcs-sms doc`, `dcs-sms gen-units`, `dcs-sms install-ai-skill` / `uninstall-ai-skill`, `dcs-sms tail-log`, `dcs-sms set-saved-games`).
 - A **`me <noun> <verb>`** verb (the Go half). The Lua half lives in `tools/me-mod/lua/dcs_sms_me/verbs/<noun>_verbs.lua` (aggregated through `verbs.lua`) and is documented in [`../me-mod/AGENTS.md`](../me-mod/AGENTS.md).
 - The **mailbox / bridge protocol** (`tools/internal/mailbox`, `tools/internal/proto`, `tools/internal/hookstatus`).
 - The **installer logic** (`install_me_mod.go`, `installhook.go`, `install_ai_skill.go`, `update.go`).
@@ -29,9 +29,11 @@ The CLI is one Go package (`package main`). Each subcommand lives in its own `.g
 |---|---|
 | `main.go` | Entry point. Reads args, calls `dispatch`. |
 | `dispatch.go` | `cmdInfo` registry type, `register` / `registerInfo` / `flagsOnly`, top-level dispatch, `printUsage`. |
-| `menu.go` + `menu_test.go` | Double-click interactive menu (install / uninstall / update / set DCS path / install AI skill). Driven by TTY detection in `dispatch`. |
+| `menu.go` + `menu_test.go` | Double-click interactive menu (install / uninstall / AI skill / set DCS path / set Saved Games folder). Driven by TTY detection in `dispatch`. Actions loop back to the menu until the user quits — see §3.1. |
 | `exec.go`, `status.go`, `taillog.go` | Bridge subcommands (talk to the running mission via the mailbox). |
 | `installhook.go` | `install-hook` — copies `tools/lua/dcs-sms-hook.lua` into `<Saved Games>/DCS*/Scripts/Hooks/`. |
+| `set_saved_games.go` | `set-saved-games` — pins `saved_games` in config, or lists the DCS folders found when run bare. |
+| `savedgames.go`, `savedgames_paths_*.go` | Shared Saved Games helpers: `inspectVariant` / `variantLines` / `betterCandidate`, used by the menu, `status` and `set-saved-games`. |
 | `install_me_mod.go`, `uninstall_me_mod.go` | Mission Editor mod install/uninstall (patches `MissionEditor.lua`, copies the embedded `dcs_sms_me/` tree). |
 | `install_ai_skill.go`, `uninstall_ai_skill.go` | Write/remove the embedded `dcs-sms` skill into `~/.claude` / `~/.agents` / `~/.gemini`. |
 | `update.go` | Self-update via GitHub Releases API. |
@@ -50,9 +52,37 @@ Internal Go packages live at `../../internal/`:
 | `tools/internal/proto` | Wire format: `ExecRequest`, `ExecResponse`, `HookState` (heartbeat). |
 | `tools/internal/hookstatus` | Reads heartbeats from `state/hook.json` (mission side) and `state/me.json` (ME side); merges them; routes `--target auto` based on what's alive. |
 | `tools/internal/aiskill` | Embedded SKILL.md + per-agent paths resolver. |
-| `tools/internal/dcspath` | DCS install-path auto-detection + user-paste sanitization. |
+| `tools/internal/dcspath` | DCS install-path auto-detection + user-paste sanitization. `ListVariants` enumerates every `DCS*` folder under Saved Games for diagnostics; `pickVariantDir` remains the sole auto-discovery rule. |
+| `tools/internal/ui` | ANSI coloring for human-facing output. Emits codes only to a real TTY, so buffers, pipes and `--json` stay plain. |
 
 ---
+
+## 3.1 Saved Games resolution and the menu loop
+
+Two behaviours bite often enough to be worth stating up front.
+
+**Multiple Saved Games folders.** Auto-discovery (`dcspath.pickVariantDir`)
+picks the first of `DCS`, `DCS.openbeta`, `DCS.server` that exists. A user with
+a stale `DCS` folder beside the `DCS.openbeta` they actually fly gets the wrong
+one, and every bridge command then fails with a bare "hook not found". Do not
+change that order — it is deterministic and existing installs depend on it.
+Instead, surface the ambiguity: `status` prints the folder it looked in plus
+the alternatives on its exit-3 and exit-4 paths, and `set-saved-games` (or menu
+option 6) pins the right one into config. `betterCandidate` decides whether a
+switch is worth suggesting at all — never suggest one unless another folder has
+a fresher heartbeat, or the current one has no hook while another does.
+
+**The menu loops.** `runActionWithElevation` and `runActionAndPause` return
+`(code, exit bool)`. The menu keeps looping until the user quits, so someone can
+install the mod and then install the AI skill in one session. The only action
+that sets `exit` is a successful elevated re-exec, where a child process takes
+over in a new window. The process exit code is the last non-zero code any action
+returned, so looping never swallows a failure.
+
+**Coloring output.** Use `ui.For(w)` and style the line, not the whole writer.
+It self-disables off a TTY, which is what keeps `--json`, piped output and the
+`bytes.Buffer` assertions in `*_test.go` unaffected. The `me <noun> <verb>` verbs
+deliberately stay uncolored — that output is consumed by agents.
 
 ## 3. The cmdInfo registry pattern
 

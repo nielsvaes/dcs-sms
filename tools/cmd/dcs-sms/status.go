@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/nielsvaes/dcs-sms/tools/internal/hookstatus"
+	"github.com/nielsvaes/dcs-sms/tools/internal/ui"
 )
 
 type statusOpts struct {
@@ -53,7 +54,9 @@ func statusCmd(args []string, stdout, stderr io.Writer) int {
 	stateDir := filepath.Join(root, "dcs-sms", "state")
 	st, err := hookstatus.ReadMerged(stateDir)
 	if err != nil {
-		fmt.Fprintln(stderr, "dcs-sms status: hook not found —", err)
+		style := ui.For(stderr)
+		fmt.Fprintln(stderr, style.Err("dcs-sms status: hook not found —"), err)
+		printSavedGamesDiagnostic(stderr, root, style)
 		return 3
 	}
 	fresh := hookstatus.IsFresh(st, 2*time.Second, time.Now())
@@ -99,8 +102,33 @@ func statusCmd(args []string, stdout, stderr io.Writer) int {
 	}
 
 	if !fresh {
-		fmt.Fprintf(stderr, "dcs-sms status: heartbeat stale (last frame at %s)\n", st.LastFrameAt)
+		style := ui.For(stderr)
+		fmt.Fprintln(stderr, style.Warn(fmt.Sprintf("dcs-sms status: heartbeat stale (last frame at %s)", st.LastFrameAt)))
+		printSavedGamesDiagnostic(stderr, root, style)
 		return 4
 	}
 	return 0
+}
+
+// printSavedGamesDiagnostic explains which Saved Games folder was used and,
+// when there is more than one on disk, what else is there and how to switch.
+//
+// Auto-discovery picks the first of DCS / DCS.openbeta / DCS.server that
+// exists, so a stale `DCS` folder left over from a stable install shadows the
+// `DCS.openbeta` the user actually flies. Without this, the failure is just
+// "hook not found" and there is nothing to act on.
+func printSavedGamesDiagnostic(stderr io.Writer, root string, style ui.Styler) {
+	fmt.Fprintln(stderr, "  looked in:", root)
+	variants, ok := listVariantsFn()
+	if !ok || len(variants) < 2 {
+		return
+	}
+	fmt.Fprintln(stderr, "  other DCS folders in Saved Games:")
+	for _, line := range variantLines(variants, root, style) {
+		fmt.Fprintln(stderr, "    "+line)
+	}
+	if alt, ok := betterCandidate(variants, root); ok {
+		fmt.Fprintln(stderr, style.Warn("  That looks like the wrong folder. Pin the live one with:"))
+		fmt.Fprintf(stderr, "    dcs-sms set-saved-games \"%s\"\n", alt)
+	}
 }
