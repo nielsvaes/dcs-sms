@@ -2,11 +2,15 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 )
+
+// errNoConfigDirForTest stands in for os.UserConfigDir failing.
+var errNoConfigDirForTest = errors.New("no config dir")
 
 func TestSetDCSPathPersists(t *testing.T) {
 	root := makeFakeDCSInstall(t)
@@ -146,5 +150,76 @@ func TestUsageListsSetDCSPath(t *testing.T) {
 	printUsage(&buf)
 	if !strings.Contains(buf.String(), "set-dcs-path") {
 		t.Errorf("printUsage should list set-dcs-path, got:\n%s", buf.String())
+	}
+}
+
+// Review finding: the env-override warning compared paths as raw strings, so
+// a DCS_SMS_DCS_INSTALL naming the very same folder with a trailing separator
+// or different casing produced "clear it to pick up the folder you just
+// pinned" — about a variable pointing at that exact folder.
+func TestSetDCSPathNoFalseEnvWarning(t *testing.T) {
+	root := makeFakeDCSInstall(t)
+	for name, env := range map[string]string{
+		"trailing separator": root + string(filepath.Separator),
+		"different case":     strings.ToLower(root),
+		"forward slashes":    filepath.ToSlash(root),
+	} {
+		t.Run(name, func(t *testing.T) {
+			cfg := filepath.Join(t.TempDir(), "config.toml")
+			withConfigSeam(t, cfg, nil)
+			t.Setenv("DCS_SMS_DCS_INSTALL", env)
+
+			var stdout, stderr bytes.Buffer
+			if code := setDCSPathCmd([]string{root}, &stdout, &stderr); code != 0 {
+				t.Fatalf("exit %d, want 0", code)
+			}
+			if strings.Contains(stdout.String(), "Clear it") {
+				t.Errorf("env names the same folder, so no warning expected, got:\n%s", stdout.String())
+			}
+		})
+	}
+}
+
+// Review finding: the bare report resolved the config path first and bailed
+// out, so the one command whose job is "show me what's configured" refused to
+// answer on a box where the config dir can't be resolved but the env var can.
+func TestSetDCSPathBareReportsWithoutConfigPath(t *testing.T) {
+	root := makeFakeDCSInstall(t)
+	oldCfg := configPathFn
+	configPathFn = func() (string, error) { return "", errNoConfigDirForTest }
+	t.Cleanup(func() { configPathFn = oldCfg })
+	t.Setenv("DCS_SMS_DCS_INSTALL", root)
+
+	var stdout, stderr bytes.Buffer
+	if code := setDCSPathCmd(nil, &stdout, &stderr); code != 0 {
+		t.Fatalf("exit %d, want 0 (stderr=%q)", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), root) {
+		t.Errorf("should still report the env-provided path, got:\n%s", stdout.String())
+	}
+}
+
+// Review finding: persistDCSInstall is the writer for interactive menu option
+// 5 too, so its errors must not name a subcommand the user never typed.
+func TestPersistDCSInstallErrorIsCommandNeutral(t *testing.T) {
+	root := makeFakeDCSInstall(t)
+	// Make the config path unwritable by putting a *file* where its parent
+	// directory would have to be.
+	dir := t.TempDir()
+	blocker := filepath.Join(dir, "blocker")
+	if err := os.WriteFile(blocker, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg := filepath.Join(blocker, "config.toml")
+
+	var stdout, stderr bytes.Buffer
+	if code := persistDCSInstall(root, cfg, &stdout, &stderr); code != 3 {
+		t.Fatalf("exit %d, want 3", code)
+	}
+	if strings.Contains(stderr.String(), "set-dcs-path") {
+		t.Errorf("shared writer must not name a command the menu user never typed, got:\n%s", stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "dcs-sms:") {
+		t.Errorf("expected a neutral dcs-sms: prefix, got:\n%s", stderr.String())
 	}
 }

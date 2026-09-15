@@ -188,6 +188,19 @@ func resolveRootFor(configPath string) (string, error) {
 	return dcspath.Discover("", configPath)
 }
 
+// resolveInstallFor resolves the DCS install folder against an explicit
+// config path, falling back to the process default when none is given — the
+// install-path counterpart of resolveRootFor, so both banner lines behave the
+// same way when menuDeps carries no config path. Without it the banner could
+// read "DCS install: not detected" directly above option 5's "Saved.",
+// looping the user through a setting that had in fact been stored.
+func resolveInstallFor(configPath string) (string, error) {
+	if configPath == "" {
+		configPath, _ = configPathFn()
+	}
+	return dcspath.DiscoverInstall("", configPath)
+}
+
 // envOverrideNote reports the DCS_SMS_SAVED_GAMES value when it is set and
 // points somewhere other than path. That variable is resolved ahead of the
 // config file, so pinning a folder while it is set silently has no effect —

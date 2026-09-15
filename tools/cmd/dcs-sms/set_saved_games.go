@@ -103,15 +103,19 @@ func printSavedGamesReport(stdout io.Writer) {
 // saveSavedGamesPath validates path and records it as saved_games in the
 // config file at cfg. Callers pass the config path explicitly so the menu can
 // use the one injected through menuDeps rather than the process-wide default.
+//
+// Like persistDCSInstall its messages say plain "dcs-sms:", because menu
+// option 6 uses it and that user never typed "set-saved-games". The
+// command-level messages in setSavedGamesCmd keep the command name.
 func saveSavedGamesPath(path, cfg string, stdout, stderr io.Writer) int {
 	st := ui.For(stdout)
 	if path == "" {
-		fmt.Fprintln(stderr, ui.For(stderr).Err("dcs-sms set-saved-games: empty path"))
+		fmt.Fprintln(stderr, ui.For(stderr).Err("dcs-sms: empty path"))
 		return 3
 	}
 	info, err := os.Stat(path)
 	if err != nil || !info.IsDir() {
-		fmt.Fprintf(stderr, "%s\n", ui.For(stderr).Err("dcs-sms set-saved-games: not an existing folder: "+path))
+		fmt.Fprintf(stderr, "%s\n", ui.For(stderr).Err("dcs-sms: not an existing folder: "+path))
 		return 3
 	}
 	if !looksLikeSavedGamesDCS(path) {
@@ -119,11 +123,11 @@ func saveSavedGamesPath(path, cfg string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stdout, st.Warn("  (expected to find Config, Logs, Missions or Scripts inside). Saving it anyway."))
 	}
 	if cfg == "" {
-		fmt.Fprintln(stderr, ui.For(stderr).Err("dcs-sms set-saved-games: cannot determine the config file location"))
+		fmt.Fprintln(stderr, ui.For(stderr).Err("dcs-sms: cannot determine the config file location"))
 		return 3
 	}
 	if err := dcspath.SaveConfig(cfg, path); err != nil {
-		fmt.Fprintf(stderr, "%s\n", ui.For(stderr).Err(fmt.Sprintf("dcs-sms set-saved-games: could not write %s: %v", cfg, err)))
+		fmt.Fprintf(stderr, "%s\n", ui.For(stderr).Err(fmt.Sprintf("dcs-sms: could not write %s: %v", cfg, err)))
 		return 3
 	}
 	fmt.Fprintln(stdout, st.OK("Saved.")+" saved_games = "+path)

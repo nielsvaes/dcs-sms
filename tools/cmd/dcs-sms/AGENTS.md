@@ -88,9 +88,17 @@ same holds for `DCS_SMS_DCS_INSTALL` and `set-dcs-path`.
 reads `--dcs-path`, then `DCS_SMS_DCS_INSTALL`, then `dcs_install` in config —
 there is no filesystem scan, because install locations vary too much to guess.
 A deleted `config.toml` therefore leaves the install path unrecoverable until
-someone sets it again, which is what `set-dcs-path` is for. Write it through
-`persistDCSInstall` (shared with menu option 5) so both routes validate the
-same way and store the same forward-slash form.
+someone sets it again, which is what `set-dcs-path` is for.
+
+Three code paths write `dcs_install`: `set-dcs-path`, menu option 5 (both via
+`persistDCSInstall`), and `install-me-mod` caching its `--dcs-path`. All three
+store the forward-slash form, so a config written by any route looks the same
+and string comparisons against the stored value see one spelling. A fourth
+writer must do likewise — prefer routing it through `persistDCSInstall`.
+
+Messages printed by `persistDCSInstall` and `saveSavedGamesPath` say plain
+`dcs-sms:` rather than naming a subcommand, because the interactive menu calls
+both and that user never typed one.
 
 **The menu loops.** `runActionWithElevation` and `runActionAndPause` return
 `(code, exit bool)`. The menu keeps looping until the user quits, so someone can

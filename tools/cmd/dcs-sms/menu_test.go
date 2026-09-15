@@ -689,3 +689,26 @@ func TestMenuBannerReadsInjectedConfig(t *testing.T) {
 		t.Errorf("banner should show the folder from the injected config %s, got:\n%s", cfg, stdout.String())
 	}
 }
+
+// Review finding: savedGamesLine falls back to configPathFn when
+// deps.configPath is empty but dcsInstallLine did not, so the two banner lines
+// could disagree — option 5 printing "Saved." while the line above it still
+// read "not detected", looping the user.
+func TestMenuInstallLineFallsBackLikeSavedGamesLine(t *testing.T) {
+	root := makeFakeDCSInstall(t)
+	cfg := filepath.Join(t.TempDir(), "config.toml")
+	if err := dcspath.SaveInstallConfig(cfg, filepath.ToSlash(root)); err != nil {
+		t.Fatal(err)
+	}
+	withConfigSeam(t, cfg, nil)
+	t.Setenv("DCS_SMS_DCS_INSTALL", "")
+
+	var calls []string
+	deps := stubDeps(t, &calls, 0) // deliberately leaves configPath empty
+	var stdout, stderr bytes.Buffer
+	runInteractiveMenuWith(strings.NewReader("q\n"), &stdout, &stderr, deps)
+
+	if !strings.Contains(stdout.String(), filepath.ToSlash(root)) {
+		t.Errorf("install line should fall back to configPathFn like the saved games line, got:\n%s", stdout.String())
+	}
+}

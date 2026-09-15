@@ -50,21 +50,24 @@ func setDCSPathCmd(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 
-	cfg, err := configPathFn()
-	if err != nil || cfg == "" {
-		fmt.Fprintln(stderr, ui.For(stderr).Err("dcs-sms set-dcs-path: cannot determine the config file location"))
-		return 3
-	}
+	// Resolve the config path *after* the bare-report branch: reporting only
+	// needs DiscoverInstall, which can still answer from DCS_SMS_DCS_INSTALL on
+	// a box where the config dir cannot be resolved at all.
+	cfg, _ := configPathFn()
 	if len(rest) == 0 {
 		printDCSPathReport(stdout, cfg)
 		return 0
+	}
+	if cfg == "" {
+		fmt.Fprintln(stderr, ui.For(stderr).Err("dcs-sms set-dcs-path: cannot determine the config file location"))
+		return 3
 	}
 	return persistDCSInstall(dcspath.SanitizeUserPath(rest[0]), cfg, stdout, stderr)
 }
 
 func printDCSPathReport(stdout io.Writer, cfg string) {
 	st := ui.For(stdout)
-	path, err := dcspath.DiscoverInstall("", cfg)
+	path, err := resolveInstallFor(cfg)
 	if err != nil || path == "" {
 		fmt.Fprintln(stdout, st.Err("DCS install: not set"))
 		fmt.Fprintln(stdout, "")
@@ -78,12 +81,18 @@ func printDCSPathReport(stdout io.Writer, cfg string) {
 		fmt.Fprintln(stdout, st.Warn("  (set by DCS_SMS_DCS_INSTALL="+env+", which overrides the config file)"))
 		return
 	}
-	fmt.Fprintln(stdout, "  recorded in "+cfg)
+	if cfg != "" {
+		fmt.Fprintln(stdout, "  recorded in "+cfg)
+	}
 }
 
 // persistDCSInstall validates path as a DCS install root and records it as
 // dcs_install. Shared with the interactive menu's option 5 so both writers
 // agree on validation, on the stored path form, and on what they print.
+//
+// Its messages deliberately say plain "dcs-sms:" rather than naming a
+// subcommand: someone who double-clicked the exe and picked option 5 never
+// typed "set-dcs-path" and should not be told about it.
 //
 // The path is stored with forward slashes, which is what option 5 has always
 // written; both forms parse, but keeping one convention means a config
@@ -91,21 +100,24 @@ func printDCSPathReport(stdout io.Writer, cfg string) {
 func persistDCSInstall(path, cfg string, stdout, stderr io.Writer) int {
 	st := ui.For(stdout)
 	if path == "" {
-		fmt.Fprintln(stderr, ui.For(stderr).Err("dcs-sms set-dcs-path: empty path"))
+		fmt.Fprintln(stderr, ui.For(stderr).Err("dcs-sms: empty path"))
 		return 3
 	}
 	if err := validateDCSInstallRoot(path); err != nil {
-		fmt.Fprintln(stderr, ui.For(stderr).Err("dcs-sms set-dcs-path: "+err.Error()))
+		fmt.Fprintln(stderr, ui.For(stderr).Err("dcs-sms: "+err.Error()))
 		return 3
 	}
 	stored := filepath.ToSlash(path)
 	if err := dcspath.SaveInstallConfig(cfg, stored); err != nil {
-		fmt.Fprintln(stderr, ui.For(stderr).Err(fmt.Sprintf("dcs-sms set-dcs-path: could not write %s: %v", cfg, err)))
+		fmt.Fprintln(stderr, ui.For(stderr).Err(fmt.Sprintf("dcs-sms: could not write %s: %v", cfg, err)))
 		return 3
 	}
 	fmt.Fprintln(stdout, st.OK("Saved.")+" dcs_install = "+stored)
 	fmt.Fprintln(stdout, "  recorded in "+cfg)
-	if env, ok := dcspath.DiscoverFromInstallEnv(); ok && filepath.ToSlash(env) != stored {
+	// sameDir, not string equality: a trailing separator or different casing
+	// names the same folder, and warning about it would tell the user to clear
+	// a variable that already points where they just pinned.
+	if env, ok := dcspath.DiscoverFromInstallEnv(); ok && !sameDir(env, path) {
 		fmt.Fprintln(stdout)
 		fmt.Fprintln(stdout, st.Warn("But DCS_SMS_DCS_INSTALL is set to "+env))
 		fmt.Fprintln(stdout, st.Warn("  That environment variable is resolved before the config file, so commands"))

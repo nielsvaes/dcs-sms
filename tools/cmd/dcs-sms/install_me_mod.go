@@ -195,7 +195,10 @@ func installMeModCmd(args []string, stdout, stderr io.Writer) int {
 	// Step 3: cache --dcs-path to config (unless --no-config-save).
 	if opts.DCSPath != "" && !opts.NoSave {
 		if cfg != "" {
-			if err := dcspath.SaveInstallConfig(cfg, opts.DCSPath); err != nil {
+			// ToSlash to match persistDCSInstall (set-dcs-path and menu option 5),
+			// so all three writers store dcs_install in one form and a later
+			// set-dcs-path for the same folder does not rewrite it differently.
+			if err := dcspath.SaveInstallConfig(cfg, filepath.ToSlash(opts.DCSPath)); err != nil {
 				fmt.Fprintln(stderr, "dcs-sms install-me-mod: warning: could not save config:", err)
 			} else {
 				fmt.Fprintf(stdout, "saved dcs_install = %q to %s\n", opts.DCSPath, cfg)

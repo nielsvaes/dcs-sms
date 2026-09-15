@@ -225,7 +225,7 @@ func printMenuBanner(w io.Writer, deps menuDeps) {
 }
 
 func dcsInstallLine(deps menuDeps, st ui.Styler) string {
-	path, err := dcspath.DiscoverInstall("", deps.configPath)
+	path, err := resolveInstallFor(deps.configPath)
 	if err != nil || path == "" {
 		return "DCS install: " + st.Err("not detected — pick option 5 to set it")
 	}
