@@ -183,7 +183,9 @@ func upsertConfigKey(configPath, key, value string) error {
 
 // DiscoverDefault returns the DCS variant folder under the user's real
 // "Saved Games" location:
-//   <Saved Games>\DCS  (or DCS.openbeta / DCS.server)
+//
+//	<Saved Games>\DCS  (or DCS.openbeta / DCS.server)
+//
 // whichever exists. The Saved Games base comes from savedGamesBase(), which on
 // Windows queries the Known Folder API so a relocated Saved Games (moved to
 // another drive) resolves the same way DCS itself resolves it. Returns
@@ -240,9 +242,14 @@ func ListVariants(base string) []string {
 			continue
 		}
 		full := filepath.Join(base, name)
+		// A canonical name claims its ordered slot. A second folder matching
+		// the same slot can only happen on a case-sensitive filesystem
+		// ("DCS" and "dcs" side by side); list it rather than drop it.
 		if i := canonicalIndex(name); i >= 0 {
-			found[canonicalVariants[i]] = full
-			continue
+			if _, taken := found[canonicalVariants[i]]; !taken {
+				found[canonicalVariants[i]] = full
+				continue
+			}
 		}
 		extra = append(extra, full)
 	}

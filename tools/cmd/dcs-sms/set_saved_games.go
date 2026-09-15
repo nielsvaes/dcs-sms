@@ -69,11 +69,14 @@ func setSavedGamesCmd(args []string, stdout, stderr io.Writer) int {
 // found, so a user whose heartbeat is missing can see the mismatch.
 func printSavedGamesReport(stdout io.Writer) {
 	st := ui.For(stdout)
-	current, err := resolveRoot("")
+	current, err := resolveRootFor("")
 	if err != nil {
 		fmt.Fprintln(stdout, st.Err("in use: none — no DCS folder found in Saved Games"))
 	} else {
 		fmt.Fprintln(stdout, "in use:", st.Bold(current))
+		if _, ok := dcspath.DiscoverFromEnv(); ok {
+			fmt.Fprintln(stdout, st.Warn("  (set by DCS_SMS_SAVED_GAMES, which overrides the config file)"))
+		}
 	}
 	variants, ok := listVariantsFn()
 	if !ok || len(variants) == 0 {
@@ -124,8 +127,14 @@ func saveSavedGamesPath(path, cfg string, stdout, stderr io.Writer) int {
 		return 3
 	}
 	fmt.Fprintln(stdout, st.OK("Saved.")+" saved_games = "+path)
-	fmt.Fprintln(stdout, "  recorded in " + cfg)
+	fmt.Fprintln(stdout, "  recorded in "+cfg)
 	fmt.Fprintln(stdout)
+	if env, shadowed := envOverrideNote(path); shadowed {
+		fmt.Fprintln(stdout, st.Warn("But DCS_SMS_SAVED_GAMES is set to "+env))
+		fmt.Fprintln(stdout, st.Warn("  That environment variable is resolved before the config file, so commands"))
+		fmt.Fprintln(stdout, st.Warn("  will keep using it. Clear it to pick up the folder you just pinned."))
+		fmt.Fprintln(stdout)
+	}
 	if !inspectVariant(path).HasHook {
 		fmt.Fprintln(stdout, st.Warn("No hook installed in that folder yet — run `dcs-sms setup` to install it."))
 		return 0

@@ -155,3 +155,28 @@ func TestBetterCandidate(t *testing.T) {
 		}
 	})
 }
+
+// Review finding: seeding the recency comparison with the current folder's
+// LastSeen meant a *zero* LastSeen (a correct folder DCS simply hasn't run in
+// yet — the normal state right after `dcs-sms setup`) lost to any other
+// folder with any heartbeat, however ancient. Following that advice pins a
+// dead folder.
+func TestBetterCandidateIgnoresAncientHeartbeats(t *testing.T) {
+	base := t.TempDir()
+	fresh := makeVariant(t, base, "DCS", true, time.Time{})                       // correct, never run
+	ancient := makeVariant(t, base, "DCS.openbeta", true, time.Now().AddDate(-2, 0, 0)) // abandoned
+	if got, ok := betterCandidate([]string{fresh, ancient}, fresh); ok {
+		t.Errorf("a two-year-old heartbeat must not beat a fresh install, got %q", got)
+	}
+}
+
+// Leftover state without a hook (teardown removes the hook but leaves
+// dcs-sms/state behind) must never be recommended.
+func TestBetterCandidateRequiresAHook(t *testing.T) {
+	base := t.TempDir()
+	cur := makeVariant(t, base, "DCS", true, time.Now().Add(-3*time.Hour))
+	stateOnly := makeVariant(t, base, "DCS.openbeta", false, time.Now()) // fresh state, no hook
+	if got, ok := betterCandidate([]string{cur, stateOnly}, cur); ok {
+		t.Errorf("a folder with no hook must not be recommended, got %q", got)
+	}
+}

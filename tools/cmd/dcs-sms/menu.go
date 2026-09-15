@@ -211,7 +211,7 @@ func printMenuBanner(w io.Writer, deps menuDeps) {
 	fmt.Fprintf(w, "DCS-SMS  v%s\n", version)
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "  "+dcsInstallLine(deps, st))
-	fmt.Fprintln(w, "  "+savedGamesLine(st))
+	fmt.Fprintln(w, "  "+savedGamesLine(deps, st))
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "  1. Install or update DCS-SMS (mod + hook + .exe)")
 	fmt.Fprintln(w, "     └─ Not sure what to pick? Pick this. It makes sure you have the latest of everything.")
@@ -237,8 +237,8 @@ func dcsInstallLine(deps menuDeps, st ui.Styler) string {
 // to the `DCS.openbeta` they actually fly gets the wrong one auto-picked, and
 // every bridge command then fails with an unhelpful "hook not found" — this
 // line is where that becomes visible.
-func savedGamesLine(st ui.Styler) string {
-	path, err := resolveRoot("")
+func savedGamesLine(deps menuDeps, st ui.Styler) string {
+	path, err := resolveRootFor(deps.configPath)
 	if err != nil || path == "" {
 		return "Saved Games: " + st.Err("not detected — pick option 6 to set it")
 	}
@@ -310,7 +310,7 @@ func promptAndSaveSavedGames(reader *bufio.Reader, stdout, stderr io.Writer, con
 	if configPath == "" {
 		configPath, _ = configPathFn()
 	}
-	current, _ := resolveRoot("")
+	current, _ := resolveRootFor(configPath)
 	variants, _ := listVariantsFn()
 
 	fmt.Fprintln(stdout)

@@ -126,7 +126,10 @@ This is the first tag after a long quiet period — `sms.version` had been froze
   folder while the CLI reads the other, and every command fails with a bare
   `hook not found`. Run the command with a path to record it in
   `config.toml`, or bare to list every DCS folder found, annotated with
-  whether a hook is installed and when DCS last wrote to it.
+  whether a hook is installed and when DCS last wrote to it. If
+  `DCS_SMS_SAVED_GAMES` is set it is resolved ahead of the config file, so the
+  command now says the pin will be ignored instead of reporting a bare
+  “Saved.”
 - **Menu option 6, "Set Saved Games folder manually."** Offers the folders
   found on disk as a numbered list with the same annotations, or takes a
   pasted path. The banner now shows the Saved Games folder in use next to the

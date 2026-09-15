@@ -128,3 +128,41 @@ func TestSetSavedGamesTooManyArgs(t *testing.T) {
 		t.Errorf("exit %d, want 2", code)
 	}
 }
+
+// Review finding: dcspath.Discover resolves DCS_SMS_SAVED_GAMES *before* the
+// config file, so pinning a folder while that variable is set has no effect —
+// and the command still said "Saved." with no hint why nothing changed.
+// install-me-mod actively tells users to set that variable, so this is a
+// reachable trap.
+func TestSetSavedGamesWarnsWhenEnvOverrides(t *testing.T) {
+	dir := t.TempDir()
+	cfg := filepath.Join(dir, "config.toml")
+	pinned := makeVariant(t, dir, "DCS.openbeta", true, time.Now())
+	envDir := makeVariant(t, dir, "DCS", true, time.Now())
+	withConfigSeam(t, cfg, []string{envDir, pinned})
+	t.Setenv("DCS_SMS_SAVED_GAMES", envDir)
+
+	var stdout, stderr bytes.Buffer
+	if code := setSavedGamesCmd([]string{pinned}, &stdout, &stderr); code != 0 {
+		t.Fatalf("exit %d, want 0", code)
+	}
+	out := stdout.String() + stderr.String()
+	if !strings.Contains(out, "DCS_SMS_SAVED_GAMES") {
+		t.Errorf("saving under an env override must say so, got:\n%s", out)
+	}
+}
+
+// No env var set — no scary note.
+func TestSetSavedGamesQuietWithoutEnvOverride(t *testing.T) {
+	dir := t.TempDir()
+	cfg := filepath.Join(dir, "config.toml")
+	pinned := makeVariant(t, dir, "DCS.openbeta", true, time.Now())
+	withConfigSeam(t, cfg, []string{pinned})
+	t.Setenv("DCS_SMS_SAVED_GAMES", "")
+
+	var stdout, stderr bytes.Buffer
+	setSavedGamesCmd([]string{pinned}, &stdout, &stderr)
+	if strings.Contains(stdout.String(), "DCS_SMS_SAVED_GAMES") {
+		t.Errorf("no override set, so no note expected, got:\n%s", stdout.String())
+	}
+}

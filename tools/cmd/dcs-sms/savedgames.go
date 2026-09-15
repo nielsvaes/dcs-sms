@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/nielsvaes/dcs-sms/tools/internal/dcspath"
 	"github.com/nielsvaes/dcs-sms/tools/internal/hookstatus"
 	"github.com/nielsvaes/dcs-sms/tools/internal/ui"
 )
@@ -122,33 +123,38 @@ func variantLines(paths []string, selected string, st ui.Styler) []string {
 
 // betterCandidate picks the folder the user should probably switch to, if
 // there is one. It returns false when the current folder is already the best
-// guess — a user whose setup is fine must not be told to move to a folder DCS
-// has never written to.
+// guess — a user whose setup is fine must not be told to move.
 //
-// "Better" means, in order: another folder DCS wrote to more recently than
-// the current one, or — when the current folder has no hook at all — any
-// folder that does.
+// Only two situations justify a suggestion:
+//
+//  1. Another folder is *live* — DCS wrote a heartbeat there within
+//     liveWindow — while the current one is not. This is the real bug: the
+//     hook is running in the folder nobody is reading.
+//  2. The current folder has no hook installed at all, and another does.
+//
+// Deliberately NOT a reason: another folder merely having an older-but-
+// non-zero heartbeat. Comparing recency against the current folder's
+// LastSeen is wrong when that is the zero time, which is the normal state of
+// a correct folder DCS has not been launched in since `dcs-sms setup` — an
+// abandoned folder from two years ago would win. A candidate must also have a
+// hook, since `teardown` removes the hook but leaves dcs-sms/state behind.
 func betterCandidate(variants []string, current string) (string, bool) {
 	if len(variants) < 2 || current == "" {
 		return "", false
 	}
+	now := time.Now()
 	cur := inspectVariant(current)
-	best := ""
-	bestSeen := cur.LastSeen
+	if cur.live(now) {
+		return "", false
+	}
 	for _, p := range variants {
 		if sameDir(p, current) {
 			continue
 		}
-		v := inspectVariant(p)
-		if !v.LastSeen.IsZero() && v.LastSeen.After(bestSeen) {
-			best, bestSeen = p, v.LastSeen
+		if inspectVariant(p).live(now) {
+			return p, true
 		}
 	}
-	if best != "" {
-		return best, true
-	}
-	// Nothing has a fresher heartbeat. The one case left worth flagging is a
-	// current folder with no hook installed while another folder has one.
 	if !cur.HasHook {
 		for _, p := range variants {
 			if !sameDir(p, current) && inspectVariant(p).HasHook {
@@ -169,6 +175,30 @@ func sameDir(a, b string) bool {
 		return filepath.Clean(a) == filepath.Clean(b)
 	}
 	return pathsEqual(ca, cb)
+}
+
+// resolveRootFor resolves the Saved Games folder against an explicit config
+// path, falling back to the process default when none is given. The menu
+// passes the path injected through menuDeps so its banner reads the same file
+// option 6 writes to — resolveRoot alone always reads the process default.
+func resolveRootFor(configPath string) (string, error) {
+	if configPath == "" {
+		configPath, _ = configPathFn()
+	}
+	return dcspath.Discover("", configPath)
+}
+
+// envOverrideNote reports the DCS_SMS_SAVED_GAMES value when it is set and
+// points somewhere other than path. That variable is resolved ahead of the
+// config file, so pinning a folder while it is set silently has no effect —
+// and install-me-mod tells users to set it when discovery fails, so this is a
+// trap people actually walk into.
+func envOverrideNote(path string) (string, bool) {
+	v, ok := dcspath.DiscoverFromEnv()
+	if !ok || sameDir(v, path) {
+		return "", false
+	}
+	return v, true
 }
 
 // plainStyler returns a never-colorizing Styler, for tests and for code

@@ -69,8 +69,18 @@ change that order — it is deterministic and existing installs depend on it.
 Instead, surface the ambiguity: `status` prints the folder it looked in plus
 the alternatives on its exit-3 and exit-4 paths, and `set-saved-games` (or menu
 option 6) pins the right one into config. `betterCandidate` decides whether a
-switch is worth suggesting at all — never suggest one unless another folder has
-a fresher heartbeat, or the current one has no hook while another does.
+switch is worth suggesting at all, and is deliberately conservative: suggest one
+only when another folder is *live* (a heartbeat inside `liveWindow`) while the
+current one is not, or when the current folder has no hook while another does.
+Do not reintroduce a "whichever folder has the fresher heartbeat" comparison —
+a correct folder DCS has not been launched in yet has *no* heartbeat, so an
+abandoned folder from two years ago would win and the tool would tell a healthy
+setup to move. A candidate also needs a hook: `teardown` removes the hook but
+leaves `dcs-sms/state` behind.
+
+Note that `DCS_SMS_SAVED_GAMES` is resolved *before* the config file
+(`dcspath.Discover`), so pinning a folder while that variable is set has no
+effect. `set-saved-games` says so rather than reporting a silent success.
 
 **The menu loops.** `runActionWithElevation` and `runActionAndPause` return
 `(code, exit bool)`. The menu keeps looping until the user quits, so someone can

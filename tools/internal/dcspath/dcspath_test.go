@@ -328,3 +328,25 @@ func TestListVariantsMissingBase(t *testing.T) {
 		t.Errorf("expected no variants for a missing base, got %v", got)
 	}
 }
+
+// Review finding: keying the canonical slot by name meant two folders whose
+// names differ only in case (possible on a case-sensitive filesystem)
+// collapsed into one entry, silently dropping a folder from diagnostics.
+func TestListVariantsKeepsCaseDuplicates(t *testing.T) {
+	base := t.TempDir()
+	for _, name := range []string{"DCS", "dcs"} {
+		if err := os.MkdirAll(filepath.Join(base, name), 0o755); err != nil {
+			t.Skip("filesystem is case-insensitive; nothing to test here")
+		}
+	}
+	entries, err := os.ReadDir(base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) < 2 {
+		t.Skip("filesystem is case-insensitive; nothing to test here")
+	}
+	if got := ListVariants(base); len(got) != 2 {
+		t.Errorf("ListVariants dropped a case-variant folder: got %v", got)
+	}
+}

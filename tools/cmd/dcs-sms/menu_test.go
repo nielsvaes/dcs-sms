@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/nielsvaes/dcs-sms/tools/internal/dcspath"
 	"github.com/nielsvaes/dcs-sms/tools/internal/elevate"
 )
 
@@ -657,5 +658,34 @@ func TestMenuOption6HonoursInjectedConfigPath(t *testing.T) {
 	}
 	if _, err := os.Stat(decoy); err == nil {
 		t.Errorf("menu wrote to the seam path %s instead of the injected one", decoy)
+	}
+}
+
+// Review finding: savedGamesLine used to call resolveRoot(""), which always
+// reads the process-wide config path. The menu tests only avoided reading the
+// developer's real %AppData%\dcs-sms\config.toml because they set
+// DCS_SMS_SAVED_GAMES. With no env var in play, the banner must reflect the
+// config file the menu was actually given.
+func TestMenuBannerReadsInjectedConfig(t *testing.T) {
+	dir := t.TempDir()
+	target := makeVariant(t, dir, "DCS.openbeta", true, time.Now())
+	cfg := filepath.Join(dir, "config.toml")
+	// Write it through SaveConfig rather than by hand: the config format
+	// escapes backslashes, so a hand-rolled Windows path would not parse back.
+	if err := dcspath.SaveConfig(cfg, target); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("DCS_SMS_SAVED_GAMES", "") // no env override: config must decide
+	withConfigSeam(t, filepath.Join(dir, "unused.toml"), []string{target})
+
+	var calls []string
+	deps := stubDeps(t, &calls, 0)
+	deps.configPath = cfg
+
+	var stdout, stderr bytes.Buffer
+	runInteractiveMenuWith(strings.NewReader("q\n"), &stdout, &stderr, deps)
+
+	if !strings.Contains(stdout.String(), target) {
+		t.Errorf("banner should show the folder from the injected config %s, got:\n%s", cfg, stdout.String())
 	}
 }
