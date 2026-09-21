@@ -16,7 +16,6 @@ local M = {}
 
 M.scope = 'unit'
 M.title = 'Randomize positions'
-M.applies_to = { ground = true, ship = true, static = true }
 
 local undo        = require('dcs_sms_me.undo')
 local skin_helper = require('dcs_sms_me.skin_helper')
